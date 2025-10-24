@@ -12,6 +12,7 @@ from .vector_store.qdrant_store import QdrantVectorStore, QdrantConfig
 from .node import Node, Chunk, SymNode
 from .parser import DocumentParser, TextFileDocumentParser
 from .embeddings import Embeddings, OpenAIEmbeddings
+from .retriever import Retriever, VectorIndexRetriever
 
 __all__ = [
     'VectorIndex',
@@ -25,4 +26,6 @@ __all__ = [
     'TextFileDocumentParser',
     'Embeddings',
     'OpenAIEmbeddings',
+    'Retriever',
+    'VectorIndexRetriever',
 ]

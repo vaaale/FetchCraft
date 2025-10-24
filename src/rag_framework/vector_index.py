@@ -161,6 +161,35 @@ class VectorIndex(Generic[D]):
         """
         return await self.vector_store.delete(document_ids, index_id=self.index_id)
     
+    def as_retriever(
+        self,
+        embeddings: 'Embeddings',
+        top_k: int = 4,
+        resolve_parents: bool = True,
+        **search_kwargs
+    ) -> 'VectorIndexRetriever[D]':
+        """
+        Create a retriever from this index.
+        
+        Args:
+            embeddings: The embeddings model to use for query encoding
+            top_k: Number of results to return (default: 4)
+            resolve_parents: Whether to resolve parent nodes for SymNodes (default: True)
+            **search_kwargs: Additional keyword arguments to pass to search
+            
+        Returns:
+            A VectorIndexRetriever instance
+        """
+        from .retriever import VectorIndexRetriever
+        
+        return VectorIndexRetriever(
+            vector_index=self,
+            embeddings=embeddings,
+            top_k=top_k,
+            resolve_parents=resolve_parents,
+            **search_kwargs
+        )
+    
     @property
     def store(self) -> VectorStore[D]:
         """

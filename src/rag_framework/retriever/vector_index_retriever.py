@@ -1,0 +1,127 @@
+"""
+Vector index retriever implementation.
+"""
+
+from typing import List, TypeVar, Generic, Optional, Any, Dict
+from pydantic import BaseModel
+
+from .base import Retriever
+from ..embeddings.base import Embeddings
+
+D = TypeVar('D', bound=BaseModel)
+
+
+class VectorIndexRetriever(Retriever[D]):
+    """
+    Retriever that uses a VectorIndex for retrieval.
+    
+    This retriever wraps a VectorIndex and an embedding model to provide
+    a simple text-to-documents retrieval interface. It handles embedding
+    generation internally.
+    """
+    
+    def __init__(
+        self,
+        vector_index: Any,  # VectorIndex[D] - using Any to avoid circular import
+        embeddings: Embeddings,
+        top_k: int = 4,
+        resolve_parents: bool = True,
+        **search_kwargs
+    ):
+        """
+        Initialize the VectorIndexRetriever.
+        
+        Args:
+            vector_index: The VectorIndex instance to use for retrieval
+            embeddings: The embeddings model to use for query encoding
+            top_k: Number of results to return (default: 4)
+            resolve_parents: Whether to resolve parent nodes for SymNodes (default: True)
+            **search_kwargs: Additional keyword arguments to pass to search
+        """
+        self.vector_index = vector_index
+        self.embeddings = embeddings
+        self.top_k = top_k
+        self.resolve_parents = resolve_parents
+        self.search_kwargs = search_kwargs
+    
+    async def retrieve(
+        self, 
+        query: str,
+        top_k: Optional[int] = None,
+        **kwargs
+    ) -> List[tuple[D, float]]:
+        """
+        Retrieve documents based on a text query.
+        
+        Args:
+            query: The query text
+            top_k: Number of results to return (overrides default if provided)
+            **kwargs: Additional search parameters (overrides defaults)
+            
+        Returns:
+            List of tuples containing (document, relevance_score)
+        """
+        # Generate query embedding
+        query_embedding = await self.embeddings.embed_query(query)
+        
+        # Merge kwargs with defaults
+        search_params = {**self.search_kwargs, **kwargs}
+        k = top_k if top_k is not None else self.top_k
+        
+        # Perform search
+        results = await self.vector_index.search(
+            query_embedding=query_embedding,
+            k=k,
+            resolve_parents=self.resolve_parents,
+            **search_params
+        )
+        
+        return results
+    
+    async def aretrieve(
+        self, 
+        query: str,
+        top_k: Optional[int] = None,
+        **kwargs
+    ) -> List[tuple[D, float]]:
+        """
+        Async version of retrieve (alias for consistency).
+        
+        Args:
+            query: The query text
+            top_k: Number of results to return (overrides default if provided)
+            **kwargs: Additional search parameters
+            
+        Returns:
+            List of tuples containing (document, relevance_score)
+        """
+        return await self.retrieve(query, top_k=top_k, **kwargs)
+    
+    def update_config(
+        self,
+        top_k: Optional[int] = None,
+        resolve_parents: Optional[bool] = None,
+        **search_kwargs
+    ) -> None:
+        """
+        Update retriever configuration.
+        
+        Args:
+            top_k: New default for top_k
+            resolve_parents: New default for resolve_parents
+            **search_kwargs: Additional search parameters to update
+        """
+        if top_k is not None:
+            self.top_k = top_k
+        if resolve_parents is not None:
+            self.resolve_parents = resolve_parents
+        if search_kwargs:
+            self.search_kwargs.update(search_kwargs)
+    
+    def __repr__(self) -> str:
+        return (
+            f"VectorIndexRetriever("
+            f"index_id={self.vector_index.index_id}, "
+            f"top_k={self.top_k}, "
+            f"resolve_parents={self.resolve_parents})"
+        )
