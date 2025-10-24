@@ -14,6 +14,26 @@ from rag_framework import (
 )
 
 
+class MockEmbeddings:
+    """Mock embeddings for testing."""
+    
+    def __init__(self, dimension=384):
+        self.dimension = dimension
+    
+    async def embed_query(self, text: str):
+        """Return a mock embedding based on text length."""
+        value = len(text) / 100.0
+        return [value] * self.dimension
+    
+    async def embed_documents(self, texts):
+        """Return mock embeddings for documents."""
+        return [await self.embed_query(text) for text in texts]
+    
+    async def aget_dimension(self):
+        """Get dimension."""
+        return self.dimension
+
+
 def test_symnode_creation():
     """Test basic SymNode creation."""
     parent_chunk = Chunk.from_text(
@@ -65,6 +85,8 @@ def test_chunk_create_symbolic_nodes():
 @pytest.mark.asyncio
 async def test_parent_resolution_in_index():
     """Test that VectorIndex resolves parent nodes correctly."""
+    embeddings = MockEmbeddings(dimension=384)
+    
     # Create parent chunk
     parent_chunk = Chunk.from_text(
         text="Machine learning is a subset of AI that enables computers to learn.",
@@ -97,7 +119,10 @@ async def test_parent_resolution_in_index():
         vector_size=384
     )
     
-    index = VectorIndex(vector_store=vector_store)
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings
+    )
     
     # Add parent first, then SymNodes
     await index.add_documents([parent_chunk])
@@ -129,6 +154,8 @@ async def test_parent_resolution_in_index():
 @pytest.mark.asyncio
 async def test_multiple_parents_resolution():
     """Test resolving multiple different parent nodes."""
+    embeddings = MockEmbeddings(dimension=384)
+    
     # Create two parent chunks
     parent1 = Chunk.from_text(
         text="Python is a programming language.",
@@ -164,7 +191,10 @@ async def test_multiple_parents_resolution():
         vector_size=384
     )
     
-    index = VectorIndex(vector_store=vector_store)
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings
+    )
     
     await index.add_documents([parent1, parent2])
     await index.add_documents([sym1, sym2])
@@ -181,6 +211,8 @@ async def test_multiple_parents_resolution():
 @pytest.mark.asyncio
 async def test_deduplication_same_parent():
     """Test that multiple SymNodes with same parent are deduplicated."""
+    embeddings = MockEmbeddings(dimension=384)
+    
     parent = Chunk.from_text(text="Parent text with multiple children.")
     parent.embedding = [0.1] * 384
     
@@ -202,7 +234,10 @@ async def test_deduplication_same_parent():
         vector_size=384
     )
     
-    index = VectorIndex(vector_store=vector_store)
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings
+    )
     
     await index.add_documents([parent])
     await index.add_documents([sym1, sym2, sym3])

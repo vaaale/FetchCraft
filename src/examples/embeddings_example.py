@@ -91,35 +91,34 @@ async def rag_pipeline_example():
         "Natural language processing helps computers understand human language."
     ]
     
-    # Step 3: Generate embeddings for documents
-    print(f"Generating embeddings for {len(documents_text)} documents...")
-    doc_embeddings = await embeddings.embed_documents(documents_text)
-    
-    # Create Node objects with embeddings
+    # Step 3: Create Node objects WITHOUT embeddings
     nodes = []
-    for text, embedding in zip(documents_text, doc_embeddings):
+    for text in documents_text:
         node = Node(
             text=text,
-            metadata={"source": "example", "type": "document"},
-            embedding=embedding
+            metadata={"source": "example", "type": "document"}
         )
         nodes.append(node)
     
-    print(f"✓ Created {len(nodes)} nodes with embeddings\n")
+    print(f"✓ Created {len(nodes)} nodes\n")
     
     # Step 4: Setup vector store and index
     client = QdrantClient(":memory:")  # Use in-memory for demo
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="documents",
-        vector_size=dimension  # Use the dimension we determined earlier
+        vector_size=dimension
     )
     
-    index = VectorIndex(vector_store=vector_store)
+    # VectorIndex now takes embeddings at initialization
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings
+    )
     
-    # Step 5: Add documents to index
+    # Step 5: Add documents to index (embeddings auto-generated!)
     doc_ids = await index.add_documents(nodes)
-    print(f"✓ Indexed {len(doc_ids)} documents\n")
+    print(f"✓ Indexed {len(doc_ids)} documents (embeddings auto-generated!)\n")
     
     # Step 6: Perform semantic search
     queries = [
@@ -132,11 +131,8 @@ async def rag_pipeline_example():
     for query in queries:
         print(f"Query: '{query}'")
         
-        # Generate query embedding
-        query_embedding = await embeddings.embed_query(query)
-        
-        # Search for similar documents
-        results = await index.search(query_embedding, k=2)
+        # Search with text query directly (no manual embedding needed!)
+        results = await index.search_by_text(query, k=2)
         
         print("  Top results:")
         for i, (doc, score) in enumerate(results, 1):
@@ -174,24 +170,14 @@ async def document_parsing_with_embeddings():
     
     # Initialize embeddings
     embeddings = OpenAIEmbeddings(
-        model="qwen3-embedding-0.6b",  # 1536 dimensions
-        api_key="sk-124",  # Optional: specify key directly
-        base_url="http://wingman:8000/v1"  # Optional: custom endpoint
+        model="qwen3-embedding-0.6b",
+        api_key="sk-124",
+        base_url="http://wingman:8000/v1"
     )
     
-    # Generate embeddings for chunks
-    print("Generating embeddings for chunks...")
-    chunk_texts = [chunk.text for chunk in chunks]
-    chunk_embeddings = await embeddings.embed_documents(chunk_texts)
-    
-    # Attach embeddings to chunks
-    for chunk, embedding in zip(chunks, chunk_embeddings):
-        chunk.embedding = embedding
-    
-    print(f"✓ Added embeddings to {len(chunks)} chunks\n")
-    
-    # Get dimension (now determined from the embed call above)
+    # Get dimension
     dimension = await embeddings.aget_dimension()
+    print(f"✓ Initialized embeddings (dimension: {dimension})\n")
     
     # Create vector store with Chunk as document class
     client = QdrantClient(":memory:")
@@ -202,18 +188,21 @@ async def document_parsing_with_embeddings():
         vector_size=dimension
     )
     
-    index = VectorIndex(vector_store=vector_store)
+    # VectorIndex with embeddings - will auto-generate embeddings for chunks!
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings
+    )
     
-    # Index the chunks
+    # Index the chunks (embeddings auto-generated!)
     chunk_ids = await index.add_documents(chunks)
-    print(f"✓ Indexed {len(chunk_ids)} chunks\n")
+    print(f"✓ Indexed {len(chunk_ids)} chunks (embeddings auto-generated!)\n")
     
-    # Search within chunks
+    # Search within chunks using text query
     query = "What is deep learning?"
     print(f"Query: '{query}'")
-    query_embedding = await embeddings.embed_query(query)
     
-    results = await index.search(query_embedding, k=2)
+    results = await index.search_by_text(query, k=2)
     print("\nTop matching chunks:")
     for i, (chunk, score) in enumerate(results, 1):
         print(f"  {i}. [Score: {score:.3f}]")

@@ -49,17 +49,13 @@ async def basic_retriever_example():
     
     print(f"Creating index with {len(documents_text)} documents...")
     
-    # Generate embeddings
-    doc_embeddings = await embeddings.embed_documents(documents_text)
-    
-    # Create nodes
+    # Create nodes WITHOUT embeddings - index will auto-generate them!
     nodes = [
         Node(
             text=text,
-            metadata={"source": "example", "index": i},
-            embedding=embedding
+            metadata={"source": "example", "index": i}
         )
-        for i, (text, embedding) in enumerate(zip(documents_text, doc_embeddings))
+        for i, text in enumerate(documents_text)
     ]
     
     # Setup vector store and index
@@ -70,15 +66,18 @@ async def basic_retriever_example():
         vector_size=dimension
     )
     
-    index = VectorIndex(vector_store=vector_store)
-    await index.add_documents(nodes)
-    print(f"✓ Indexed {len(nodes)} documents\n")
-    
-    # Step 3: Create retriever from index
-    retriever = index.as_retriever(
-        embeddings=embeddings,
-        top_k=3
+    # VectorIndex now requires embeddings at initialization
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings
     )
+    
+    # Embeddings are auto-generated when adding documents!
+    await index.add_documents(nodes)
+    print(f"✓ Indexed {len(nodes)} documents (auto-embedded)\n")
+    
+    # Step 3: Create retriever from index (no embeddings param needed!)
+    retriever = index.as_retriever(top_k=3)
     
     print(f"✓ Created retriever: {retriever}\n")
     
@@ -125,10 +124,9 @@ async def retriever_configuration_example():
         "Embeddings represent text as high-dimensional vectors."
     ]
     
-    doc_embeddings = await embeddings.embed_documents(documents_text)
     nodes = [
-        Node(text=text, embedding=emb, metadata={"topic": "rag"})
-        for text, emb in zip(documents_text, doc_embeddings)
+        Node(text=text, metadata={"topic": "rag"})
+        for text in documents_text
     ]
     
     client = QdrantClient(":memory:")
@@ -137,14 +135,16 @@ async def retriever_configuration_example():
         collection_name="rag_docs",
         vector_size=dimension
     )
-    index = VectorIndex(vector_store=vector_store)
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings
+    )
     await index.add_documents(nodes)
     
     print("✓ Setup complete\n")
     
     # Create retriever with custom configuration
     retriever = index.as_retriever(
-        embeddings=embeddings,
         top_k=2,  # Return only top 2 results
         resolve_parents=True  # Resolve SymNode parents
     )
@@ -193,7 +193,7 @@ async def retriever_with_symnode_example():
         text=parent_text,
         metadata={"type": "definition", "topic": "RAG"}
     )
-    parent_chunk.embedding = await embeddings.embed_query(parent_text)
+    # No need to manually add embeddings - VectorIndex handles it!
     
     # Create SymNodes for granular search
     sub_texts = [
@@ -203,9 +203,7 @@ async def retriever_with_symnode_example():
     ]
     
     sym_nodes = parent_chunk.create_symbolic_nodes(sub_texts)
-    sym_embeddings = await embeddings.embed_documents(sub_texts)
-    for sym, emb in zip(sym_nodes, sym_embeddings):
-        sym.embedding = emb
+    # No need to manually add embeddings!
     
     # Setup index
     client = QdrantClient(":memory:")
@@ -215,17 +213,19 @@ async def retriever_with_symnode_example():
         document_class=Node,
         vector_size=dimension
     )
-    index = VectorIndex(vector_store=vector_store)
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings
+    )
     
-    # Index parent first, then SymNodes
+    # Index parent first, then SymNodes (embeddings auto-generated!)
     await index.add_documents([parent_chunk])
     await index.add_documents(sym_nodes)
     
-    print(f"✓ Indexed 1 parent chunk and {len(sym_nodes)} SymNodes\n")
+    print(f"✓ Indexed 1 parent chunk and {len(sym_nodes)} SymNodes (auto-embedded)\n")
     
     # Create retriever with parent resolution enabled (default)
     retriever = index.as_retriever(
-        embeddings=embeddings,
         top_k=3,
         resolve_parents=True
     )
@@ -241,7 +241,6 @@ async def retriever_with_symnode_example():
     
     # Create retriever without parent resolution
     retriever_no_resolve = index.as_retriever(
-        embeddings=embeddings,
         top_k=3,
         resolve_parents=False
     )
@@ -275,10 +274,9 @@ async def direct_retriever_creation():
         "Dense vectors are better than sparse for semantics."
     ]
     
-    doc_embeddings = await embeddings.embed_documents(documents_text)
     nodes = [
-        Node(text=text, embedding=emb)
-        for text, emb in zip(documents_text, doc_embeddings)
+        Node(text=text)
+        for text in documents_text
     ]
     
     client = QdrantClient(":memory:")
@@ -287,7 +285,10 @@ async def direct_retriever_creation():
         collection_name="vectors",
         vector_size=dimension
     )
-    index = VectorIndex(vector_store=vector_store)
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings
+    )
     await index.add_documents(nodes)
     
     # Create retriever directly (not using as_retriever)

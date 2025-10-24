@@ -4,11 +4,34 @@ import asyncio
 from qdrant_client import QdrantClient
 from rag_framework import VectorIndex, QdrantVectorStore, Node, Chunk
 
+
+class MockEmbeddings:
+    """Mock embeddings for testing."""
+    
+    def __init__(self, dimension=384):
+        self.dimension = dimension
+    
+    async def embed_query(self, text: str):
+        """Return a mock embedding."""
+        return [0.1] * self.dimension
+    
+    async def embed_documents(self, texts):
+        """Return mock embeddings for documents."""
+        return [[0.1] * self.dimension for _ in texts]
+    
+    async def aget_dimension(self):
+        """Get dimension."""
+        return self.dimension
+
+
 async def test_node_persistence():
     """Test that all Node properties are stored and retrieved correctly."""
     
     # Create in-memory Qdrant client
     client = QdrantClient(":memory:")
+    
+    # Create embeddings (mock for testing)
+    embeddings = MockEmbeddings(dimension=384)
     
     # Create vector store with Node as document class
     vector_store = QdrantVectorStore(
@@ -17,7 +40,11 @@ async def test_node_persistence():
         vector_size=384
     )
     
-    index = VectorIndex(vector_store=vector_store, index_id="test_index")
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings,
+        index_id="test_index"
+    )
     
     # Create a parent node
     parent_node = Node(

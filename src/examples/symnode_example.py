@@ -88,18 +88,7 @@ async def basic_symnode_example():
     dimension = await embeddings.aget_dimension()
     print(f"✓ Initialized embeddings (dimension: {dimension})\n")
     
-    # Step 4: Generate embeddings for all nodes
-    # We need to embed the parent chunk and the symbolic nodes
-    all_texts = [big_chunk.text, sym_node1.text, sym_node2.text]
-    all_embeddings = await embeddings.embed_documents(all_texts)
-    
-    big_chunk.embedding = all_embeddings[0]
-    sym_node1.embedding = all_embeddings[1]
-    sym_node2.embedding = all_embeddings[2]
-    
-    print("✓ Generated embeddings for all nodes\n")
-    
-    # Step 5: Setup vector store and index
+    # Step 4: Setup vector store and index
     client = QdrantClient(":memory:")
     vector_store = QdrantVectorStore(
         client=client,
@@ -108,25 +97,28 @@ async def basic_symnode_example():
         vector_size=dimension
     )
     
-    index = VectorIndex(vector_store=vector_store)
+    # VectorIndex with embeddings - will auto-generate embeddings!
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings
+    )
     
-    # Step 6: Add parent chunk first (must exist before SymNodes can reference it)
+    # Step 5: Add parent chunk first (must exist before SymNodes can reference it)
+    # Embeddings auto-generated!
     parent_ids = await index.add_documents([big_chunk])
     print(f"✓ Indexed parent chunk (ID: {parent_ids[0][:8]}...)\n")
     
-    # Step 7: Add symbolic nodes to the index
+    # Step 6: Add symbolic nodes to the index (embeddings auto-generated!)
     sym_ids = await index.add_documents([sym_node1, sym_node2])
-    print(f"✓ Indexed {len(sym_ids)} SymNodes\n")
+    print(f"✓ Indexed {len(sym_ids)} SymNodes (all embeddings auto-generated!)\n")
     
-    # Step 8: Search and observe parent resolution
+    # Step 7: Search and observe parent resolution
     query = "What is deep learning?"
     print(f"Query: '{query}'\n")
     
-    query_embedding = await embeddings.embed_query(query)
-    
     # Search with parent resolution (default behavior)
     print("--- With Parent Resolution (default) ---")
-    results = await index.search(query_embedding, k=2, resolve_parents=True)
+    results = await index.search_by_text(query, k=2, resolve_parents=True)
     
     for i, (doc, score) in enumerate(results, 1):
         print(f"{i}. [Score: {score:.3f}]")
@@ -137,7 +129,7 @@ async def basic_symnode_example():
     
     # Search without parent resolution to see the SymNodes
     print("--- Without Parent Resolution ---")
-    results_no_resolve = await index.search(query_embedding, k=2, resolve_parents=False)
+    results_no_resolve = await index.search_by_text(query, k=2, resolve_parents=False)
     
     for i, (doc, score) in enumerate(results_no_resolve, 1):
         print(f"{i}. [Score: {score:.3f}]")
@@ -193,7 +185,11 @@ async def hierarchical_chunking_example():
         document_class=Node,
         vector_size=dimension
     )
-    index = VectorIndex(vector_store=vector_store)
+    # VectorIndex with embeddings for auto-generation
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings
+    )
     
     # Process each document
     all_parent_chunks: List[Chunk] = []
@@ -223,28 +219,13 @@ async def hierarchical_chunking_example():
     print(f"Created {len(all_parent_chunks)} parent chunks")
     print(f"Created {len(all_sym_nodes)} SymNodes\n")
     
-    # Generate embeddings
-    parent_texts = [chunk.text for chunk in all_parent_chunks]
-    sym_texts = [sym.text for sym in all_sym_nodes]
-    
-    parent_embeddings = await embeddings.embed_documents(parent_texts)
-    sym_embeddings = await embeddings.embed_documents(sym_texts)
-    
-    for chunk, emb in zip(all_parent_chunks, parent_embeddings):
-        chunk.embedding = emb
-    
-    for sym, emb in zip(all_sym_nodes, sym_embeddings):
-        sym.embedding = emb
-    
-    print("✓ Generated embeddings\n")
-    
-    # Index parent chunks first
+    # Index parent chunks first (embeddings auto-generated!)
     await index.add_documents(all_parent_chunks)
     print(f"✓ Indexed {len(all_parent_chunks)} parent chunks")
     
-    # Index SymNodes
+    # Index SymNodes (embeddings auto-generated!)
     await index.add_documents(all_sym_nodes)
-    print(f"✓ Indexed {len(all_sym_nodes)} SymNodes\n")
+    print(f"✓ Indexed {len(all_sym_nodes)} SymNodes (all embeddings auto-generated!)\n")
     
     # Search examples
     queries = [
@@ -256,8 +237,7 @@ async def hierarchical_chunking_example():
     print("Searching with automatic parent resolution:\n")
     for query in queries:
         print(f"Query: '{query}'")
-        query_emb = await embeddings.embed_query(query)
-        results = await index.search(query_emb, k=1)
+        results = await index.search_by_text(query, k=1)
         
         if results:
             doc, score = results[0]

@@ -55,11 +55,14 @@ async def test_basic_retriever():
         collection_name="test_retriever",
         vector_size=384
     )
-    index = VectorIndex(vector_store=vector_store)
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings
+    )
     await index.add_documents(documents)
     
     # Create retriever
-    retriever = index.as_retriever(embeddings=embeddings, top_k=2)
+    retriever = index.as_retriever(top_k=2)
     
     # Retrieve
     results = await retriever.retrieve("test query")
@@ -85,11 +88,14 @@ async def test_retriever_top_k_override():
         collection_name="test_topk",
         vector_size=384
     )
-    index = VectorIndex(vector_store=vector_store)
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings
+    )
     await index.add_documents(documents)
     
     # Create retriever with top_k=2
-    retriever = index.as_retriever(embeddings=embeddings, top_k=2)
+    retriever = index.as_retriever(top_k=2)
     
     # Default top_k
     results = await retriever.retrieve("query")
@@ -116,10 +122,13 @@ async def test_retriever_update_config():
         collection_name="test_config",
         vector_size=384
     )
-    index = VectorIndex(vector_store=vector_store)
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings
+    )
     await index.add_documents(documents)
     
-    retriever = index.as_retriever(embeddings=embeddings, top_k=2)
+    retriever = index.as_retriever(top_k=2)
     
     # Update config
     retriever.update_config(top_k=3)
@@ -154,14 +163,16 @@ async def test_retriever_with_symnode():
         document_class=Node,
         vector_size=384
     )
-    index = VectorIndex(vector_store=vector_store)
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings
+    )
     
     await index.add_documents([parent])
     await index.add_documents([sym1, sym2])
     
     # Retriever with parent resolution
     retriever = index.as_retriever(
-        embeddings=embeddings,
         top_k=5,
         resolve_parents=True
     )
@@ -195,13 +206,15 @@ async def test_retriever_without_parent_resolution():
         document_class=Node,
         vector_size=384
     )
-    index = VectorIndex(vector_store=vector_store)
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings
+    )
     
     await index.add_documents([parent, sym])
     
     # Retriever without parent resolution
     retriever = index.as_retriever(
-        embeddings=embeddings,
         top_k=5,
         resolve_parents=False
     )
@@ -226,7 +239,10 @@ async def test_direct_retriever_creation():
         collection_name="test_direct",
         vector_size=384
     )
-    index = VectorIndex(vector_store=vector_store)
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings
+    )
     await index.add_documents(documents)
     
     # Create directly
@@ -253,10 +269,13 @@ async def test_aretrieve_alias():
         collection_name="test_aretrieve",
         vector_size=384
     )
-    index = VectorIndex(vector_store=vector_store)
+    index = VectorIndex(
+        vector_store=vector_store,
+        embeddings=embeddings
+    )
     await index.add_documents(documents)
     
-    retriever = index.as_retriever(embeddings=embeddings, top_k=1)
+    retriever = index.as_retriever(top_k=1)
     
     # Both should work
     results1 = await retriever.retrieve("test")

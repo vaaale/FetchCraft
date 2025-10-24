@@ -9,6 +9,25 @@ from qdrant_client import QdrantClient
 from rag_framework import VectorIndex, QdrantVectorStore, Node, Chunk
 
 
+class MockEmbeddings:
+    """Mock embeddings for testing without API calls."""
+    
+    def __init__(self, dimension=384):
+        self.dimension = dimension
+    
+    async def embed_query(self, text: str):
+        """Return a mock embedding based on text hash."""
+        return [hash(text) % 100 / 100.0] * self.dimension
+    
+    async def embed_documents(self, texts):
+        """Return mock embeddings for documents."""
+        return [await self.embed_query(text) for text in texts]
+    
+    async def aget_dimension(self):
+        """Get dimension."""
+        return self.dimension
+
+
 async def demo_multiple_indices():
     """
     Demonstrate how to use multiple indices in the same Qdrant collection.
@@ -20,8 +39,8 @@ async def demo_multiple_indices():
     """
     
     # Initialize Qdrant client
-    # client = QdrantClient(":memory:")  # Using in-memory for demo
-    client = QdrantClient("http://localhost:6333")
+    client = QdrantClient(":memory:")  # Using in-memory for demo
+    # client = QdrantClient("http://localhost:6333")  # Or use actual Qdrant server
 
     # Create a shared vector store (uses Node as document class by default)
     vector_store = QdrantVectorStore(
@@ -35,21 +54,27 @@ async def demo_multiple_indices():
     print("Multiple Indices Demo")
     print("="*60 + "\n")
     
+    # Initialize embeddings (mock for demo)
+    embeddings = MockEmbeddings(dimension=384)
+    
     # Create Index 1: Technical documentation
     tech_index = VectorIndex(
         vector_store=vector_store,
+        embeddings=embeddings,
         index_id="tech_docs"
     )
     
     # Create Index 2: Marketing content
     marketing_index = VectorIndex(
         vector_store=vector_store,
+        embeddings=embeddings,
         index_id="marketing_content"
     )
     
     # Create Index 3: Customer support
     support_index = VectorIndex(
         vector_store=vector_store,
+        embeddings=embeddings,
         index_id="customer_support"
     )
     
@@ -59,51 +84,45 @@ async def demo_multiple_indices():
     print(f"  - Support: {support_index.index_id}")
     print()
     
-    # Add documents to technical index
+    # Add documents to technical index (no embeddings needed!)
     tech_docs = [
         Node(
             text="API authentication using OAuth2",
-            metadata={"category": "api", "version": "v2"},
-            embedding=[0.1] * 384
+            metadata={"category": "api", "version": "v2"}
         ),
         Node(
             text="Database schema design patterns",
-            metadata={"category": "database", "version": "v2"},
-            embedding=[0.2] * 384
+            metadata={"category": "database", "version": "v2"}
         ),
     ]
     
     tech_ids = await tech_index.add_documents(tech_docs)
     print(f"✓ Added {len(tech_ids)} documents to technical index")
     
-    # Add documents to marketing index
+    # Add documents to marketing index (no embeddings needed!)
     marketing_docs = [
         Node(
             text="New product launch announcement",
-            metadata={"campaign": "product_launch"},
-            embedding=[0.3] * 384
+            metadata={"campaign": "product_launch"}
         ),
         Node(
             text="Customer success stories",
-            metadata={"campaign": "testimonials"},
-            embedding=[0.4] * 384
+            metadata={"campaign": "testimonials"}
         ),
     ]
     
     marketing_ids = await marketing_index.add_documents(marketing_docs)
     print(f"✓ Added {len(marketing_ids)} documents to marketing index")
     
-    # Add documents to support index
+    # Add documents to support index (no embeddings needed!)
     support_docs = [
         Node(
             text="How to reset your password",
-            metadata={"topic": "account"},
-            embedding=[0.5] * 384
+            metadata={"topic": "account"}
         ),
         Node(
             text="Troubleshooting connection issues",
-            metadata={"topic": "technical"},
-            embedding=[0.6] * 384
+            metadata={"topic": "technical"}
         ),
     ]
     
@@ -116,25 +135,25 @@ async def demo_multiple_indices():
     print("Searching within specific indices")
     print("="*60 + "\n")
     
-    query_embedding = [0.15] * 384
+    query = "authentication and security"
     
     # Search only in technical index
-    print("Searching technical docs index:")
-    tech_results = await tech_index.search(query_embedding, k=2)
+    print(f"Searching technical docs index for '{query}':")
+    tech_results = await tech_index.search_by_text(query, k=2)
     for doc, score in tech_results:
         print(f"  - Score: {score:.3f} | {doc.text}")
     print()
     
     # Search only in marketing index
-    print("Searching marketing index:")
-    marketing_results = await marketing_index.search(query_embedding, k=2)
+    print(f"Searching marketing index for '{query}':")
+    marketing_results = await marketing_index.search_by_text(query, k=2)
     for doc, score in marketing_results:
         print(f"  - Score: {score:.3f} | {doc.text}")
     print()
     
     # Search only in support index
-    print("Searching support index:")
-    support_results = await support_index.search(query_embedding, k=2)
+    print(f"Searching support index for '{query}':")
+    support_results = await support_index.search_by_text(query, k=2)
     for doc, score in support_results:
         print(f"  - Score: {score:.3f} | {doc.text}")
     print()
@@ -180,8 +199,8 @@ async def demo_multiple_indices():
     print("Auto-generated index IDs")
     print("="*60 + "\n")
     
-    auto_index1 = VectorIndex(vector_store=vector_store)
-    auto_index2 = VectorIndex(vector_store=vector_store)
+    auto_index1 = VectorIndex(vector_store=vector_store, embeddings=embeddings)
+    auto_index2 = VectorIndex(vector_store=vector_store, embeddings=embeddings)
     
     print(f"Auto-generated index 1 ID: {auto_index1.index_id}")
     print(f"Auto-generated index 2 ID: {auto_index2.index_id}")
@@ -207,36 +226,39 @@ async def demo_use_cases():
         vector_size=384
     )
     
+    # Mock embeddings for use cases
+    embeddings = MockEmbeddings(dimension=384)
+    
     # Use Case 1: Multi-tenant application
     print("1. Multi-tenant SaaS application:")
-    tenant_a_index = VectorIndex(vector_store, index_id="tenant_company_a")
-    tenant_b_index = VectorIndex(vector_store, index_id="tenant_company_b")
+    tenant_a_index = VectorIndex(vector_store, embeddings, index_id="tenant_company_a")
+    tenant_b_index = VectorIndex(vector_store, embeddings, index_id="tenant_company_b")
     print(f"   - Company A has isolated index: {tenant_a_index.index_id}")
     print(f"   - Company B has isolated index: {tenant_b_index.index_id}")
     print(f"   - Both share the same Qdrant collection\n")
     
     # Use Case 2: Environment separation
     print("2. Environment separation (dev/staging/prod):")
-    dev_index = VectorIndex(vector_store, index_id="env_development")
-    staging_index = VectorIndex(vector_store, index_id="env_staging")
-    prod_index = VectorIndex(vector_store, index_id="env_production")
+    dev_index = VectorIndex(vector_store, embeddings, index_id="env_development")
+    staging_index = VectorIndex(vector_store, embeddings, index_id="env_staging")
+    prod_index = VectorIndex(vector_store, embeddings, index_id="env_production")
     print(f"   - Development: {dev_index.index_id}")
     print(f"   - Staging: {staging_index.index_id}")
     print(f"   - Production: {prod_index.index_id}\n")
     
     # Use Case 3: Language-specific indices
     print("3. Multi-language content:")
-    en_index = VectorIndex(vector_store, index_id="lang_english")
-    es_index = VectorIndex(vector_store, index_id="lang_spanish")
-    fr_index = VectorIndex(vector_store, index_id="lang_french")
+    en_index = VectorIndex(vector_store, embeddings, index_id="lang_english")
+    es_index = VectorIndex(vector_store, embeddings, index_id="lang_spanish")
+    fr_index = VectorIndex(vector_store, embeddings, index_id="lang_french")
     print(f"   - English: {en_index.index_id}")
     print(f"   - Spanish: {es_index.index_id}")
     print(f"   - French: {fr_index.index_id}\n")
     
     # Use Case 4: Version control
     print("4. Document version control:")
-    v1_index = VectorIndex(vector_store, index_id="version_1.0")
-    v2_index = VectorIndex(vector_store, index_id="version_2.0")
+    v1_index = VectorIndex(vector_store, embeddings, index_id="version_1.0")
+    v2_index = VectorIndex(vector_store, embeddings, index_id="version_2.0")
     print(f"   - Version 1.0: {v1_index.index_id}")
     print(f"   - Version 2.0: {v2_index.index_id}\n")
 
