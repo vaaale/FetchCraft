@@ -14,12 +14,13 @@ class VectorStore(ABC, Generic[D]):
     """
     
     @abstractmethod
-    async def add_documents(self, documents: List[D]) -> List[str]:
+    async def add_documents(self, documents: List[D], index_id: Optional[str] = None) -> List[str]:
         """
         Add documents to the vector store.
         
         Args:
             documents: List of document objects to add
+            index_id: Optional index identifier to isolate documents
             
         Returns:
             List of document IDs that were added
@@ -31,6 +32,7 @@ class VectorStore(ABC, Generic[D]):
         self, 
         query_embedding: List[float],
         k: int = 4,
+        index_id: Optional[str] = None,
         **kwargs
     ) -> List[tuple[D, float]]:
         """
@@ -39,6 +41,7 @@ class VectorStore(ABC, Generic[D]):
         Args:
             query_embedding: The embedding vector to search with
             k: Number of results to return
+            index_id: Optional index identifier to filter search results
             **kwargs: Additional search parameters
             
         Returns:
@@ -47,12 +50,13 @@ class VectorStore(ABC, Generic[D]):
         pass
     
     @abstractmethod
-    async def delete(self, ids: List[str]) -> bool:
+    async def delete(self, ids: List[str], index_id: Optional[str] = None) -> bool:
         """
         Delete documents by their IDs.
         
         Args:
             ids: List of document IDs to delete
+            index_id: Optional index identifier to filter deletions
             
         Returns:
             True if deletion was successful
@@ -60,12 +64,13 @@ class VectorStore(ABC, Generic[D]):
         pass
     
     @abstractmethod
-    async def get_document(self, document_id: str) -> Optional[D]:
+    async def get_document(self, document_id: str, index_id: Optional[str] = None) -> Optional[D]:
         """
         Retrieve a single document by its ID.
         
         Args:
             document_id: The ID of the document to retrieve
+            index_id: Optional index identifier to filter retrieval
             
         Returns:
             The document if found, None otherwise

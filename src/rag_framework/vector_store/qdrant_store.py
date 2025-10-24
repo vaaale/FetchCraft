@@ -6,6 +6,7 @@ from qdrant_client.http import models
 from pydantic import BaseModel, Field
 
 from .base import VectorStore, D
+from ..node import Node
 
 class QdrantConfig(BaseModel):
     """Configuration for Qdrant vector store."""
@@ -24,7 +25,7 @@ class QdrantVectorStore(VectorStore[D]):
         self,
         client: QdrantClient,
         collection_name: str,
-        document_class: Type[D],
+        document_class: Optional[Type[D]] = None,
         vector_size: int = 384,
         distance: str = "Cosine"
     ):
@@ -34,13 +35,13 @@ class QdrantVectorStore(VectorStore[D]):
         Args:
             client: QdrantClient instance
             collection_name: Name of the collection to use
-            document_class: The document model class
+            document_class: The document model class (defaults to Node if not provided)
             vector_size: Size of the embedding vectors
             distance: Distance metric to use ("Cosine", "Euclid", or "Dot")
         """
         self.client = client
         self.collection_name = collection_name
-        self.document_class = document_class
+        self.document_class = document_class or Node  # type: ignore
         self.vector_size = vector_size
         self.distance = getattr(models.Distance, distance.upper())
         
@@ -61,12 +62,13 @@ class QdrantVectorStore(VectorStore[D]):
                 )
             )
     
-    async def add_documents(self, documents: List[D]) -> List[str]:
+    async def add_documents(self, documents: List[D], index_id: Optional[str] = None) -> List[str]:
         """
         Add documents to the Qdrant collection.
         
         Args:
             documents: List of document objects with embeddings
+            index_id: Optional index identifier to isolate documents
             
         Returns:
             List of document IDs that were added
@@ -74,8 +76,13 @@ class QdrantVectorStore(VectorStore[D]):
         if not documents:
             return []
             
-        # Generate IDs for new documents
-        ids = [str(uuid4()) for _ in documents]
+        # Use existing document IDs or generate new ones
+        ids = []
+        for doc in documents:
+            if hasattr(doc, 'id') and doc.id:  # type: ignore
+                ids.append(doc.id)  # type: ignore
+            else:
+                ids.append(str(uuid4()))
         
         # Convert documents to Qdrant points
         points = []
@@ -86,6 +93,13 @@ class QdrantVectorStore(VectorStore[D]):
                 
             payload = doc.dict()
             vector = payload.pop('embedding')
+            
+            # Store the document ID in the payload as well
+            payload['id'] = doc_id
+            
+            # Add index_id to payload if provided
+            if index_id is not None:
+                payload['_index_id'] = index_id
             
             points.append(
                 models.PointStruct(
@@ -107,6 +121,7 @@ class QdrantVectorStore(VectorStore[D]):
         self, 
         query_embedding: List[float],
         k: int = 4,
+        index_id: Optional[str] = None,
         **kwargs
     ) -> List[tuple[D, float]]:
         """
@@ -115,65 +130,131 @@ class QdrantVectorStore(VectorStore[D]):
         Args:
             query_embedding: The embedding vector to search with
             k: Number of results to return
+            index_id: Optional index identifier to filter search results
             **kwargs: Additional search parameters
             
         Returns:
             List of tuples containing (document, similarity_score)
         """
+        # Build filter for index_id if provided
+        query_filter = kwargs.pop('query_filter', None)
+        if index_id is not None:
+            index_filter = models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="_index_id",
+                        match=models.MatchValue(value=index_id)
+                    )
+                ]
+            )
+            # Merge with existing filter if provided
+            if query_filter:
+                if hasattr(query_filter, 'must'):
+                    query_filter.must.extend(index_filter.must)
+                else:
+                    query_filter = index_filter
+            else:
+                query_filter = index_filter
+        
         search_result = self.client.search(
             collection_name=self.collection_name,
             query_vector=query_embedding,
             limit=k,
+            query_filter=query_filter,
+            with_vectors=True,  # Include vectors in results
             **kwargs
         )
         
         results = []
         for hit in search_result:
-            doc_dict = hit.payload
-            doc_dict['id'] = hit.id  # Include the document ID
+            doc_dict = hit.payload.copy()
+            # Remove internal index_id from payload
+            doc_dict.pop('_index_id', None)
+            # Ensure document ID is present
+            if 'id' not in doc_dict:
+                doc_dict['id'] = hit.id
+            # Add embedding back if the document class expects it
+            if 'embedding' not in doc_dict and hasattr(self.document_class, 'model_fields'):
+                if 'embedding' in self.document_class.model_fields:
+                    doc_dict['embedding'] = hit.vector
             doc = self.document_class(**doc_dict)
             results.append((doc, hit.score))
             
         return results
     
-    async def delete(self, ids: List[str]) -> bool:
+    async def delete(self, ids: List[str], index_id: Optional[str] = None) -> bool:
         """
         Delete documents by their IDs.
         
         Args:
             ids: List of document IDs to delete
+            index_id: Optional index identifier to filter deletions
             
         Returns:
             True if deletion was successful
         """
-        self.client.delete(
-            collection_name=self.collection_name,
-            points_selector=models.PointIdsList(
-                points=ids
+        if index_id is not None:
+            # Filter by both ID and index_id
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=models.FilterSelector(
+                    filter=models.Filter(
+                        must=[
+                            models.HasIdCondition(has_id=ids),
+                            models.FieldCondition(
+                                key="_index_id",
+                                match=models.MatchValue(value=index_id)
+                            )
+                        ]
+                    )
+                )
             )
-        )
+        else:
+            # Delete by ID only
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=models.PointIdsList(
+                    points=ids
+                )
+            )
         return True
     
-    async def get_document(self, document_id: str) -> Optional[D]:
+    async def get_document(self, document_id: str, index_id: Optional[str] = None) -> Optional[D]:
         """
         Retrieve a single document by its ID.
         
         Args:
             document_id: The ID of the document to retrieve
+            index_id: Optional index identifier to filter retrieval
             
         Returns:
             The document if found, None otherwise
         """
         result = self.client.retrieve(
             collection_name=self.collection_name,
-            ids=[document_id]
+            ids=[document_id],
+            with_vectors=True  # Include vectors in results
         )
         
         if not result:
             return None
-            
-        doc_data = result[0].payload
-        doc_data['id'] = result[0].id
+        
+        # Check if index_id matches if specified
+        doc_data = result[0].payload.copy()
+        if index_id is not None:
+            stored_index_id = doc_data.get('_index_id')
+            if stored_index_id != index_id:
+                return None
+        
+        # Remove internal index_id from payload
+        doc_data.pop('_index_id', None)
+        # Ensure document ID is present
+        if 'id' not in doc_data:
+            doc_data['id'] = result[0].id
+        # Add embedding back if the document class expects it
+        if 'embedding' not in doc_data and hasattr(self.document_class, 'model_fields'):
+            if 'embedding' in self.document_class.model_fields:
+                doc_data['embedding'] = result[0].vector
         return self.document_class(**doc_data)
     
     @classmethod
@@ -198,7 +279,7 @@ class QdrantVectorStore(VectorStore[D]):
         return cls(
             client=client,
             collection_name=config.collection_name,
-            document_class=BaseModel,  # This should be overridden by the actual document class
+            document_class=Node,  # Defaults to Node
             vector_size=config.vector_size,
             distance=config.distance
         )
