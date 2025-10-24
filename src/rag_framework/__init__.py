@@ -11,6 +11,7 @@ from .vector_store.base import VectorStore
 from .vector_store.qdrant_store import QdrantVectorStore, QdrantConfig
 from .node import Node, Chunk
 from .parser import DocumentParser, TextFileDocumentParser
+from .embeddings import Embeddings, OpenAIEmbeddings
 
 __all__ = [
     'VectorIndex',
@@ -21,4 +22,6 @@ __all__ = [
     'Chunk',
     'DocumentParser',
     'TextFileDocumentParser',
+    'Embeddings',
+    'OpenAIEmbeddings',
 ]

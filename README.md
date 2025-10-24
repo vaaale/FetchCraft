@@ -7,6 +7,7 @@ A flexible and extensible framework for building Retrieval-Augmented Generation 
 - 🎯 **Modular Architecture**: Abstract base classes for easy extension
 - 🗂️ **Multiple Vector Store Support**: Currently supports Qdrant (more backends can be added)
 - 🔢 **Multiple Indices**: Support multiple isolated indices in the same vector store
+- 🤖 **Embedding Models**: Built-in support for OpenAI embeddings with extensible architecture
 - 📄 **Document Parsing**: Built-in text file parser with chunking strategies
 - 🔗 **Relationship Management**: Node-based system with parent/child and sequential relationships
 - 🧩 **Smart Chunking**: Configurable chunk size with overlap support
@@ -32,10 +33,32 @@ pip install -e ".[dev]"
 - Python >= 3.10
 - pydantic >= 2.0.0
 - qdrant-client >= 1.15.1
+- openai >= 1.0.0
 
 ## Quick Start
 
-### 1. Parse Documents into Chunks
+### 1. Generate Embeddings
+
+```python
+from rag_framework import OpenAIEmbeddings
+
+# Initialize OpenAI embeddings
+embeddings = OpenAIEmbeddings(
+    model="text-embedding-3-small",  # 1536 dimensions
+    # api_key="your-key",  # Optional: reads from OPENAI_API_KEY env var
+)
+
+# Embed a query
+query_embedding = await embeddings.embed_query("What is machine learning?")
+
+# Embed multiple documents
+texts = ["Document 1", "Document 2", "Document 3"]
+doc_embeddings = await embeddings.embed_documents(texts)
+
+print(f"Embedding dimension: {embeddings.dimension}")
+```
+
+### 2. Parse Documents into Chunks
 
 ```python
 from pathlib import Path
@@ -50,16 +73,15 @@ chunks = TextFileDocumentParser.from_file(
 
 print(f"Created {len(chunks)} chunks")
 
-# Access chunk relationships
-for chunk in chunks:
-    print(f"Chunk {chunk.chunk_index}: {chunk.text[:50]}...")
-    if chunk.has_next():
-        print(f"  → Next chunk exists")
-    if chunk.has_parent():
-        print(f"  ↑ Parent document: {chunk.parent.metadata['title']}")
+# Add embeddings to chunks
+chunk_texts = [chunk.text for chunk in chunks]
+chunk_embeddings = await embeddings.embed_documents(chunk_texts)
+
+for chunk, embedding in zip(chunks, chunk_embeddings):
+    chunk.embedding = embedding
 ```
 
-### 2. Create a Vector Store with Qdrant
+### 3. Create a Vector Store with Qdrant
 
 ```python
 from qdrant_client import QdrantClient
@@ -84,7 +106,7 @@ chunk_vector_store = QdrantVectorStore(
 )
 ```
 
-### 3. Build a Vector Index
+### 4. Build a Vector Index
 
 ```python
 from rag_framework import VectorIndex
@@ -97,7 +119,7 @@ document_ids = await index.add_documents(chunks)
 print(f"Indexed {len(document_ids)} chunks")
 ```
 
-### 4. Search for Similar Documents
+### 5. Search for Similar Documents
 
 ```python
 # Search with a query embedding
@@ -196,6 +218,92 @@ results = TextFileDocumentParser.parse_directory(
 
 for file_path, chunks in results.items():
     print(f"{file_path}: {len(chunks)} chunks")
+```
+
+### Embedding Models
+
+The framework provides built-in support for generating embeddings with an extensible architecture.
+
+#### OpenAI Embeddings
+
+```python
+from rag_framework import OpenAIEmbeddings
+
+# Basic usage (reads API key from OPENAI_API_KEY env var)
+embeddings = OpenAIEmbeddings(
+    model="text-embedding-3-small"  # 1536 dimensions
+)
+
+# With custom configuration
+embeddings = OpenAIEmbeddings(
+    api_key="your-api-key-here",
+    model="text-embedding-3-large",  # 3072 dimensions
+    dimensions=1024,  # Optional: reduce dimensions
+    base_url="https://api.openai.com/v1",  # Custom endpoint
+    timeout=60.0
+)
+
+# Embed documents
+texts = ["Document 1", "Document 2", "Document 3"]
+embeddings_list = await embeddings.embed_documents(texts)
+
+# Embed a query
+query_embedding = await embeddings.embed_query("search query")
+
+# Get embedding dimension (determined lazily on first API call)
+print(embeddings.dimension)  # e.g., 1536
+
+# Or explicitly determine dimension in async context
+dimension = await embeddings.aget_dimension()
+```
+
+**Supported Models:**
+- `text-embedding-3-small` - 1536 dimensions, efficient and cost-effective
+- `text-embedding-3-large` - 3072 dimensions, highest quality
+- `text-embedding-ada-002` - 1536 dimensions, previous generation
+
+**Dimension Determination:**
+Embedding dimensions are determined lazily - the actual dimension is discovered on the first API call or when explicitly requested. This allows the framework to work with any embedding model without hardcoded dimension mappings.
+
+```python
+# Dimension determined on first embed call
+embeddings = OpenAIEmbeddings(model="custom-model")
+result = await embeddings.embed_query("test")  # Dimension determined here
+print(embeddings.dimension)  # Returns actual dimension from API
+
+# Or explicitly determine in async context
+dimension = await embeddings.aget_dimension()
+
+# Or provide dimension explicitly to skip API call
+embeddings = OpenAIEmbeddings(model="custom-model", dimensions=1024)
+```
+
+**Custom Endpoints:**
+The OpenAI embeddings class supports any OpenAI-compatible API endpoint, including:
+- Azure OpenAI
+- Local embedding models (via LiteLLM, Ollama, etc.)
+- Other OpenAI-compatible services
+
+#### Extending with Custom Embeddings
+
+Create your own embedding implementation by inheriting from the `Embeddings` base class:
+
+```python
+from rag_framework import Embeddings
+from typing import List
+
+class MyCustomEmbeddings(Embeddings):
+    async def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        # Your implementation
+        pass
+    
+    async def embed_query(self, text: str) -> List[float]:
+        # Your implementation
+        pass
+    
+    @property
+    def dimension(self) -> int:
+        return 768  # Your embedding dimension
 ```
 
 ### Choosing Between Node and Chunk
