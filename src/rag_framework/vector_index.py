@@ -1,9 +1,10 @@
-from typing import List, TypeVar, Generic, Type, Optional, Dict, Any
+from typing import List, TypeVar, Generic, Type, Optional, Dict, Any, Set
 from abc import ABC, abstractmethod
 from uuid import uuid4
 
 from pydantic import BaseModel
 from .vector_store.base import VectorStore
+from .node import Node, SymNode
 
 D = TypeVar('D', bound=BaseModel)
 
@@ -64,6 +65,7 @@ class VectorIndex(Generic[D]):
         self,
         query_embedding: List[float],
         k: int = 4,
+        resolve_parents: bool = True,
         **kwargs
     ) -> List[tuple[D, float]]:
         """
@@ -73,17 +75,65 @@ class VectorIndex(Generic[D]):
         Args:
             query_embedding: The embedding vector to search with
             k: Number of results to return
+            resolve_parents: If True, automatically resolve parent nodes for SymNode results
             **kwargs: Additional search parameters
             
         Returns:
             List of tuples containing (document, similarity_score)
         """
-        return await self.vector_store.similarity_search(
+        results = await self.vector_store.similarity_search(
             query_embedding=query_embedding,
             k=k,
             index_id=self.index_id,
             **kwargs
         )
+        
+        # Resolve parent nodes if enabled
+        if resolve_parents:
+            results = await self._resolve_parent_nodes(results)
+        
+        return results
+    
+    async def _resolve_parent_nodes(
+        self, 
+        results: List[tuple[D, float]]
+    ) -> List[tuple[D, float]]:
+        """
+        Resolve parent nodes for SymNode instances in search results.
+        
+        Args:
+            results: List of (document, score) tuples from search
+            
+        Returns:
+            List of (document, score) tuples with parent nodes resolved
+        """
+        resolved_results = []
+        seen_parent_ids: Set[str] = set()
+        
+        for doc, score in results:
+            # Check if this is a SymNode that requires parent resolution
+            if isinstance(doc, SymNode) and doc.requires_parent_resolution():
+                parent_id = doc.parent_id
+                
+                # Skip if we've already resolved this parent
+                if parent_id in seen_parent_ids:
+                    continue
+                    
+                # Fetch the parent node
+                # Note: parent might be in a different index, so we don't pass index_id
+                parent_node = await self.vector_store.get_document(parent_id, index_id=None)
+                
+                if parent_node:
+                    resolved_results.append((parent_node, score))  # type: ignore
+                    seen_parent_ids.add(parent_id)
+                else:
+                    # If parent not found, fall back to the SymNode itself
+                    resolved_results.append((doc, score))
+            else:
+                # Not a SymNode or doesn't require resolution
+                resolved_results.append((doc, score))
+        
+        return resolved_results
     
     async def get_document(self, document_id: str) -> Optional[D]:
         """

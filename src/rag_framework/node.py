@@ -219,3 +219,98 @@ class Chunk(Node):
             current = current._next
         
         return "\n\n".join(context_parts)
+    
+    def create_symbolic_nodes(
+        self,
+        sub_texts: List[str],
+        preserve_metadata: bool = True
+    ) -> List['SymNode']:
+        """
+        Create multiple SymNode instances that reference this chunk as parent.
+        
+        Args:
+            sub_texts: List of text strings for the SymNodes (should be substrings of this chunk)
+            preserve_metadata: Whether to copy this chunk's metadata to the SymNodes
+            
+        Returns:
+            List of SymNode instances
+        """
+        # Forward reference - SymNode is defined later in this file
+        sym_nodes = []
+        for text in sub_texts:
+            metadata = self.metadata.copy() if preserve_metadata else {}
+            # Will be resolved when SymNode class is available
+            sym_node = SymNode.create(
+                text=text,
+                parent_id=self.id,
+                metadata=metadata
+            )
+            sym_nodes.append(sym_node)
+        
+        return sym_nodes
+
+
+class SymNode(Node):
+    """
+    A symbolic node that references a parent node for hierarchical relationships.
+    
+    SymNodes are useful for creating smaller, more granular chunks for semantic search
+    while returning larger parent nodes with more context during retrieval.
+    When a SymNode is retrieved from a vector index, the parent node is automatically
+    resolved and returned instead.
+    """
+    
+    # Flag to indicate this is a symbolic node
+    is_symbolic: bool = True
+    
+    def __init__(self, **data):
+        """
+        Initialize a SymNode.
+        
+        Args:
+            **data: Keyword arguments for initialization
+        """
+        super().__init__(**data)
+        # Ensure metadata has symbolic flag
+        if 'symbolic' not in self.metadata:
+            self.metadata['symbolic'] = True
+        
+        # Validate that parent_id is set
+        if not self.parent_id:
+            raise ValueError("SymNode must have a parent_id set")
+    
+    @classmethod
+    def create(
+        cls,
+        text: str,
+        parent_id: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ) -> 'SymNode':
+        """
+        Create a SymNode with a parent reference.
+        
+        Args:
+            text: The text content for this symbolic node
+            parent_id: The ID of the parent node
+            metadata: Additional metadata
+            **kwargs: Additional keyword arguments
+            
+        Returns:
+            A new SymNode instance
+        """
+        return cls(
+            text=text,
+            parent_id=parent_id,
+            metadata=metadata or {},
+            **kwargs
+        )
+    
+    def requires_parent_resolution(self) -> bool:
+        """
+        Check if this node requires parent resolution during retrieval.
+        
+        Returns:
+            True if parent should be resolved
+        """
+        return self.is_symbolic and self.parent_id is not None

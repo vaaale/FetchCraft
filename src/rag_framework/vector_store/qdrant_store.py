@@ -6,7 +6,7 @@ from qdrant_client.http import models
 from pydantic import BaseModel, Field
 
 from .base import VectorStore, D
-from ..node import Node
+from ..node import Node, Chunk, SymNode
 
 class QdrantConfig(BaseModel):
     """Configuration for Qdrant vector store."""
@@ -62,6 +62,26 @@ class QdrantVectorStore(VectorStore[D]):
                 )
             )
     
+    def _get_doc_class(self, class_name: Optional[str]) -> Type[D]:
+        """
+        Get the document class based on the stored class name.
+        
+        Args:
+            class_name: Name of the class stored in the payload
+            
+        Returns:
+            The appropriate document class
+        """
+        if class_name == 'SymNode':
+            return SymNode  # type: ignore
+        elif class_name == 'Chunk':
+            return Chunk  # type: ignore
+        elif class_name == 'Node':
+            return Node  # type: ignore
+        else:
+            # Fall back to the default document class
+            return self.document_class
+    
     async def add_documents(self, documents: List[D], index_id: Optional[str] = None) -> List[str]:
         """
         Add documents to the Qdrant collection.
@@ -96,6 +116,9 @@ class QdrantVectorStore(VectorStore[D]):
             
             # Store the document ID in the payload as well
             payload['id'] = doc_id
+            
+            # Store the document class type for proper reconstruction
+            payload['_doc_class'] = doc.__class__.__name__
             
             # Add index_id to payload if provided
             if index_id is not None:
@@ -168,8 +191,10 @@ class QdrantVectorStore(VectorStore[D]):
         results = []
         for hit in search_result:
             doc_dict = hit.payload.copy()
-            # Remove internal index_id from payload
+            # Remove internal fields from payload
             doc_dict.pop('_index_id', None)
+            doc_class_name = doc_dict.pop('_doc_class', None)
+            
             # Ensure document ID is present
             if 'id' not in doc_dict:
                 doc_dict['id'] = hit.id
@@ -177,7 +202,10 @@ class QdrantVectorStore(VectorStore[D]):
             if 'embedding' not in doc_dict and hasattr(self.document_class, 'model_fields'):
                 if 'embedding' in self.document_class.model_fields:
                     doc_dict['embedding'] = hit.vector
-            doc = self.document_class(**doc_dict)
+            
+            # Reconstruct using the correct class type
+            doc_class = self._get_doc_class(doc_class_name)
+            doc = doc_class(**doc_dict)
             results.append((doc, hit.score))
             
         return results
@@ -246,8 +274,10 @@ class QdrantVectorStore(VectorStore[D]):
             if stored_index_id != index_id:
                 return None
         
-        # Remove internal index_id from payload
+        # Remove internal fields from payload
         doc_data.pop('_index_id', None)
+        doc_class_name = doc_data.pop('_doc_class', None)
+        
         # Ensure document ID is present
         if 'id' not in doc_data:
             doc_data['id'] = result[0].id
@@ -255,7 +285,10 @@ class QdrantVectorStore(VectorStore[D]):
         if 'embedding' not in doc_data and hasattr(self.document_class, 'model_fields'):
             if 'embedding' in self.document_class.model_fields:
                 doc_data['embedding'] = result[0].vector
-        return self.document_class(**doc_data)
+        
+        # Reconstruct using the correct class type
+        doc_class = self._get_doc_class(doc_class_name)
+        return doc_class(**doc_data)
     
     @classmethod
     def from_config(cls, config: Union[Dict[str, Any], QdrantConfig]) -> 'QdrantVectorStore':
