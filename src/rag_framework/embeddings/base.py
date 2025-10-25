@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import List, Union
 
+from pydantic import BaseModel
 
-class Embeddings(ABC):
+
+class Embeddings(BaseModel, ABC):
     """
     Abstract base class for embedding models.
     

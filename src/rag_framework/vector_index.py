@@ -7,7 +7,7 @@ from .vector_store.base import VectorStore
 from .node import Node, SymNode
 from .embeddings.base import Embeddings
 
-D = TypeVar('D', bound=BaseModel)
+D = TypeVar('D', bound=Node)
 
 class VectorIndex(Generic[D]):
     """
@@ -82,7 +82,7 @@ class VectorIndex(Generic[D]):
             docs_indices = []
             
             for i, doc in enumerate(documents):
-                if not hasattr(doc, 'embedding') or doc.embedding is None:
+                if doc.embedding is None:
                     docs_to_embed.append(doc.text if hasattr(doc, 'text') else str(doc))
                     docs_indices.append(i)
             

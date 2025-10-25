@@ -13,6 +13,7 @@ from .node import Node, Chunk, SymNode
 from .parser import DocumentParser, TextFileDocumentParser
 from .embeddings import Embeddings, OpenAIEmbeddings
 from .retriever import Retriever, VectorIndexRetriever
+from .agents import BaseAgent, ReActAgent, RetrieverTool
 
 __all__ = [
     'VectorIndex',
@@ -28,4 +29,7 @@ __all__ = [
     'OpenAIEmbeddings',
     'Retriever',
     'VectorIndexRetriever',
+    'BaseAgent',
+    'ReActAgent',
+    'RetrieverTool',
 ]

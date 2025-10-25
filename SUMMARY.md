@@ -6,6 +6,7 @@ This document summarizes the complete implementation of a flexible RAG (Retrieva
 - Automatic embedding generation
 - Hierarchical node relationships (SymNode)
 - High-level retriever abstraction
+- AI Agents with pydantic-ai integration
 - Simplified, intuitive API
 
 ## Features Implemented
@@ -95,28 +96,59 @@ retriever.update_config(top_k=10)
 - `src/rag_framework/vector_index.py` - Added as_retriever() method
 - `RETRIEVER_USAGE.md` - Complete documentation
 
+### 4. ✅ AI Agents with pydantic-ai
+
+**Purpose**: Conversational AI interface for question-answering with automatic retrieval.
+
+```python
+# Create agent from index
+agent = ReActAgent.create(
+    retriever=index.as_retriever(top_k=2)
+)
+
+# Query with natural language
+answer = await agent.query("How old was Bill Gates when he died?")
+# Agent searches documents, reasons about them, and provides answer
+```
+
+**Features**:
+- ReAct (Reasoning and Acting) pattern implementation
+- Automatic tool registration for retriever
+- Customizable system prompts
+- Multi-step reasoning capabilities
+- Support for multiple LLM providers (OpenAI, Anthropic, etc.)
+- Graceful error handling for missing dependencies
+
+**Files Created**:
+- `src/rag_framework/agents/base.py` - Abstract BaseAgent class
+- `src/rag_framework/agents/react_agent.py` - ReActAgent implementation
+- `src/rag_framework/agents/__init__.py` - Package exports
+- `src/examples/agent_example.py` - Complete usage examples
+- `AGENT_USAGE.md` - Comprehensive documentation
+- `AGENT_IMPLEMENTATION.md` - Implementation details
+
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     Application Layer                   │
-│                                                           │
-│  ┌──────────────┐              ┌──────────────┐        │
-│  │  Retriever   │              │ VectorIndex  │        │
-│  │              │◄─────────────┤              │        │
-│  │ .retrieve()  │              │ .search_by   │        │
-│  └──────────────┘              │  _text()     │        │
-│                                 │ .as_retriever│        │
-│                                 └──────┬───────┘        │
-└────────────────────────────────────────┼────────────────┘
-                                         │
-                         ┌───────────────┼───────────────┐
-                         ▼               ▼               ▼
-                 ┌──────────────┐ ┌──────────┐  ┌────────────┐
-                 │ VectorStore  │ │Embeddings│  │ Node Types │
-                 │  (Qdrant)    │ │ (OpenAI) │  │ Chunk      │
-                 │              │ │          │  │ SymNode    │
-                 └──────────────┘ └──────────┘  └────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                     Application Layer                       │
+│                                                               │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   │
+│  │  ReActAgent  │   │  Retriever   │   │ VectorIndex  │   │
+│  │              │   │              │   │              │   │
+│  │ .query()     │──►│ .retrieve()  │◄──┤ .search_by   │   │
+│  │              │   │              │   │  _text()     │   │
+│  │ pydantic-ai  │   └──────────────┘   │ .as_retriever│   │
+│  └──────────────┘                      └──────┬───────┘   │
+└────────────────────────────────────────────────┼───────────┘
+                                                 │
+                         ┌───────────────────────┼───────────────┐
+                         ▼                       ▼               ▼
+                 ┌──────────────┐       ┌──────────┐    ┌────────────┐
+                 │ VectorStore  │       │Embeddings│    │ Node Types │
+                 │  (Qdrant)    │       │ (OpenAI) │    │ Chunk      │
+                 │              │       │          │    │ SymNode    │
+                 └──────────────┘       └──────────┘    └────────────┘
 ```
 
 ## File Structure
@@ -136,19 +168,26 @@ src/rag_framework/
 │   ├── __init__.py
 │   ├── base.py                    # Retriever abstract class
 │   └── vector_index_retriever.py  # VectorIndex retriever
+├── agents/
+│   ├── __init__.py
+│   ├── base.py                    # BaseAgent abstract class
+│   └── react_agent.py             # ReActAgent implementation
 └── parser.py                      # Document parsing utilities
 
 src/examples/
 ├── simple_usage.py                # ✅ Best starting point
 ├── retriever_example.py           # ✅ Retriever patterns
 ├── symnode_example.py             # ✅ Hierarchical nodes
-└── embeddings_example.py          # ✅ Embedding integration
+├── embeddings_example.py          # ✅ Embedding integration
+└── agent_example.py               # ✅ Agent usage
 
 Documentation/
 ├── README_NEW_API.md              # Quick start guide
 ├── VECTORINDEX_API_CHANGES.md     # Migration guide
 ├── RETRIEVER_USAGE.md             # Retriever documentation
 ├── SYMNODE_USAGE.md               # SymNode documentation
+├── AGENT_USAGE.md                 # Agent documentation
+├── AGENT_IMPLEMENTATION.md        # Agent implementation details
 └── EXAMPLES_UPDATED.md            # Example status
 ```
 
@@ -203,6 +242,24 @@ results = await retriever.aretrieve("query text")
 
 # Configuration
 retriever.update_config(top_k=10)
+```
+
+### ReActAgent
+
+```python
+# Creation from retriever
+agent = ReActAgent.create(
+    retriever=index.as_retriever(top_k=2),
+    model="openai:gpt-4o-mini",  # Optional
+    system_prompt="Custom prompt"  # Optional
+)
+
+# Query
+answer = await agent.query("How old was Bill Gates when he died?")
+answer = await agent.aquery("question")  # Alias
+
+# Sync (if no event loop running)
+answer = agent.query_sync("question")
 ```
 
 ## Key Benefits
@@ -326,6 +383,8 @@ Potential future enhancements:
 - `VECTORINDEX_API_CHANGES.md` - Complete API migration guide  
 - `RETRIEVER_USAGE.md` - Retriever abstraction guide
 - `SYMNODE_USAGE.md` - Hierarchical node guide
+- `AGENT_USAGE.md` - Agent usage guide
+- `AGENT_IMPLEMENTATION.md` - Agent implementation details
 - `EXAMPLES_UPDATED.md` - Example update status
 
 ## Conclusion
@@ -333,10 +392,11 @@ Potential future enhancements:
 The RAG framework now provides:
 - ✅ Clean, intuitive API
 - ✅ Automatic embedding management
-- ✅ Hierarchical node relationships
+- ✅ Hierarchical node relationships (SymNode)
 - ✅ High-level retriever abstraction
+- ✅ AI Agents with pydantic-ai integration
 - ✅ Production-ready code
 - ✅ Comprehensive documentation
 - ✅ Working examples
 
-All features are tested and documented. The framework is ready for use in production RAG applications.
+All features are tested and documented. The framework is ready for use in production RAG applications with advanced conversational AI capabilities.

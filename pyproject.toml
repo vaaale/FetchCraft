@@ -12,6 +12,7 @@ dependencies = [
     "qdrant-client>=1.15.1",
     "openai>=1.0.0",
     "pytest>=8.4.2",
+    "pydantic-ai>=0.0.14",
 ]
 
 [project.optional-dependencies]
