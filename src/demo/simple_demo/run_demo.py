@@ -41,6 +41,7 @@ DOCUMENTS_PATH = Path("/mnt/storage/data/knowledge/textfiles_tiny")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "bge-m3")
 EMBEDDING_API_KEY = os.getenv("OPENAI_API_KEY", "sk-321")
 EMBEDDING_BASE_URL = os.getenv("OPENAI_BASE_URL", None)  # None = use OpenAI default
+INDEX_ID = "39372e06-5cb9-45ef-ab40-cc66649f7362"
 
 # LLM configuration for the agent
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4-turbo")
@@ -95,7 +96,7 @@ async def load_and_index_documents(
     
     results = parser.parse_directory(
         directory_path=documents_path,
-        pattern="*.txt",
+        pattern="*",
         recursive=True
     )
     
@@ -162,10 +163,12 @@ async def setup_rag_system():
         distance="Cosine"
     )
     
-    # Create vector index
+    # Create vector index with a consistent index_id
+    # This ensures documents can be found across multiple runs
     vector_index = VectorIndex(
         vector_store=vector_store,
-        embeddings=embeddings
+        embeddings=embeddings,
+        index_id=INDEX_ID
     )
     
     # Index documents if needed
@@ -174,8 +177,8 @@ async def setup_rag_system():
         num_chunks = await load_and_index_documents(
             vector_index=vector_index,
             documents_path=DOCUMENTS_PATH,
-            chunk_size=500,
-            overlap=50
+            chunk_size=4096,
+            overlap=200
         )
         if num_chunks == 0:
             print("\n⚠️  Warning: No documents were indexed!")

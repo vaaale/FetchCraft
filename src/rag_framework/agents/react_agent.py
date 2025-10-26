@@ -7,6 +7,7 @@ from typing import Optional, Any, List, Union, Dict, AsyncIterable
 from pydantic_ai import AgentRunResultEvent, AgentStreamEvent, PartStartEvent, PartDeltaEvent, TextPartDelta, \
     ThinkingPartDelta, ToolCallPartDelta, FunctionToolCallEvent, FunctionToolResultEvent, FinalResultEvent
 
+from .memory import Memory
 from .utils import to_chat_message
 from ..logging import configure_logging
 
@@ -27,17 +28,34 @@ from .base import BaseAgent, AgentResponse, CitationContainer, ChatMessage
 
 configure_logging("root")
 
-SYSTEM_PROMPT = """You are a helpful AI assistant that answers questions based on retrieved information.
+# SYSTEM_PROMPT = """You are a helpful AI assistant that answers questions based on retrieved information.
+# SYSTEM_PROMPT = """You are a helpful AI assistant that uses reasoning and multi-step thinking to answer questions based on retrieved information and conversation history.
+# Knowledge cutoff: 31.12.2023
+# Today's date: {today}
+#
+# When answering:
+# 1. Read the conversation history and the users query carefully to understand what the user wants
+# 2. Create a plan for solving the task step-by-step
+# 3. Use the provided tools to find relevant information or execute actions. You can call the tools as often as you need.
+# 4. Base your answer on the retrieved documents ONLY! Never use prior knowledge!
+# 5. If the provided documents do not contain the information refine your query and try again.
+# 5. When reciting facts, always include a citation to the source of the information. Always add citations to your answer using a Markdown link. Example: 'See [<document_title>](<document_number>)'
+# (The document_number must always be an integer and is the number following 'Document ' in the citations)
+# """
+
+SYSTEM_PROMPT = """You are a helpful AI assistant that uses reasoning and multi-step thinking to answer questions based on retrieved information and conversation history.
 Knowledge cutoff: 31.12.2023
 Today's date: {today}
 
-When answering:
-1. Understand the task the user wants you to do
-2. Create a plan for solving the task step-by-step
-3. Use the provided tools to find relevant information or execute actions. You can call the tools as often as you need.
-4. Base your answer on the retrieved documents ONLY! Never use prior knowledge!
-5. If the provided documents do not contain the information refine your query and try again.
-5. When reciting facts, always include a citation to the source of the information. Always add citations to your answer using a Markdown link. Example: 'See [<document_title>](<document_number>)'
+Lets think Step-By-Step:
+1. Read the conversation history and the users query carefully to understand what the user wants
+2. Break the problem down into manageable steps using the provided tools
+3. Execute the planned steps. Repeat this step until the problem is solved.
+
+When writing your answer:
+1. Base your answer on the retrieved documents ONLY! Never use prior knowledge!
+2. If the provided documents do not contain the information refine your query and try again.
+3. When reciting facts, always include a citation to the source of the information. Always add citations to your answer using a Markdown link. Example: 'See [<document_title>](<document_number>)'
 (The document_number must always be an integer and is the number following 'Document ' in the citations)
 """
 
@@ -79,6 +97,7 @@ class ReActAgent(BaseAgent):
     _tools: List[Tool] = PrivateAttr(default=None)
     model: Union[str, Any] = "openai:gpt-4"
     agent_kwargs: Dict = {}
+    _memory: Memory = PrivateAttr(default=None)
 
     """
     ReAct (Reasoning and Acting) agent that uses a retriever to answer questions.
@@ -174,10 +193,16 @@ class ReActAgent(BaseAgent):
             The input should be your final answer."""
             return answer
 
-        chat_history = messages if messages else []
+        if not self._memory:
+            self._memory = Memory()
+
+        # chat_history = messages if messages else []
         citations = CitationContainer()
+
+        user_query, chat_history = self._memory.get_prompt(question)
+
         result = await agent.run(
-            user_prompt=question,
+            user_prompt=user_query,
             message_history=chat_history,
             output_type=final_output,
             deps=citations,
@@ -185,7 +210,20 @@ class ReActAgent(BaseAgent):
         )
         response = result.output
         answer = self._post_process_citations(response, citations)
-        return AgentResponse(query=ChatMessage.user_message(question), response=ChatMessage.assistant_message(answer), citations=citations.citations, all_citations=citations.all_citations)
+
+        self._memory.add_memory(
+            ChatMessage.user_message(question),
+            ChatMessage.assistant_message(answer),
+            citations.citations
+        )
+
+        used_citations = citations.citations
+        return AgentResponse(
+            query=ChatMessage.user_message(question),
+            response=ChatMessage.assistant_message(answer),
+            citations=used_citations,
+            all_citations=citations.all_citations
+        )
 
     def __repr__(self) -> str:
         return f"ReActAgent(model={self.model})"

@@ -157,9 +157,8 @@ class TextFileDocumentParser(DocumentParser):
         
         return chunks
     
-    @classmethod
     def from_file(
-        cls,
+        self,
         file_path: Path,
         chunk_size: int = 200,
         overlap: int = 20,
@@ -183,21 +182,18 @@ class TextFileDocumentParser(DocumentParser):
         Returns:
             List of Chunk objects
         """
-        parser = cls(
-            chunk_size=chunk_size,
-            overlap=overlap,
-            separator=separator,
-            keep_separator=keep_separator
-        )
-        
+
         # Read the file
+        text = None
         if not encoding:
             for encoding in ["utf-8", "iso8859-1"]:
                 try:
                     text = file_path.read_text(encoding=encoding)
+                    break
                 except Exception as e:
                     continue
-                break
+            else:
+                raise ValueError(f"Failed to read file {file_path} with any encoding")
         else:
             text = file_path.read_text(encoding=encoding)
 
@@ -221,18 +217,15 @@ class TextFileDocumentParser(DocumentParser):
         )
         
         # Parse into chunks
-        return parser.parse(
+        return self.parse(
             text=text,
             metadata=metadata,
             parent_node=parent_node
         )
     
-    @classmethod
     def parse_directory(
-        cls,
+        self,
         directory_path: Path,
-        chunk_size: int = 200,
-        overlap: int = 20,
         pattern: str = "*.txt",
         separator: str = " ",
         keep_separator: bool = True,
@@ -268,10 +261,10 @@ class TextFileDocumentParser(DocumentParser):
         
         for file_path in files:
             if file_path.is_file():
-                chunks = cls.from_file(
+                chunks = self.from_file(
                     file_path=file_path,
-                    chunk_size=chunk_size,
-                    overlap=overlap,
+                    chunk_size=self.chunk_size,
+                    overlap=self.overlap,
                     separator=separator,
                     keep_separator=keep_separator,
                     encoding=encoding

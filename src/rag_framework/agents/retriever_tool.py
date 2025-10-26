@@ -52,11 +52,11 @@ class RetrieverTool:
             description = """Search for relevant documents.
 
 Args:
-    query: The search query
+    query: The search query. The query should be as specific as possible to get relevant results. This is very important for followup questions as the tool has no memory!
 
 Returns:
     Retrieved documents as formatted text"""
-        
+
         self.description = description
     
     @classmethod
@@ -114,7 +114,7 @@ Returns:
         
         Args:
             ctx: Context from pydantic-ai (RunContext) - not type-checked here for flexibility
-            query: The search query
+            query: The search query. The query should be as specific as possible to get relevant results. This is very important for followup questions!
             
         Returns:
             Formatted retrieval results
