@@ -1,8 +1,8 @@
-from typing import List, TypeVar, Generic, Type, Optional, Dict, Any, Set
+from typing import List, TypeVar, Generic, Type, Optional, Dict, Any, Set, Annotated
 from abc import ABC, abstractmethod
 from uuid import uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict, SkipValidation, PrivateAttr
 from tqdm import tqdm
 
 from fetchcraft.vector_store.base import VectorStore
@@ -11,7 +11,7 @@ from fetchcraft.embeddings.base import Embeddings
 
 D = TypeVar('D', bound=Node)
 
-class VectorIndex(Generic[D]):
+class VectorIndex(BaseModel, Generic[D]):
     """
     A vector index that works with any vector store implementation.
     
@@ -23,11 +23,21 @@ class VectorIndex(Generic[D]):
     Multiple indices can coexist in the same vector store by using unique index_id values.
     """
     
+    vector_store: Annotated[VectorStore[D], SkipValidation()] = Field(description="Vector store instance")
+    _embeddings: Embeddings = PrivateAttr(default=None)
+    index_id: str = Field(default_factory=lambda: str(uuid4()), description="Unique index identifier")
+    
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+    )
+    
     def __init__(
         self, 
         vector_store: VectorStore[D], 
         embeddings: Embeddings,
-        index_id: Optional[str] = None
+        index_id: Optional[str] = None,
+        **kwargs
     ):
         """
         Initialize the vector index with a vector store and embeddings model.
@@ -38,10 +48,13 @@ class VectorIndex(Generic[D]):
             index_id: Unique identifier for this index. If None, a UUID will be generated.
                      Multiple indices can share the same vector store with different index_ids.
         """
-        self.vector_store = vector_store
-        self.embeddings = embeddings
-        self.index_id = index_id or str(uuid4())
-    
+        super().__init__(
+            vector_store=vector_store,
+            index_id=index_id or str(uuid4()),
+            **kwargs
+        )
+        self._embeddings=embeddings
+
     @classmethod
     def from_vector_store(
         cls,
@@ -83,7 +96,7 @@ class VectorIndex(Generic[D]):
 
         for i, doc in enumerate(documents):
             if doc.embedding is None:
-                embeddings = await self.embeddings.embed_documents([doc.text])
+                embeddings = await self._embeddings.embed_documents([doc.text])
                 doc.embedding = embeddings[0]
                 added_ids = await self.vector_store.add_documents([doc], index_id=self.index_id)
                 ids.append(added_ids[0])
@@ -147,7 +160,7 @@ class VectorIndex(Generic[D]):
             List of tuples containing (document, similarity_score)
         """
         # Generate query embedding
-        query_embedding = await self.embeddings.embed_query(query)
+        query_embedding = await self._embeddings.embed_query(query)
         
         # Perform search with the generated embedding
         return await self.search(
@@ -252,7 +265,7 @@ class VectorIndex(Generic[D]):
         
         return VectorIndexRetriever(
             vector_index=self,
-            embeddings=self.embeddings,
+            embeddings=self._embeddings,
             top_k=top_k,
             resolve_parents=resolve_parents,
             **search_kwargs

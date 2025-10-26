@@ -4,14 +4,14 @@ Base retriever interface for RAG framework.
 
 from abc import ABC, abstractmethod
 from typing import List, TypeVar, Generic, Any, Dict
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from ..node import Node, NodeWithScore
 
 D = TypeVar('D', bound=Node)
 
 
-class Retriever(ABC, Generic[D]):
+class Retriever(BaseModel, ABC, Generic[D]):
     """
     Abstract base class for retriever implementations.
     
@@ -20,6 +20,11 @@ class Retriever(ABC, Generic[D]):
     retrievers accept natural language queries and handle the embedding
     generation internally.
     """
+    
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+    )
     
     @abstractmethod
     async def retrieve(

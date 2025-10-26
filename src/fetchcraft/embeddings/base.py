@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class Embeddings(BaseModel, ABC):
@@ -10,6 +10,11 @@ class Embeddings(BaseModel, ABC):
     
     This class defines the interface that all embedding implementations must follow.
     """
+    
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+    )
     
     @abstractmethod
     async def embed_documents(self, texts: List[str]) -> List[List[float]]:

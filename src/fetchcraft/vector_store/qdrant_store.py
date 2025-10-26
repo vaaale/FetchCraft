@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from .base import VectorStore, D
 from ..node import Node, Chunk, SymNode
@@ -21,13 +21,26 @@ class QdrantVectorStore(VectorStore[D]):
     Qdrant implementation of the VectorStore interface.
     """
     
+    client: Any = Field(description="QdrantClient instance")
+    collection_name: str = Field(description="Name of the collection")
+    document_class: Optional[Type[D]] = Field(default=None, description="Document class type")
+    vector_size: int = Field(default=384, description="Size of embedding vectors")
+    distance: str = Field(default="Cosine", description="Distance metric (Cosine, Euclid, or Dot)")
+    _distance_metric: Any = None  # Computed field for models.Distance
+    
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+    )
+    
     def __init__(
         self,
         client: QdrantClient,
         collection_name: str,
         document_class: Optional[Type[D]] = None,
         vector_size: int = 384,
-        distance: str = "Cosine"
+        distance: str = "Cosine",
+        **kwargs
     ):
         """
         Initialize the Qdrant vector store.
@@ -39,11 +52,15 @@ class QdrantVectorStore(VectorStore[D]):
             vector_size: Size of the embedding vectors
             distance: Distance metric to use ("Cosine", "Euclid", or "Dot")
         """
-        self.client = client
-        self.collection_name = collection_name
-        self.document_class = document_class or Node  # type: ignore
-        self.vector_size = vector_size
-        self.distance = getattr(models.Distance, distance.upper())
+        super().__init__(
+            client=client,
+            collection_name=collection_name,
+            document_class=document_class or Node,  # type: ignore
+            vector_size=vector_size,
+            distance=distance,
+            **kwargs
+        )
+        self._distance_metric = getattr(models.Distance, distance.upper())
         
         # Create collection if it doesn't exist
         self._ensure_collection()
@@ -58,7 +75,7 @@ class QdrantVectorStore(VectorStore[D]):
                 collection_name=self.collection_name,
                 vectors_config=models.VectorParams(
                     size=self.vector_size,
-                    distance=self.distance
+                    distance=self._distance_metric
                 )
             )
     

@@ -400,8 +400,8 @@ await index.add_documents(nodes, auto_embed=False)
 
 ```python
 # The embeddings model is accessible
-dimension = await index.embeddings.aget_dimension()
-custom_emb = await index.embeddings.embed_query("test")
+dimension = await index._embeddings.aget_dimension()
+custom_emb = await index._embeddings.embed_query("test")
 ```
 
 ## Backward Compatibility

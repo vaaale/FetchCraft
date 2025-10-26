@@ -1,17 +1,22 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Any, TypeVar, Generic, Type
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 # Type variable for document type
 D = TypeVar('D', bound=BaseModel)
 
-class VectorStore(ABC, Generic[D]):
+class VectorStore(BaseModel, ABC, Generic[D]):
     """
     Abstract base class for vector store implementations.
     
     This class defines the interface that all vector store implementations must follow.
     """
+    
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+    )
     
     @abstractmethod
     async def add_documents(self, documents: List[D], index_id: Optional[str] = None) -> List[str]:

@@ -1,9 +1,9 @@
 """
 Vector index retriever implementation.
 """
-
-from typing import List, TypeVar, Generic, Optional, Any, Dict
-from pydantic import BaseModel
+import json
+from typing import List, TypeVar, Generic, Optional, Any, Dict, Annotated
+from pydantic import BaseModel, Field, ConfigDict, SkipValidation, PrivateAttr
 
 from .base import Retriever
 from ..embeddings.base import Embeddings
@@ -20,6 +20,17 @@ class VectorIndexRetriever(Retriever[D]):
     a simple text-to-documents retrieval interface. It handles embedding
     generation internally.
     """
+    
+    vector_index: Annotated[Any, SkipValidation()] = Field(description="VectorIndex instance")
+    _embeddings: Embeddings = PrivateAttr(default=None)
+    top_k: int = Field(default=4, description="Number of results to return")
+    resolve_parents: bool = Field(default=True, description="Whether to resolve parent nodes")
+    search_kwargs: Dict[str, Any] = Field(default_factory=dict, description="Additional search parameters")
+    
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+    )
     
     def __init__(
         self,
@@ -39,12 +50,18 @@ class VectorIndexRetriever(Retriever[D]):
             resolve_parents: Whether to resolve parent nodes for SymNodes (default: True)
             **search_kwargs: Additional keyword arguments to pass to search
         """
-        self.vector_index = vector_index
-        self.embeddings = embeddings
-        self.top_k = top_k
-        self.resolve_parents = resolve_parents
-        self.search_kwargs = search_kwargs
-    
+        super().__init__(
+            vector_index=vector_index,
+            embeddings=embeddings,
+            top_k=top_k,
+            resolve_parents=resolve_parents,
+            search_kwargs=search_kwargs
+        )
+
+    def to_json(self) -> str:
+        """Serialize to JSON string."""
+        return self.model_dump_json()
+
     async def retrieve(
         self, 
         query: str,

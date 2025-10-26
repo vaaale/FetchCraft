@@ -332,7 +332,7 @@ class NodeWithScore(BaseModel):
     }
     
     def __repr__(self) -> str:
-        return f"NodeWithScore(score={self.score:.3f}, node_id={self.node.id[:8]}...)"
+        return f"NodeWithScore(score={self.score:.3f}, node_id={self.node.id[:8]}, {self.node.text[:100]}...)"
     
     @property
     def text(self) -> str:
@@ -348,3 +348,11 @@ class NodeWithScore(BaseModel):
     def id(self) -> str:
         """Convenience property to access the node's id."""
         return self.node.id
+
+
+class ObjectNode(Node):
+    """
+    A node that represents an object with a name and description.
+    """
+    object: Any = Field(description="The object")
+
