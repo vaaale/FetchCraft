@@ -111,7 +111,7 @@ class QdrantVectorStore(VectorStore[D]):
             if not hasattr(doc, 'embedding') or not doc.embedding:  # type: ignore
                 raise ValueError("Document must have an 'embedding' field")
                 
-            payload = doc.dict()
+            payload = doc.model_dump()
             vector = payload.pop('embedding')
             
             # Store the document ID in the payload as well
@@ -179,9 +179,9 @@ class QdrantVectorStore(VectorStore[D]):
             else:
                 query_filter = index_filter
         
-        search_result = self.client.search(
+        search_result = self.client.query_points(
             collection_name=self.collection_name,
-            query_vector=query_embedding,
+            query=query_embedding,
             limit=k,
             query_filter=query_filter,
             with_vectors=True,  # Include vectors in results
@@ -189,7 +189,7 @@ class QdrantVectorStore(VectorStore[D]):
         )
         
         results = []
-        for hit in search_result:
+        for hit in search_result.points:
             doc_dict = hit.payload.copy()
             # Remove internal fields from payload
             doc_dict.pop('_index_id', None)

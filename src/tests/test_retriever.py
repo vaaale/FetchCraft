@@ -9,6 +9,7 @@ from rag_framework import (
     Node,
     Chunk,
     SymNode,
+    NodeWithScore,
     QdrantVectorStore,
     VectorIndex,
     VectorIndexRetriever
@@ -68,8 +69,9 @@ async def test_basic_retriever():
     results = await retriever.retrieve("test query")
     
     assert len(results) == 2
-    assert all(isinstance(doc, Node) for doc, score in results)
-    assert all(isinstance(score, float) for doc, score in results)
+    assert all(isinstance(result, NodeWithScore) for result in results)
+    assert all(isinstance(result.node, Node) for result in results)
+    assert all(isinstance(result.score, float) for result in results)
 
 
 @pytest.mark.asyncio
@@ -180,9 +182,9 @@ async def test_retriever_with_symnode():
     results = await retriever.retrieve("query")
     
     # Should get parent, not SymNodes
-    for doc, score in results:
-        if doc.id == parent.id:
-            assert isinstance(doc, Chunk)
+    for result in results:
+        if result.node.id == parent.id:
+            assert isinstance(result.node, Chunk)
             break
     else:
         pytest.fail("Parent chunk not found in results")
@@ -222,7 +224,7 @@ async def test_retriever_without_parent_resolution():
     results = await retriever.retrieve("query")
     
     # Should include SymNode
-    has_symnode = any(isinstance(doc, SymNode) for doc, score in results)
+    has_symnode = any(isinstance(result.node, SymNode) for result in results)
     assert has_symnode, "SymNode should be in results when resolve_parents=False"
 
 

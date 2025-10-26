@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 from .vector_store.base import VectorStore
-from .node import Node, SymNode
+from .node import Node, SymNode, Chunk
 from .embeddings.base import Embeddings
 
 D = TypeVar('D', bound=Node)
@@ -197,7 +197,12 @@ class VectorIndex(Generic[D]):
                     resolved_results.append((doc, score))
             else:
                 # Not a SymNode or doesn't require resolution
-                resolved_results.append((doc, score))
+                # Check if this document is already a parent we've seen
+                if doc.id not in seen_parent_ids:
+                    resolved_results.append((doc, score))
+                    # If this could be a parent (Chunk), track it to avoid duplicates
+                    if isinstance(doc, Chunk):
+                        seen_parent_ids.add(doc.id)
         
         return resolved_results
     

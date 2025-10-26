@@ -2415,6 +2415,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-ai" },
     { name = "pytest" },
+    { name = "pytest-asyncio" },
     { name = "qdrant-client" },
 ]
 
@@ -2440,6 +2441,7 @@ requires-dist = [
     { name = "pydantic-ai", specifier = ">=0.0.14" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
+    { name = "pytest-asyncio", specifier = ">=1.2.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
     { name = "qdrant-client", specifier = ">=1.15.1" },
     { name = "qdrant-client", marker = "extra == 'qdrant'", specifier = ">=1.6.0" },
