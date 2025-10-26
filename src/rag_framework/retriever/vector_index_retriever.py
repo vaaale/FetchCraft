@@ -7,8 +7,9 @@ from pydantic import BaseModel
 
 from .base import Retriever
 from ..embeddings.base import Embeddings
+from ..node import Node, NodeWithScore
 
-D = TypeVar('D', bound=BaseModel)
+D = TypeVar('D', bound=Node)
 
 
 class VectorIndexRetriever(Retriever[D]):
@@ -49,7 +50,7 @@ class VectorIndexRetriever(Retriever[D]):
         query: str,
         top_k: Optional[int] = None,
         **kwargs
-    ) -> List[tuple[D, float]]:
+    ) -> List[NodeWithScore]:
         """
         Retrieve documents based on a text query.
         
@@ -59,7 +60,7 @@ class VectorIndexRetriever(Retriever[D]):
             **kwargs: Additional search parameters (overrides defaults)
             
         Returns:
-            List of tuples containing (document, relevance_score)
+            List of NodeWithScore objects containing documents and their relevance scores
         """
         # Generate query embedding
         query_embedding = await self.embeddings.embed_query(query)
@@ -76,14 +77,15 @@ class VectorIndexRetriever(Retriever[D]):
             **search_params
         )
         
-        return results
+        # Convert tuples to NodeWithScore
+        return [NodeWithScore(node=doc, score=score) for doc, score in results]
     
     async def aretrieve(
         self, 
         query: str,
         top_k: Optional[int] = None,
         **kwargs
-    ) -> List[tuple[D, float]]:
+    ) -> List[NodeWithScore]:
         """
         Async version of retrieve (alias for consistency).
         
@@ -93,7 +95,7 @@ class VectorIndexRetriever(Retriever[D]):
             **kwargs: Additional search parameters
             
         Returns:
-            List of tuples containing (document, relevance_score)
+            List of NodeWithScore objects containing documents and their relevance scores
         """
         return await self.retrieve(query, top_k=top_k, **kwargs)
     

@@ -1,7 +1,7 @@
 """
 ReAct agent implementation using pydantic-ai.
 """
-
+from datetime import datetime
 from typing import Optional, Any, List, Union, Dict, AsyncIterable
 
 from pydantic_ai import AgentRunResultEvent, AgentStreamEvent, PartStartEvent, PartDeltaEvent, TextPartDelta, \
@@ -21,18 +21,26 @@ except ImportError:
     Model = None
 
 from pydantic import ConfigDict, PrivateAttr
-
+import re
 from .base import BaseAgent, AgentResponse, CitationContainer
 
 configure_logging("root")
 
 SYSTEM_PROMPT = """You are a helpful AI assistant that answers questions based on retrieved information.
+Knowledge cutoff: 31.12.2023
+Today's date: {today}
 
 When answering:
-1. Use the provided tools to find relevant information
-2. Base your answer on the retrieved documents ONLY!
-3. If the information is not in the retrieved documents, say so
-4. Always add citations to your answer using the format: 'See {<document_number>}'"""
+1. Understand the task the user wants you to do
+2. Create a plan for solving the task step-by-step
+3. Use the provided tools to find relevant information or execute actions. You can call the tools as often as you need.
+4. Base your answer on the retrieved documents ONLY! Never use prior knowledge!
+5. If the provided documents do not contain the information refine your query and try again.
+5. When reciting facts, always include a citation to the source of the information. Always add citations to your answer using a Markdown link. Example: 'See [<document_title>](<document_number>)'
+(The document_number must always be an integer and is the number following 'Document ' in the citations)
+"""
+
+#3. If the information is not in the retrieved documents, say so
 
 output_messages: list[str] = []
 
@@ -137,7 +145,7 @@ class ReActAgent(BaseAgent):
             agent_kwargs=agent_kwargs,
         )
 
-    async def query(self, question: str, **kwargs) -> str:
+    async def query(self, question: str, **kwargs) -> AgentResponse:
         """
         Query the agent with a question.
         
@@ -151,7 +159,7 @@ class ReActAgent(BaseAgent):
 
         agent = Agent(
             model=self.model,
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=SYSTEM_PROMPT.format(today=datetime.now().strftime("%d.%m.%Y")),
             tools=self._tools,
             deps_type=CitationContainer,
             **self.agent_kwargs,
@@ -161,7 +169,6 @@ class ReActAgent(BaseAgent):
         def final_output(ctx: RunContext, answer: str) -> str:
             """Call this function when to return your final answer.
             The input should be your final answer."""
-            print(f"Final Answer:\n{answer}")
             return answer
 
         chat_history = []
@@ -173,10 +180,11 @@ class ReActAgent(BaseAgent):
             deps=citations,
             **kwargs
         )
+        response = result.output
+        answer = self._post_process_citations(response, citations)
+        return AgentResponse(response=answer, citations=citations.citations, all_citations=citations.all_citations)
 
-        return result.output
-
-    async def aquery(self, question: str, **kwargs) -> str:
+    async def aquery(self, question: str, **kwargs) -> AgentResponse:
         """
         Async version of query (alias for consistency).
         

@@ -6,7 +6,9 @@ from abc import ABC, abstractmethod
 from typing import List, TypeVar, Generic, Any, Dict
 from pydantic import BaseModel
 
-D = TypeVar('D', bound=BaseModel)
+from ..node import Node, NodeWithScore
+
+D = TypeVar('D', bound=Node)
 
 
 class Retriever(ABC, Generic[D]):
@@ -24,7 +26,7 @@ class Retriever(ABC, Generic[D]):
         self, 
         query: str, 
         **kwargs
-    ) -> List[tuple[D, float]]:
+    ) -> List[NodeWithScore]:
         """
         Retrieve documents based on a text query.
         
@@ -33,7 +35,7 @@ class Retriever(ABC, Generic[D]):
             **kwargs: Additional retrieval parameters
             
         Returns:
-            List of tuples containing (document, relevance_score)
+            List of NodeWithScore objects containing documents and their relevance scores
         """
         pass
     
@@ -42,7 +44,7 @@ class Retriever(ABC, Generic[D]):
         self, 
         query: str, 
         **kwargs
-    ) -> List[tuple[D, float]]:
+    ) -> List[NodeWithScore]:
         """
         Async version of retrieve (for consistency).
         
@@ -51,7 +53,7 @@ class Retriever(ABC, Generic[D]):
             **kwargs: Additional retrieval parameters
             
         Returns:
-            List of tuples containing (document, relevance_score)
+            List of NodeWithScore objects containing documents and their relevance scores
         """
         pass
     
@@ -59,7 +61,7 @@ class Retriever(ABC, Generic[D]):
         self, 
         query: str, 
         **kwargs
-    ) -> List[tuple[D, float]]:
+    ) -> List[NodeWithScore]:
         """
         Synchronous version of retrieve.
         
@@ -68,7 +70,7 @@ class Retriever(ABC, Generic[D]):
             **kwargs: Additional retrieval parameters
             
         Returns:
-            List of tuples containing (document, relevance_score)
+            List of NodeWithScore objects containing documents and their relevance scores
         """
         import asyncio
         try:

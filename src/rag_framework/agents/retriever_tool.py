@@ -2,8 +2,10 @@
 RetrieverTool for integrating retrievers with agents.
 """
 
-from typing import Optional, Callable, Any
+from typing import Optional, Callable, Any, List
 import logging
+
+from .. import Node
 
 try:
     from pydantic_ai import RunContext
@@ -13,7 +15,7 @@ except ImportError:
     RunContext = None
 
 from ..retriever.base import Retriever
-from .base import CitationContainer
+from .base import CitationContainer, Citation
 
 logger = logging.getLogger(__name__)
 
@@ -84,23 +86,24 @@ Returns:
             formatter=formatter
         )
     
-    def _default_formatter(self, results, citation_container: CitationContainer) -> str:
+    def _default_formatter(self, citations: List[Citation]) -> str:
         """
         Default formatter for retrieval results.
         
         Args:
-            results: List of (document, score) tuples
+            results: List of NodeWithScore objects
+            citations: List of Citation objects
             
         Returns:
             Formatted string representation
         """
-        if not results:
+        if not citations:
             return "No relevant documents found."
 
         formatted_results = []
-        for i, (doc, score) in enumerate(results, 1):
+        for citation in citations:
             formatted_results.append(
-                f"Document {i} (relevance: {score:.3f}):\n{doc.text}\n"
+                f"Document {citation.citation_id} (relevance: {citation.node.score:.3f}):\n{citation.node.text}\n"
             )
         
         return "\n".join(formatted_results)
@@ -119,10 +122,11 @@ Returns:
         logger.info(f"Retrieving documents for query: {query}")
         results = await self.retriever.retrieve(query)
 
-        citations = [ctx.deps.add(ctx.tool_call_id, self.name, query, doc) for doc, _ in results]
+        # Add each retrieved node as a citation
+        citations = [ctx.deps.add(ctx.tool_call_id, self.name, query, result) for result in results]
 
         logger.info(f"Retrieved {len(results)} documents")
-        tool_response = self.formatter(results, citations)
+        tool_response = self.formatter(citations)
         logger.info(f"{tool_response}")
         return tool_response
     

@@ -316,3 +316,35 @@ class SymNode(Node):
         return self.is_symbolic and self.parent_id is not None
 
 
+class NodeWithScore(BaseModel):
+    """
+    Wrapper class that pairs a Node with its relevance score.
+    
+    This is typically used in retrieval results where documents
+    are returned with their similarity scores.
+    """
+    
+    node: Node = Field(description="The document node")
+    score: float = Field(description="Relevance score (typically 0.0 to 1.0)")
+    
+    model_config = {
+        "arbitrary_types_allowed": True,
+    }
+    
+    def __repr__(self) -> str:
+        return f"NodeWithScore(score={self.score:.3f}, node_id={self.node.id[:8]}...)"
+    
+    @property
+    def text(self) -> str:
+        """Convenience property to access the node's text."""
+        return self.node.text
+    
+    @property
+    def metadata(self) -> Dict[str, Any]:
+        """Convenience property to access the node's metadata."""
+        return self.node.metadata
+    
+    @property
+    def id(self) -> str:
+        """Convenience property to access the node's id."""
+        return self.node.id

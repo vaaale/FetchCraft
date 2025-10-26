@@ -9,7 +9,7 @@ multiple vector store backends.
 from .vector_index import VectorIndex
 from .vector_store.base import VectorStore
 from .vector_store.qdrant_store import QdrantVectorStore, QdrantConfig
-from .node import Node, Chunk, SymNode
+from .node import Node, Chunk, SymNode, NodeWithScore
 from .parser import DocumentParser, TextFileDocumentParser
 from .embeddings import Embeddings, OpenAIEmbeddings
 from .retriever import Retriever, VectorIndexRetriever
@@ -23,6 +23,7 @@ __all__ = [
     'Node',
     'Chunk',
     'SymNode',
+    'NodeWithScore',
     'DocumentParser',
     'TextFileDocumentParser',
     'Embeddings',

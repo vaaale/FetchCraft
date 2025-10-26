@@ -10,6 +10,7 @@ This example shows how to:
 
 import asyncio
 import os
+import traceback
 
 import openai
 from pydantic_ai import Tool
@@ -59,20 +60,20 @@ async def basic_agent_example():
 
     # Step 2: Create knowledge base
     documents_text = [
-        "Bill Gates was born on October 28, 1955, in Seattle, Washington.",
-        "Bill Gates co-founded Microsoft with Paul Allen in 1975.",
-        "Bill Gates stepped down as CEO of Microsoft in 2000 but remained chairman.",
-        "Bill Gates is known for his philanthropic work through the Bill & Melinda Gates Foundation.",
-        "The Gates Foundation focuses on global health, education, and poverty alleviation.",
-        "Python is a high-level programming language created by Guido van Rossum.",
-        "Python was first released in 1991 and emphasizes code readability.",
-        "Machine learning is a subset of artificial intelligence.",
-        "Neural networks are inspired by biological neural networks in the brain.",
-        "The Turing test was proposed by Alan Turing in 1950.",
+        ("Bill Gates was born on October 28, 1955, in Seattle, Washington.", {"url": "https://en.wikipedia.org/wiki/Bill_Gates", "title": "Bill Gates"}),
+        ("Bill Gates co-founded Microsoft with Paul Allen in 1975.", {"url": "https://en.wikipedia.org/wiki/Bill_Gates", "title": "Bill Gates"}),
+        ("Bill Gates stepped down as CEO of Microsoft in 2000 but remained chairman.", {"path": "bill_gates.pdf", "title": "Life and death of Bill Gates"}),
+        ("Bill Gates is known for his philanthropic work through the Bill & Melinda Gates Foundation.", {"path": "Gates Foundation.pdf", "title": "End of the line"}),
+        ("The Gates Foundation focuses on global health, education, and poverty alleviation.", {"path": "Gates Foundation.pdf", "title": "End of the line"}),
+        ("Python is a high-level programming language created by Guido van Rossum.", {"filename": "python.pdf", "title": "Python"}),
+        ("Python was first released in 1991 and emphasizes code readability.", {"filename": "python.pdf", "title": "Python"}),
+        ("Machine learning is a subset of artificial intelligence.", {"filename": "python.pdf", "title": "Python"}),
+        ("Neural networks are inspired by biological neural networks in the brain.", {"url": "https://en.wikipedia.org/wiki/Neural_network", "title": "Neural networks"}),
+        ("The Turing test was proposed by Alan Turing in 1950.", {"url": "https://en.wikipedia.org/wiki/Alan_Turing", "title": "Alan Turing"}),
     ]
     
     print(f"Creating knowledge base with {len(documents_text)} documents...")
-    nodes = [Node(text=text) for text in documents_text]
+    nodes = [Node(text=text, metadata=metadata) for text, metadata in documents_text]
     
     # Step 3: Setup vector store and index
     client = QdrantClient(":memory:")
@@ -195,6 +196,7 @@ When answering questions about landmarks:
         print(f"A: {answer}\n")
     except Exception as e:
         print(f"Error: {e}\n")
+        traceback.print_exc()
 
 
 async def multi_step_reasoning_example():
@@ -212,6 +214,13 @@ async def multi_step_reasoning_example():
     )
 
     documents_text = [
+        "Amazon was founded on July 5, 1994, by Jeff Bezos after he relocated from New York City to Bellevue, Washington, near Seattle, to operate an online bookstore.",
+        (
+            "Melinda French Gates is a philanthropist, businesswoman, and global advocate for women and girls. She founded and co-chaired the Gates Foundation, where, for more than two decades, she set the direction and priorities of the world's largest philanthropy. Melinda left the Gates Foundation in June 2024.\n\n"
+            "Melinda Ann French\n"
+            "August 15, 1964 (age 61)\n"
+            "Dallas, Texas, U.S.\n"
+        ),
         "Microsoft was founded in 1975.",
         "Bill Gates co-founded Microsoft with Paul Allen.",
         "Microsoft's first product was a BASIC interpreter for the Altair 8800.",
@@ -234,7 +243,7 @@ async def multi_step_reasoning_example():
     index = VectorIndex(vector_store=vector_store, embeddings=embeddings)
     await index.add_documents(nodes)
     
-    retriever = index.as_retriever(top_k=4)
+    retriever = index.as_retriever(top_k=2)
     retriever_tool = RetrieverTool.from_retriever(retriever)
     tool_func = retriever_tool.get_tool_function()
     tools = [Tool(tool_func, takes_ctx=True, max_retries=3)]
@@ -243,30 +252,35 @@ async def multi_step_reasoning_example():
     print("✓ Setup complete\n")
     
     # Complex question requiring multi-step reasoning
-    question = "How many years was Bill Gates the CEO of Microsoft?"
-    print(f"Q: {question}")
-    print("(This requires finding when he became CEO and when he stepped down)\n")
-    
-    try:
-        answer = await agent.query(question)
-        print(f"A: {answer}\n")
-    except Exception as e:
-        print(f"Error: {e}\n")
+    questions = [
+        "How old is the founder of Microsoft ex wife?",
+        "How many years was Bill Gates the CEO of Microsoft?",
+    ]
+
+    print("=" * 60)
+    print("Asking Questions")
+    print("=" * 60 + "\n")
+
+    for question in questions:
+        try:
+            print(f"Q: {question}")
+            answer = await agent.query(question)
+            print(f"A: {answer}\n")
+        except Exception as e:
+            print(f"Error: {e}\n")
 
 
 async def main():
     """Run all examples."""
     try:
-        await basic_agent_example()
-        await custom_system_prompt_example()
         await multi_step_reasoning_example()
-        
+        await custom_system_prompt_example()
+        await basic_agent_example()
+
         print("\n" + "="*60)
         print("All examples completed successfully! ✓")
         print("="*60)
         print("\nNote: Actual results depend on the LLM model used.")
-        print("Make sure you have OPENAI_API_KEY set in your environment.")
-        
     except Exception as e:
         print(f"\n❌ Error: {e}")
         print("\nMake sure you have:")
