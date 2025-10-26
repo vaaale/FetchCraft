@@ -3,6 +3,8 @@ from abc import ABC, abstractmethod
 from uuid import uuid4
 
 from pydantic import BaseModel
+from tqdm import tqdm
+
 from .vector_store.base import VectorStore
 from .node import Node, SymNode, Chunk
 from .embeddings.base import Embeddings
@@ -60,7 +62,7 @@ class VectorIndex(Generic[D]):
         """
         return cls(vector_store=vector_store, embeddings=embeddings, index_id=index_id)
     
-    async def add_documents(self, documents: List[D], auto_embed: bool = True) -> List[str]:
+    async def add_documents(self, documents: List[D], show_progress: bool = False) -> List[str]:
         """
         Add documents to the index.
         
@@ -73,29 +75,24 @@ class VectorIndex(Generic[D]):
         Returns:
             List of document IDs that were added
         """
-        if not documents:
-            return []
-        
+
         # Generate embeddings for documents that don't have them
-        if auto_embed:
-            docs_to_embed = []
-            docs_indices = []
-            
-            for i, doc in enumerate(documents):
-                if doc.embedding is None:
-                    docs_to_embed.append(doc.text if hasattr(doc, 'text') else str(doc))
-                    docs_indices.append(i)
-            
-            if docs_to_embed:
-                # Generate embeddings in batch
-                embeddings = await self.embeddings.embed_documents(docs_to_embed)
-                
-                # Assign embeddings to documents
-                for idx, embedding in zip(docs_indices, embeddings):
-                    documents[idx].embedding = embedding
-        
-        return await self.vector_store.add_documents(documents, index_id=self.index_id)
-    
+        ids = []
+        if show_progress:
+            documents = tqdm(documents, desc="Adding documents")
+
+        for i, doc in enumerate(documents):
+            if doc.embedding is None:
+                embeddings = await self.embeddings.embed_documents([doc.text])
+                doc.embedding = embeddings[0]
+                added_ids = await self.vector_store.add_documents([doc], index_id=self.index_id)
+                ids.append(added_ids[0])
+            else:
+                added_ids = await self.vector_store.add_documents([doc], index_id=self.index_id)
+                ids.append(added_ids[0])
+        return ids
+
+
     async def search(
         self,
         query_embedding: List[float],

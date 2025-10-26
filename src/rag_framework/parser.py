@@ -165,7 +165,7 @@ class TextFileDocumentParser(DocumentParser):
         overlap: int = 20,
         separator: str = " ",
         keep_separator: bool = True,
-        encoding: str = "utf-8",
+        encoding: str | None = None,
         include_file_metadata: bool = True
     ) -> List[Chunk]:
         """
@@ -191,8 +191,16 @@ class TextFileDocumentParser(DocumentParser):
         )
         
         # Read the file
-        text = file_path.read_text(encoding=encoding)
-        
+        if not encoding:
+            for encoding in ["utf-8", "iso8859-1"]:
+                try:
+                    text = file_path.read_text(encoding=encoding)
+                except Exception as e:
+                    continue
+                break
+        else:
+            text = file_path.read_text(encoding=encoding)
+
         # Prepare metadata
         metadata = {}
         if include_file_metadata:
@@ -228,7 +236,7 @@ class TextFileDocumentParser(DocumentParser):
         pattern: str = "*.txt",
         separator: str = " ",
         keep_separator: bool = True,
-        encoding: str = "utf-8",
+        encoding: str | None = None,
         recursive: bool = False
     ) -> Dict[str, List[Chunk]]:
         """

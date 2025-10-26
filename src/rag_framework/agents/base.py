@@ -4,12 +4,28 @@ Base agent interface for RAG framework.
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Optional, Dict, List
+from datetime import datetime
+from typing import Dict, List, Literal, TypedDict, Optional
 
 from pydantic import BaseModel, Field
 
 from rag_framework import Node
 
+
+class ChatMessage(BaseModel):
+    """Format of messages sent to the browser."""
+
+    role: Literal['user', 'model']
+    timestamp: str
+    content: str
+
+    @classmethod
+    def user_message(cls, content: str) -> 'ChatMessage':
+        return cls(role='user', timestamp=datetime.now().isoformat(), content=content)
+
+    @classmethod
+    def assistant_message(cls, content: str) -> 'ChatMessage':
+        return cls(role='model', timestamp=datetime.now().isoformat(), content=content)
 
 @dataclass
 class Citation:
@@ -62,7 +78,8 @@ class CitationContainer:
 
 class AgentResponse(BaseModel):
     """Agent response with citations"""
-    response: str = Field(description="Response text", default=None)
+    query: ChatMessage = Field(description="Query text", default=None)
+    response: ChatMessage = Field(description="Response text", default=None)
     citations: List[Citation] = Field(description="List of used citations", default=[])
     all_citations: List[Citation] = Field(description="List of all citations", default=[])
 
@@ -98,7 +115,7 @@ class BaseAgent(BaseModel, ABC):
     """
 
     @abstractmethod
-    async def query(self, question: str, **kwargs) -> AgentResponse:
+    async def query(self, question: str, messages: Optional[List[ChatMessage]] = None, **kwargs) -> AgentResponse:
         """
         Query the agent with a question.
         
@@ -108,11 +125,12 @@ class BaseAgent(BaseModel, ABC):
             
         Returns:
             The agent's response
+            :param question:
+            :param messages:
         """
         pass
 
-    @abstractmethod
-    async def aquery(self, question: str, **kwargs) -> AgentResponse:
+    async def aquery(self, question: str, messages: Optional[List[ChatMessage]] = None, **kwargs) -> AgentResponse:
         """
         Async version of query.
         
@@ -122,10 +140,12 @@ class BaseAgent(BaseModel, ABC):
             
         Returns:
             The agent's response
+            :param question:
+            :param messages:
         """
-        pass
+        return await self.query(question, messages, **kwargs)
 
-    def query_sync(self, question: str, **kwargs) -> AgentResponse:
+    def query_sync(self, question: str, messages: Optional[List[ChatMessage]] = None, **kwargs) -> AgentResponse:
         """
         Synchronous version of query.
         
@@ -135,6 +155,8 @@ class BaseAgent(BaseModel, ABC):
             
         Returns:
             The agent's response
+            :param question:
+            :param messages:
         """
         import asyncio
         try:
@@ -149,4 +171,4 @@ class BaseAgent(BaseModel, ABC):
                 "Use query() or aquery() instead."
             )
 
-        return loop.run_until_complete(self.query(question, **kwargs))
+        return loop.run_until_complete(self.query(question, messages, **kwargs))

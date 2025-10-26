@@ -7,6 +7,7 @@ from typing import Optional, Any, List, Union, Dict, AsyncIterable
 from pydantic_ai import AgentRunResultEvent, AgentStreamEvent, PartStartEvent, PartDeltaEvent, TextPartDelta, \
     ThinkingPartDelta, ToolCallPartDelta, FunctionToolCallEvent, FunctionToolResultEvent, FinalResultEvent
 
+from .utils import to_chat_message
 from ..logging import configure_logging
 
 try:
@@ -22,7 +23,7 @@ except ImportError:
 
 from pydantic import ConfigDict, PrivateAttr
 import re
-from .base import BaseAgent, AgentResponse, CitationContainer
+from .base import BaseAgent, AgentResponse, CitationContainer, ChatMessage
 
 configure_logging("root")
 
@@ -145,7 +146,7 @@ class ReActAgent(BaseAgent):
             agent_kwargs=agent_kwargs,
         )
 
-    async def query(self, question: str, **kwargs) -> AgentResponse:
+    async def query(self, question: str, messages: Optional[List[ChatMessage]] = None, **kwargs) -> AgentResponse:
         """
         Query the agent with a question.
         
@@ -155,6 +156,8 @@ class ReActAgent(BaseAgent):
             
         Returns:
             The agent's response
+            :param question:
+            :param messages:
         """
 
         agent = Agent(
@@ -171,7 +174,7 @@ class ReActAgent(BaseAgent):
             The input should be your final answer."""
             return answer
 
-        chat_history = []
+        chat_history = messages if messages else []
         citations = CitationContainer()
         result = await agent.run(
             user_prompt=question,
@@ -182,20 +185,7 @@ class ReActAgent(BaseAgent):
         )
         response = result.output
         answer = self._post_process_citations(response, citations)
-        return AgentResponse(response=answer, citations=citations.citations, all_citations=citations.all_citations)
-
-    async def aquery(self, question: str, **kwargs) -> AgentResponse:
-        """
-        Async version of query (alias for consistency).
-        
-        Args:
-            question: The question to ask
-            **kwargs: Additional parameters
-            
-        Returns:
-            The agent's response
-        """
-        return await self.query(question, **kwargs)
+        return AgentResponse(query=ChatMessage.user_message(question), response=ChatMessage.assistant_message(answer), citations=citations.citations, all_citations=citations.all_citations)
 
     def __repr__(self) -> str:
         return f"ReActAgent(model={self.model})"
