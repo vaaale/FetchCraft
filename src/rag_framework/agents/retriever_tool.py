@@ -3,6 +3,7 @@ RetrieverTool for integrating retrievers with agents.
 """
 
 from typing import Optional, Callable, Any
+import logging
 
 try:
     from pydantic_ai import RunContext
@@ -12,7 +13,7 @@ except ImportError:
     RunContext = None
 
 from ..retriever.base import Retriever
-import logging
+from .base import CitationContainer
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,7 @@ Returns:
             formatter=formatter
         )
     
-    def _default_formatter(self, results) -> str:
+    def _default_formatter(self, results, citation_container: CitationContainer) -> str:
         """
         Default formatter for retrieval results.
         
@@ -95,7 +96,7 @@ Returns:
         """
         if not results:
             return "No relevant documents found."
-        
+
         formatted_results = []
         for i, (doc, score) in enumerate(results, 1):
             formatted_results.append(
@@ -117,8 +118,11 @@ Returns:
         """
         logger.info(f"Retrieving documents for query: {query}")
         results = await self.retriever.retrieve(query)
+
+        citations = [ctx.deps.add(ctx.tool_call_id, self.name, query, doc) for doc, _ in results]
+
         logger.info(f"Retrieved {len(results)} documents")
-        tool_response = self.formatter(results)
+        tool_response = self.formatter(results, citations)
         logger.info(f"{tool_response}")
         return tool_response
     

@@ -22,7 +22,7 @@ except ImportError:
 
 from pydantic import ConfigDict, PrivateAttr
 
-from .base import BaseAgent
+from .base import BaseAgent, AgentResponse, CitationContainer
 
 configure_logging("root")
 
@@ -30,9 +30,9 @@ SYSTEM_PROMPT = """You are a helpful AI assistant that answers questions based o
 
 When answering:
 1. Use the provided tools to find relevant information
-2. Base your answer on the retrieved documents
+2. Base your answer on the retrieved documents ONLY!
 3. If the information is not in the retrieved documents, say so
-4. Cite specific information from the documents when possible"""
+4. Always add citations to your answer using the format: 'See {<document_number>}'"""
 
 output_messages: list[str] = []
 
@@ -148,23 +148,33 @@ class ReActAgent(BaseAgent):
         Returns:
             The agent's response
         """
+
         agent = Agent(
             model=self.model,
             system_prompt=SYSTEM_PROMPT,
             tools=self._tools,
+            deps_type=CitationContainer,
             **self.agent_kwargs,
         )
-        chat_history = []
-        # result = await agent.run(user_prompt=question, message_history=chat_history, **kwargs)
-        result = None
-        async for event in agent.run_stream_events(user_prompt=question, message_history=chat_history, **kwargs):
-            if isinstance(event, AgentRunResultEvent):
-                output_messages.append(f'[Final Output] {event.result.output}')
-                result = event.result
-            else:
-                await handle_event(event)
 
-        return result.output.strip()
+
+        def final_output(ctx: RunContext, answer: str) -> str:
+            """Call this function when to return your final answer.
+            The input should be your final answer."""
+            print(f"Final Answer:\n{answer}")
+            return answer
+
+        chat_history = []
+        citations = CitationContainer()
+        result = await agent.run(
+            user_prompt=question,
+            message_history=chat_history,
+            output_type=final_output,
+            deps=citations,
+            **kwargs
+        )
+
+        return result.output
 
     async def aquery(self, question: str, **kwargs) -> str:
         """

@@ -314,3 +314,5 @@ class SymNode(Node):
             True if parent should be resolved
         """
         return self.is_symbolic and self.parent_id is not None
+
+
