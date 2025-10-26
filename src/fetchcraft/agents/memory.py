@@ -3,7 +3,7 @@ from typing import *
 
 from pydantic import BaseModel, Field
 
-from rag_framework.agents.base import ChatMessage, Citation
+from fetchcraft.agents.base import ChatMessage, Citation
 
 
 CONTEXT_TEMPLATE = (

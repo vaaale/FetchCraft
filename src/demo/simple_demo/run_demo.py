@@ -20,7 +20,7 @@ from typing import List, Any
 from qdrant_client import QdrantClient
 from pydantic_ai import Tool
 
-from rag_framework import (
+from fetchcraft import (
     OpenAIEmbeddings,
     QdrantVectorStore,
     VectorIndex,
@@ -35,7 +35,7 @@ from rag_framework import (
 QDRANT_HOST = "localhost"
 QDRANT_PORT = 6333
 COLLECTION_NAME = "fetchcraft"
-DOCUMENTS_PATH = Path("/mnt/storage/data/knowledge/textfiles_tiny")
+DOCUMENTS_PATH = Path(os.getenv("DOCUMENTS_PATH", "Documents"))
 
 # Embeddings configuration (adjust based on your setup)
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "bge-m3")

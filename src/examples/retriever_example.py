@@ -11,7 +11,7 @@ This example shows how to:
 import asyncio
 from qdrant_client import QdrantClient
 
-from rag_framework import (
+from fetchcraft import (
     OpenAIEmbeddings,
     QdrantVectorStore,
     VectorIndex,
@@ -172,7 +172,7 @@ async def retriever_with_symnode_example():
     print("Retriever with SymNode Example")
     print("="*60 + "\n")
     
-    from rag_framework import Chunk, SymNode
+    from fetchcraft import Chunk, SymNode
     
     # Setup embeddings
     embeddings = OpenAIEmbeddings(

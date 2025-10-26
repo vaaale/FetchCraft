@@ -18,7 +18,7 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from qdrant_client import QdrantClient
 
-from rag_framework import (
+from fetchcraft import (
     OpenAIEmbeddings,
     QdrantVectorStore,
     VectorIndex,

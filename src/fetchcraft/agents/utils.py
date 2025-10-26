@@ -2,7 +2,7 @@ from typing import List
 
 from pydantic_ai import ModelMessage, ModelRequest, UserPromptPart, ModelResponse, TextPart, UnexpectedModelBehavior
 
-from rag_framework.agents.base import ChatMessage
+from fetchcraft.agents.base import ChatMessage
 
 
 def to_chat_messages(messages: List[ModelMessage]) -> List[ChatMessage]:

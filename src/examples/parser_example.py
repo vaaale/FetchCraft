@@ -3,7 +3,7 @@ Example demonstrating the use of DocumentParser and TextFileDocumentParser.
 """
 
 from pathlib import Path
-from rag_framework import TextFileDocumentParser, Chunk
+from fetchcraft import TextFileDocumentParser, Chunk
 
 
 def create_sample_file(file_path: Path) -> None:

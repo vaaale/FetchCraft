@@ -12,7 +12,7 @@ import asyncio
 from typing import List
 from qdrant_client import QdrantClient
 
-from rag_framework import (
+from fetchcraft import (
     OpenAIEmbeddings,
     QdrantVectorStore,
     VectorIndex,

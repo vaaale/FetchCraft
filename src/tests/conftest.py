@@ -5,7 +5,7 @@ Pytest configuration and shared fixtures for RAG Framework tests.
 import pytest
 import asyncio
 from qdrant_client import QdrantClient
-from rag_framework import (
+from fetchcraft import (
     Node,
     Chunk,
     QdrantVectorStore,

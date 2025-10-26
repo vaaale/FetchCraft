@@ -7,7 +7,7 @@ This example shows how easy it is to build a RAG system with the new API.
 import asyncio
 from qdrant_client import QdrantClient
 
-from rag_framework import (
+from fetchcraft import (
     OpenAIEmbeddings,
     QdrantVectorStore,
     VectorIndex,

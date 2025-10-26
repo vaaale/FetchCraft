@@ -122,7 +122,7 @@ python -m pytest src/tests/ -v
 python src/tests/test_suite.py all
 
 # With coverage report
-python -m pytest src/tests/ --cov=rag_framework --cov-report=html
+python -m pytest src/tests/ --cov=fetchcraft --cov-report=html
 ```
 
 ### Verify Setup
@@ -172,7 +172,7 @@ jobs:
         python-version: '3.10'
     - run: pip install -e .
     - run: pip install pytest pytest-asyncio pytest-cov
-    - run: python -m pytest src/tests/ --cov=rag_framework --cov-report=xml
+    - run: python -m pytest src/tests/ --cov=fetchcraft --cov-report=xml
     - uses: codecov/codecov-action@v3
 ```
 

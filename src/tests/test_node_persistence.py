@@ -2,7 +2,7 @@
 
 import asyncio
 from qdrant_client import QdrantClient
-from rag_framework import VectorIndex, QdrantVectorStore, Node, Chunk
+from fetchcraft import VectorIndex, QdrantVectorStore, Node, Chunk
 
 
 class MockEmbeddings:

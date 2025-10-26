@@ -111,7 +111,7 @@ make test
 ### Run with Coverage
 ```bash
 # Using pytest
-python -m pytest src/tests/ --cov=rag_framework --cov-report=html
+python -m pytest src/tests/ --cov=fetchcraft --cov-report=html
 
 # Using test suite
 python src/tests/test_suite.py coverage

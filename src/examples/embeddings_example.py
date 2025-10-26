@@ -6,7 +6,7 @@ import asyncio
 from pathlib import Path
 from qdrant_client import QdrantClient
 
-from rag_framework import (
+from fetchcraft import (
     OpenAIEmbeddings,
     TextFileDocumentParser,
     QdrantVectorStore,

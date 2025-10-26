@@ -5,9 +5,9 @@ from uuid import uuid4
 from pydantic import BaseModel
 from tqdm import tqdm
 
-from .vector_store.base import VectorStore
-from .node import Node, SymNode, Chunk
-from .embeddings.base import Embeddings
+from fetchcraft.vector_store.base import VectorStore
+from fetchcraft.node import Node, SymNode, Chunk
+from fetchcraft.embeddings.base import Embeddings
 
 D = TypeVar('D', bound=Node)
 
@@ -248,7 +248,7 @@ class VectorIndex(Generic[D]):
         Returns:
             A VectorIndexRetriever instance
         """
-        from .retriever import VectorIndexRetriever
+        from ..retriever import VectorIndexRetriever
         
         return VectorIndexRetriever(
             vector_index=self,

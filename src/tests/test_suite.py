@@ -96,7 +96,7 @@ class TestSuite:
         return pytest.main([
             "src/tests/",
             "-v",
-            "--cov=rag_framework",
+            "--cov=fetchcraft",
             "--cov-report=html",
             "--cov-report=term-missing"
         ])

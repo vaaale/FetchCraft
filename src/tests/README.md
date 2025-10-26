@@ -67,7 +67,7 @@ python src/tests/test_suite.py retriever
 ### Run with Coverage
 ```bash
 # Using pytest
-python -m pytest src/tests/ --cov=rag_framework --cov-report=html
+python -m pytest src/tests/ --cov=fetchcraft --cov-report=html
 
 # Using test suite
 python src/tests/test_suite.py coverage
@@ -165,7 +165,7 @@ For GitHub Actions or similar CI/CD:
 ```yaml
 - name: Run tests
   run: |
-    python -m pytest src/tests/ -v --cov=rag_framework --cov-report=xml
+    python -m pytest src/tests/ -v --cov=fetchcraft --cov-report=xml
 
 - name: Upload coverage
   uses: codecov/codecov-action@v3
@@ -210,7 +210,7 @@ python -m pytest src/tests/ -v -s --capture=no
 After running with coverage, view the HTML report:
 
 ```bash
-python -m pytest src/tests/ --cov=rag_framework --cov-report=html
+python -m pytest src/tests/ --cov=fetchcraft --cov-report=html
 open htmlcov/index.html  # macOS
 xdg-open htmlcov/index.html  # Linux
 start htmlcov/index.html  # Windows

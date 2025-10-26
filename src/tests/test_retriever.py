@@ -5,7 +5,7 @@ Tests for Retriever functionality.
 import pytest
 from qdrant_client import QdrantClient
 
-from rag_framework import (
+from fetchcraft import (
     Node,
     Chunk,
     SymNode,
