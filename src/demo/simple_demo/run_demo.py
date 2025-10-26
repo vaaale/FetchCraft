@@ -25,6 +25,8 @@ from fetchcraft import (
     QdrantVectorStore,
     VectorIndex,
     TextFileDocumentParser,
+    HierarchicalChunkingStrategy,
+    CharacterChunkingStrategy,
     Chunk,
     ReActAgent,
     RetrieverTool
@@ -47,6 +49,12 @@ INDEX_ID = "39372e06-5cb9-45ef-ab40-cc66649f7362"
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4-turbo")
 LLM_API_KEY = os.getenv("OPENAI_API_KEY", "sk-123")
 
+# Chunking configuration
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "8192"))
+CHILD_SIZES = [4096, 1024]
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
+USE_HIERARCHICAL_CHUNKING = os.getenv("USE_HIERARCHICAL_CHUNKING", "true").lower() == "true"
+
 
 def collection_exists(client: QdrantClient, collection_name: str) -> bool:
     """
@@ -67,8 +75,10 @@ def collection_exists(client: QdrantClient, collection_name: str) -> bool:
 async def load_and_index_documents(
     vector_index: VectorIndex,
     documents_path: Path,
-    chunk_size: int = 500,
-    overlap: int = 50
+    chunk_size: int = 8192,
+    child_sizes = [4096, 1024],
+    overlap: int = 200,
+    use_hierarchical: bool = True
 ) -> int:
     """
     Load documents from a directory and index them.
@@ -78,6 +88,7 @@ async def load_and_index_documents(
         documents_path: Path to the directory containing text files
         chunk_size: Size of text chunks
         overlap: Overlap between chunks
+        use_hierarchical: Whether to use hierarchical chunking (default: True)
         
     Returns:
         Number of chunks indexed
@@ -87,12 +98,29 @@ async def load_and_index_documents(
     if not documents_path.exists():
         raise FileNotFoundError(f"Documents path does not exist: {documents_path}")
     
-    # Parse all text files in the directory
-    parser = TextFileDocumentParser(
-        chunk_size=chunk_size,
-        overlap=overlap,
-        separator=" "
-    )
+    # Create chunking strategy
+    if use_hierarchical:
+        # Multi-level hierarchy: 1024, 512, 256 char child chunks
+
+        print(f"   Using HierarchicalChunkingStrategy")
+        print(f"     - Parent chunks: {chunk_size} chars")
+        print(f"     - Child chunks: {child_sizes}")
+        print(f"     - Recursive splitting: paragraph → line → sentence → word")
+        chunker = HierarchicalChunkingStrategy(
+            chunk_size=chunk_size,
+            overlap=overlap,
+            child_chunks=child_sizes,
+            child_overlap=50
+        )
+    else:
+        print(f"   Using CharacterChunkingStrategy ({chunk_size} chars)")
+        chunker = CharacterChunkingStrategy(
+            chunk_size=chunk_size,
+            overlap=overlap
+        )
+    
+    # Create parser with the chunking strategy
+    parser = TextFileDocumentParser(chunker=chunker)
     
     results = parser.parse_directory(
         directory_path=documents_path,
@@ -177,8 +205,10 @@ async def setup_rag_system():
         num_chunks = await load_and_index_documents(
             vector_index=vector_index,
             documents_path=DOCUMENTS_PATH,
-            chunk_size=4096,
-            overlap=200
+            chunk_size=CHUNK_SIZE,
+            child_sizes=CHILD_SIZES,
+            overlap=CHUNK_OVERLAP,
+            use_hierarchical=USE_HIERARCHICAL_CHUNKING
         )
         if num_chunks == 0:
             print("\n⚠️  Warning: No documents were indexed!")

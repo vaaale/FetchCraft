@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from .node import Chunk, Node
+from .chunking import ChunkingStrategy, HierarchicalChunkingStrategy
 
 
 class DocumentParser(ABC):
@@ -40,13 +41,14 @@ class DocumentParser(ABC):
 
 class TextFileDocumentParser(DocumentParser):
     """
-    Parser for text files that splits them into overlapping chunks.
+    Parser for text files that splits them into chunks using a chunking strategy.
     """
     
     def __init__(
         self,
-        chunk_size: int = 200,
-        overlap: int = 20,
+        chunker: Optional[ChunkingStrategy] = None,
+        chunk_size: int = 4096,
+        overlap: int = 200,
         separator: str = " ",
         keep_separator: bool = True
     ):
@@ -54,11 +56,24 @@ class TextFileDocumentParser(DocumentParser):
         Initialize the text file parser.
         
         Args:
-            chunk_size: Maximum size of each chunk in characters
-            overlap: Number of characters to overlap between chunks
-            separator: Character/string to use as split boundaries
-            keep_separator: Whether to keep the separator in chunks
+            chunker: ChunkingStrategy to use (default: HierarchicalChunkingStrategy)
+            chunk_size: Maximum size of each chunk in characters (used if chunker not provided)
+            overlap: Number of characters to overlap between chunks (used if chunker not provided)
+            separator: Character/string to use as split boundaries (used if chunker not provided)
+            keep_separator: Whether to keep the separator in chunks (used if chunker not provided)
         """
+        # Use provided chunker or create default HierarchicalChunkingStrategy
+        if chunker is None:
+            self.chunker = HierarchicalChunkingStrategy(
+                chunk_size=chunk_size,
+                overlap=overlap,
+                separator=separator,
+                keep_separator=keep_separator
+            )
+        else:
+            self.chunker = chunker
+        
+        # Keep these for backward compatibility with parse_directory
         self.chunk_size = chunk_size
         self.overlap = overlap
         self.separator = separator
@@ -71,7 +86,7 @@ class TextFileDocumentParser(DocumentParser):
         parent_node: Optional[Node] = None
     ) -> List[Chunk]:
         """
-        Parse text into chunks.
+        Parse text into chunks using the configured chunking strategy.
         
         Args:
             text: The text to parse
@@ -79,110 +94,37 @@ class TextFileDocumentParser(DocumentParser):
             parent_node: Optional parent node for the chunks
             
         Returns:
-            List of Chunk objects with relationships
+            List of Chunk objects (and SymNodes if hierarchical strategy)
         """
         if not text:
             return []
         
         metadata = metadata or {}
-        chunks = self._split_text(text)
-        chunk_nodes = []
         
-        for idx, (chunk_text, start_idx, end_idx) in enumerate(chunks):
-            chunk = Chunk.from_text(
-                text=chunk_text,
-                chunk_index=idx,
-                start_char_idx=start_idx,
-                end_char_idx=end_idx,
-                metadata={**metadata, "total_chunks": len(chunks)}
-            )
-            
-            # Set parent if provided
-            if parent_node:
-                chunk.parent = parent_node
-            
-            # Link to previous chunk
-            if chunk_nodes:
-                chunk.link_to_previous(chunk_nodes[-1])
-            
-            chunk_nodes.append(chunk)
-        
-        return chunk_nodes
-    
-    def _split_text(self, text: str) -> List[tuple[str, int, int]]:
-        """
-        Split text into chunks with overlap.
-        
-        Args:
-            text: The text to split
-            
-        Returns:
-            List of tuples (chunk_text, start_idx, end_idx)
-        """
-        if len(text) <= self.chunk_size:
-            return [(text, 0, len(text))]
-        
-        chunks = []
-        start = 0
-        
-        while start < len(text):
-            # Calculate end position
-            end = start + self.chunk_size
-            
-            # If this is not the last chunk, try to break at separator
-            if end < len(text):
-                # Look for the last separator within the chunk
-                chunk_text = text[start:end]
-                last_sep_idx = chunk_text.rfind(self.separator)
-                
-                if last_sep_idx != -1 and last_sep_idx > self.overlap:
-                    # Adjust end to the separator position
-                    if self.keep_separator:
-                        end = start + last_sep_idx + len(self.separator)
-                    else:
-                        end = start + last_sep_idx
-            else:
-                # Last chunk, take everything
-                end = len(text)
-            
-            chunk_text = text[start:end]
-            chunks.append((chunk_text, start, end))
-            
-            # Move start position with overlap
-            start = end - self.overlap
-            
-            # Ensure we make progress
-            if start <= chunks[-1][1]:
-                start = end
-        
-        return chunks
+        # Use the chunking strategy to split the text
+        return self.chunker.chunk_text(
+            text=text,
+            metadata=metadata,
+            parent_node=parent_node
+        )
     
     def from_file(
         self,
         file_path: Path,
-        chunk_size: int = 200,
-        overlap: int = 20,
-        separator: str = " ",
-        keep_separator: bool = True,
         encoding: str | None = None,
         include_file_metadata: bool = True
     ) -> List[Chunk]:
         """
-        Parse a text file into chunks.
+        Parse a text file into chunks using the configured chunking strategy.
         
         Args:
             file_path: Path to the text file
-            chunk_size: Maximum size of each chunk in characters
-            overlap: Number of characters to overlap between chunks
-            separator: Character/string to use as split boundaries
-            keep_separator: Whether to keep the separator in chunks
-            encoding: File encoding
+            encoding: File encoding (auto-detect if None)
             include_file_metadata: Whether to include file metadata in chunks
             
         Returns:
-            List of Chunk objects
+            List of Chunk objects (and SymNodes if hierarchical strategy)
         """
-
         # Read the file
         text = None
         if not encoding:
@@ -216,7 +158,7 @@ class TextFileDocumentParser(DocumentParser):
             }
         )
         
-        # Parse into chunks
+        # Parse into chunks using the chunking strategy
         return self.parse(
             text=text,
             metadata=metadata,
@@ -227,22 +169,16 @@ class TextFileDocumentParser(DocumentParser):
         self,
         directory_path: Path,
         pattern: str = "*.txt",
-        separator: str = " ",
-        keep_separator: bool = True,
         encoding: str | None = None,
         recursive: bool = False
     ) -> Dict[str, List[Chunk]]:
         """
-        Parse all text files in a directory.
+        Parse all files in a directory using the configured chunking strategy.
         
         Args:
             directory_path: Path to the directory
-            chunk_size: Maximum size of each chunk in characters
-            overlap: Number of characters to overlap between chunks
-            pattern: Glob pattern for file matching
-            separator: Character/string to use as split boundaries
-            keep_separator: Whether to keep the separator in chunks
-            encoding: File encoding
+            pattern: Glob pattern for file matching (default: "*.txt")
+            encoding: File encoding (auto-detect if None)
             recursive: Whether to search subdirectories recursively
             
         Returns:
@@ -263,10 +199,6 @@ class TextFileDocumentParser(DocumentParser):
             if file_path.is_file():
                 chunks = self.from_file(
                     file_path=file_path,
-                    chunk_size=self.chunk_size,
-                    overlap=self.overlap,
-                    separator=separator,
-                    keep_separator=keep_separator,
                     encoding=encoding
                 )
                 results[str(file_path)] = chunks

@@ -11,6 +11,7 @@ from .vector_store.base import VectorStore
 from .vector_store.qdrant_store import QdrantVectorStore, QdrantConfig
 from .node import Node, Chunk, SymNode, NodeWithScore
 from .parser import DocumentParser, TextFileDocumentParser
+from .chunking import ChunkingStrategy, CharacterChunkingStrategy, HierarchicalChunkingStrategy
 from .embeddings import Embeddings, OpenAIEmbeddings
 from .retriever import Retriever, VectorIndexRetriever
 from .agents import BaseAgent, ReActAgent, RetrieverTool
@@ -26,6 +27,9 @@ __all__ = [
     'NodeWithScore',
     'DocumentParser',
     'TextFileDocumentParser',
+    'ChunkingStrategy',
+    'CharacterChunkingStrategy',
+    'HierarchicalChunkingStrategy',
     'Embeddings',
     'OpenAIEmbeddings',
     'Retriever',
