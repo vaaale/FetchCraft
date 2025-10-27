@@ -352,7 +352,9 @@ class NodeWithScore(BaseModel):
 
 class ObjectNode(Node):
     """
-    A node that represents an object with a name and description.
+    A node that represents an object.
     """
-    object: Any = Field(description="The object")
+    object_id: Any = Field(description="The object_id", default_factory=lambda: str(uuid4()))
+    object_type: Any = Field(description="The object_type", default=None)
+    _object: Any | None = PrivateAttr()
 

@@ -1,9 +1,9 @@
 """
 Vector index retriever implementation.
 """
-import json
-from typing import List, TypeVar, Generic, Optional, Any, Dict, Annotated
-from pydantic import BaseModel, Field, ConfigDict, SkipValidation, PrivateAttr
+from typing import List, TypeVar, Optional, Any, Dict, Annotated
+
+from pydantic import Field, ConfigDict, SkipValidation, PrivateAttr
 
 from .base import Retriever
 from ..embeddings.base import Embeddings
@@ -23,8 +23,6 @@ class VectorIndexRetriever(Retriever[D]):
     
     vector_index: Annotated[Any, SkipValidation()] = Field(description="VectorIndex instance")
     _embeddings: Embeddings = PrivateAttr(default=None)
-    top_k: int = Field(default=4, description="Number of results to return")
-    resolve_parents: bool = Field(default=True, description="Whether to resolve parent nodes")
     search_kwargs: Dict[str, Any] = Field(default_factory=dict, description="Additional search parameters")
     
     model_config = ConfigDict(
@@ -52,51 +50,12 @@ class VectorIndexRetriever(Retriever[D]):
         """
         super().__init__(
             vector_index=vector_index,
-            embeddings=embeddings,
             top_k=top_k,
             resolve_parents=resolve_parents,
             search_kwargs=search_kwargs
         )
+        self._embeddings = embeddings
 
-    def to_json(self) -> str:
-        """Serialize to JSON string."""
-        return self.model_dump_json()
-
-    async def retrieve(
-        self, 
-        query: str,
-        top_k: Optional[int] = None,
-        **kwargs
-    ) -> List[NodeWithScore]:
-        """
-        Retrieve documents based on a text query.
-        
-        Args:
-            query: The query text
-            top_k: Number of results to return (overrides default if provided)
-            **kwargs: Additional search parameters (overrides defaults)
-            
-        Returns:
-            List of NodeWithScore objects containing documents and their relevance scores
-        """
-        # Generate query embedding
-        query_embedding = await self.embeddings.embed_query(query)
-        
-        # Merge kwargs with defaults
-        search_params = {**self.search_kwargs, **kwargs}
-        k = top_k if top_k is not None else self.top_k
-        
-        # Perform search
-        results = await self.vector_index.search(
-            query_embedding=query_embedding,
-            k=k,
-            resolve_parents=self.resolve_parents,
-            **search_params
-        )
-        
-        # Convert tuples to NodeWithScore
-        return [NodeWithScore(node=doc, score=score) for doc, score in results]
-    
     async def aretrieve(
         self, 
         query: str,
@@ -114,8 +73,24 @@ class VectorIndexRetriever(Retriever[D]):
         Returns:
             List of NodeWithScore objects containing documents and their relevance scores
         """
-        return await self.retrieve(query, top_k=top_k, **kwargs)
-    
+        # Generate query embedding
+        query_embedding = await self._embeddings.embed_query(query)
+
+        # Merge kwargs with defaults
+        search_params = {**self.search_kwargs, **kwargs}
+        k = top_k if top_k is not None else self.top_k
+
+        # Perform search
+        results = await self.vector_index.search(
+            query_embedding=query_embedding,
+            k=k,
+            resolve_parents=self.resolve_parents,
+            **search_params
+        )
+
+        # Convert tuples to NodeWithScore
+        return [NodeWithScore(node=doc, score=score) for doc, score in results]
+
     def update_config(
         self,
         top_k: Optional[int] = None,

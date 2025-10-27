@@ -120,7 +120,7 @@ Returns:
             Formatted retrieval results
         """
         logger.info(f"Retrieving documents for query: {query}")
-        results = await self.retriever.retrieve(query)
+        results = await self.retriever.aretrieve(query)
 
         # Add each retrieved node as a citation
         citations = [ctx.deps.add(ctx.tool_call_id, self.name, query, result) for result in results]

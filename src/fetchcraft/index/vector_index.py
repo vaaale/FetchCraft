@@ -270,13 +270,3 @@ class VectorIndex(BaseModel, Generic[D]):
             resolve_parents=resolve_parents,
             **search_kwargs
         )
-    
-    @property
-    def store(self) -> VectorStore[D]:
-        """
-        Get the underlying vector store instance.
-        
-        Returns:
-            The vector store instance
-        """
-        return self.vector_store
