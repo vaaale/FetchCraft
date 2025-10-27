@@ -1,17 +1,17 @@
-from typing import List, TypeVar, Generic, Type, Optional, Dict, Any, Set, Annotated
-from abc import ABC, abstractmethod
+from typing import List, TypeVar, Optional, Annotated
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, ConfigDict, SkipValidation, PrivateAttr
+from pydantic import Field, SkipValidation, PrivateAttr
 from tqdm import tqdm
 
-from fetchcraft.vector_store.base import VectorStore
-from fetchcraft.node import Node, SymNode, Chunk
 from fetchcraft.embeddings.base import Embeddings
+from fetchcraft.index.base import BaseIndex
+from fetchcraft.node import Node
+from fetchcraft.vector_store.base import VectorStore
 
 D = TypeVar('D', bound=Node)
 
-class VectorIndex(BaseModel, Generic[D]):
+class VectorIndex(BaseIndex[D]):
     """
     A vector index that works with any vector store implementation.
     
@@ -25,13 +25,7 @@ class VectorIndex(BaseModel, Generic[D]):
     
     vector_store: Annotated[VectorStore[D], SkipValidation()] = Field(description="Vector store instance")
     _embeddings: Embeddings = PrivateAttr(default=None)
-    index_id: str = Field(default_factory=lambda: str(uuid4()), description="Unique index identifier")
-    
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        validate_assignment=True,
-    )
-    
+
     def __init__(
         self, 
         vector_store: VectorStore[D], 
@@ -169,53 +163,7 @@ class VectorIndex(BaseModel, Generic[D]):
             resolve_parents=resolve_parents,
             **kwargs
         )
-    
-    async def _resolve_parent_nodes(
-        self, 
-        results: List[tuple[D, float]]
-    ) -> List[tuple[D, float]]:
-        """
-        Resolve parent nodes for SymNode instances in search results.
-        
-        Args:
-            results: List of (document, score) tuples from search
-            
-        Returns:
-            List of (document, score) tuples with parent nodes resolved
-        """
-        resolved_results = []
-        seen_parent_ids: Set[str] = set()
-        
-        for doc, score in results:
-            # Check if this is a SymNode that requires parent resolution
-            if isinstance(doc, SymNode) and doc.requires_parent_resolution():
-                parent_id = doc.parent_id
-                
-                # Skip if we've already resolved this parent
-                if parent_id in seen_parent_ids:
-                    continue
-                    
-                # Fetch the parent node
-                # Note: parent might be in a different index, so we don't pass index_id
-                parent_node = await self.vector_store.get_document(parent_id, index_id=None)
-                
-                if parent_node:
-                    resolved_results.append((parent_node, score))  # type: ignore
-                    seen_parent_ids.add(parent_id)
-                else:
-                    # If parent not found, fall back to the SymNode itself
-                    resolved_results.append((doc, score))
-            else:
-                # Not a SymNode or doesn't require resolution
-                # Check if this document is already a parent we've seen
-                if doc.id not in seen_parent_ids:
-                    resolved_results.append((doc, score))
-                    # If this could be a parent (Chunk), track it to avoid duplicates
-                    if isinstance(doc, Chunk):
-                        seen_parent_ids.add(doc.id)
-        
-        return resolved_results
-    
+
     async def get_document(self, document_id: str) -> Optional[D]:
         """
         Retrieve a single document by its ID.
