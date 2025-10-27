@@ -106,6 +106,67 @@ python -m examples.hierarchical_retrieval_test
 
 ---
 
+### 5. `chroma_example.py` 🆕
+
+Comprehensive ChromaDB vector store examples.
+
+**Shows:**
+- Using ChromaDB as a vector store backend
+- In-memory and persistent storage modes
+- Different distance metrics (cosine, L2, inner product)
+- Hierarchical chunking with ChromaDB
+- Metadata filtering
+
+**Run:**
+```bash
+# Install ChromaDB first
+pip install chromadb
+
+# Set your OpenAI API key
+export OPENAI_API_KEY="your-key"
+
+python -m examples.chroma_example
+```
+
+**Dependencies:**
+- ChromaDB (`pip install chromadb`)
+- OpenAI API key (for embeddings)
+
+**What it demonstrates:**
+1. ✅ Basic ChromaDB usage (in-memory)
+2. ✅ Persistent storage configuration
+3. ✅ Hierarchical chunking integration
+4. ✅ Distance metric comparison
+5. ✅ Configuration-based setup
+
+---
+
+## Vector Store Examples
+
+### ChromaDB vs Qdrant
+
+Both vector stores are supported. Choose based on your needs:
+
+| Feature | ChromaDB | Qdrant |
+|---------|----------|--------|
+| Setup | `pip install chromadb` | `pip install qdrant-client` |
+| In-memory | ✅ Easy | ✅ Easy |
+| Persistent | ✅ Simple | ✅ Advanced |
+| Self-hosted | ✅ Yes | ✅ Yes |
+| Cloud option | ✅ Yes | ✅ Yes |
+| Best for | Quick start, local dev | Production, scalability |
+
+**Try both:**
+```bash
+# ChromaDB example
+python -m examples.chroma_example
+
+# Qdrant examples (already in quick_hierarchy_test, etc.)
+python -m examples.quick_hierarchy_test
+```
+
+---
+
 ## Running the Examples
 
 ### Without External Services
