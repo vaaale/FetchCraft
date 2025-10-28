@@ -16,7 +16,7 @@ class VectorIndexRetriever(Retriever[D]):
     Retriever that uses a VectorIndex for retrieval.
     
     This retriever wraps a VectorIndex to provide a simple text-to-documents
-    retrieval interface. It uses the vector store's embeddings for query encoding.
+    retrieval interface. Query embedding is handled by the vector store.
     """
     
     vector_index: Annotated[Any, SkipValidation()] = Field(description="VectorIndex instance")
@@ -67,20 +67,21 @@ class VectorIndexRetriever(Retriever[D]):
         Returns:
             List of NodeWithScore objects containing documents and their relevance scores
         """
-        # Generate query embedding using vector store's embeddings
-        query_embedding = await self.vector_index.vector_store.embed_query(query)
-
         # Merge kwargs with defaults
         search_params = {**self.search_kwargs, **kwargs}
         k = top_k if top_k is not None else self.top_k
 
-        # Perform search
-        results = await self.vector_index.search(
-            query_embedding=query_embedding,
+        # Use vector store's search_by_text which handles embedding internally
+        results = await self.vector_index.vector_store.search_by_text(
+            query=query,
             k=k,
-            resolve_parents=self.resolve_parents,
+            index_id=self.vector_index.index_id,
             **search_params
         )
+        
+        # Resolve parents if needed
+        if self.resolve_parents:
+            results = await self.vector_index._resolve_parent_nodes(results)
 
         # Convert tuples to NodeWithScore
         return [NodeWithScore(node=doc, score=score) for doc, score in results]

@@ -75,11 +75,8 @@ class VectorIndex(BaseIndex[D]):
         Returns:
             List of document IDs that were added
         """
-        if show_progress:
-            documents = list(tqdm(documents, desc="Adding documents"))
-        
         # Delegate to vector store which handles embedding generation
-        return await self.vector_store.add_documents(documents, index_id=self.index_id)
+        return await self.vector_store.add_documents(documents, index_id=self.index_id, show_progress=show_progress)
 
 
     async def search(

@@ -50,7 +50,7 @@ class VectorStore(BaseModel, ABC, Generic[D]):
         return await self._embeddings.embed_documents(texts)
     
     @abstractmethod
-    async def add_documents(self, documents: List[D], index_id: Optional[str] = None) -> List[str]:
+    async def add_documents(self, documents: List[D], index_id: Optional[str] = None, show_progress: bool = False) -> List[str]:
         """
         Add documents to the vector store.
         
@@ -62,6 +62,7 @@ class VectorStore(BaseModel, ABC, Generic[D]):
             
         Returns:
             List of document IDs that were added
+            :param show_progress:
         """
         pass
     
@@ -88,6 +89,38 @@ class VectorStore(BaseModel, ABC, Generic[D]):
             List of tuples containing (document, similarity_score)
         """
         pass
+    
+    async def search_by_text(
+        self,
+        query: str,
+        k: int = 4,
+        index_id: Optional[str] = None,
+        **kwargs
+    ) -> List[tuple[D, float]]:
+        """
+        Search for similar documents using a text query.
+        Generates the query embedding automatically.
+        
+        Args:
+            query: The query text
+            k: Number of results to return
+            index_id: Optional index identifier to filter search results
+            **kwargs: Additional search parameters
+            
+        Returns:
+            List of tuples containing (document, similarity_score)
+        """
+        # Generate query embedding
+        query_embedding = await self.embed_query(query)
+        
+        # Perform search, passing query text for hybrid search support
+        return await self.similarity_search(
+            query_embedding=query_embedding,
+            k=k,
+            index_id=index_id,
+            query_text=query,
+            **kwargs
+        )
     
     @abstractmethod
     async def delete(self, ids: List[str], index_id: Optional[str] = None) -> bool:

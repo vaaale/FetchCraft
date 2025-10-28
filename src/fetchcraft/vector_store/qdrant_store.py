@@ -4,6 +4,7 @@ from uuid import uuid4
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from pydantic import BaseModel, Field, ConfigDict
+from tqdm import tqdm
 
 from .base import VectorStore, D
 from ..embeddings import Embeddings
@@ -145,7 +146,7 @@ class QdrantVectorStore(VectorStore[D]):
             # Fall back to the default document class
             return self.document_class
     
-    async def add_documents(self, documents: List[D], index_id: Optional[str] = None) -> List[str]:
+    async def add_documents(self, documents: List[D], index_id: Optional[str] = None, show_progress: bool = False) -> List[str]:
         """
         Add documents to the Qdrant collection.
         
@@ -161,41 +162,41 @@ class QdrantVectorStore(VectorStore[D]):
         if not documents:
             return []
         
-        # Generate embeddings for documents that don't have them
-        for doc in documents:
+        # Single loop: check embedding, generate if needed, insert immediately
+        ids = []
+        if show_progress:
+            items = tqdm(documents, desc="Processing documents")
+        else:
+            items = documents
+
+        for doc in items:
+            # Generate dense embedding if needed
             if not hasattr(doc, 'embedding') or not doc.embedding:  # type: ignore
                 if self._embeddings is None:
                     raise ValueError("Document missing embedding and no embeddings model configured")
-                # Generate embedding
+                # Embed this single document
                 embedding = await self._embeddings.embed_documents([doc.text])  # type: ignore
                 doc.embedding = embedding[0]  # type: ignore
-        
-        # Generate sparse embeddings if hybrid mode is enabled
-        sparse_embeddings = None
-        if self.enable_hybrid:
-            texts = [doc.text for doc in documents]  # type: ignore
-            # Fastembed returns a generator, convert to list
-            sparse_embeddings = list(self._sparse_embedder.embed(texts))
             
-        # Use existing document IDs or generate new ones
-        ids = []
-        for doc in documents:
-            if hasattr(doc, 'id') and doc.id:  # type: ignore
-                ids.append(doc.id)  # type: ignore
-            else:
-                ids.append(str(uuid4()))
-        
-        # Convert documents to Qdrant points
-        points = []
-        for idx, (doc_id, doc) in enumerate(zip(ids, documents)):
+            # Generate sparse embedding if hybrid mode
+            sparse_vector = None
+            if self.enable_hybrid:
+                # Generate sparse embedding for this document
+                sparse_emb = next(self._sparse_embedder.embed([doc.text]))  # type: ignore
+                sparse_vector = models.SparseVector(
+                    indices=sparse_emb.indices.tolist(),
+                    values=sparse_emb.values.tolist()
+                )
+            
+            # Use existing ID or generate new one
+            doc_id = doc.id if hasattr(doc, 'id') and doc.id else str(uuid4())  # type: ignore
+            ids.append(doc_id)
+            
             # Extract vector and payload
-            if not hasattr(doc, 'embedding') or not doc.embedding:  # type: ignore
-                raise ValueError("Document must have an 'embedding' field")
-                
             payload = doc.model_dump()
             dense_vector = payload.pop('embedding')
             
-            # Store the document ID in the payload as well
+            # Store the document ID in the payload
             payload['id'] = doc_id
             
             # Store the document class type for proper reconstruction
@@ -207,31 +208,25 @@ class QdrantVectorStore(VectorStore[D]):
             
             # Prepare vectors based on hybrid mode
             if self.enable_hybrid:
-                # Convert fastembed sparse embedding to Qdrant format
-                sparse_emb = sparse_embeddings[idx]
                 vector = {
                     "dense": dense_vector,
-                    "sparse": models.SparseVector(
-                        indices=sparse_emb.indices.tolist(),
-                        values=sparse_emb.values.tolist()
-                    )
+                    "sparse": sparse_vector
                 }
             else:
                 vector = dense_vector
             
-            points.append(
-                models.PointStruct(
-                    id=doc_id,
-                    vector=vector,
-                    payload=payload
-                )
+            # Create point and insert immediately
+            point = models.PointStruct(
+                id=doc_id,
+                vector=vector,
+                payload=payload
             )
-        
-        # Upsert points to Qdrant
-        self.client.upsert(
-            collection_name=self.collection_name,
-            points=points
-        )
+            
+            # Insert into index immediately
+            self.client.upsert(
+                collection_name=self.collection_name,
+                points=[point]
+            )
         
         return ids
     

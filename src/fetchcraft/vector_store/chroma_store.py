@@ -120,7 +120,7 @@ class ChromaVectorStore(VectorStore[D]):
             # Fall back to the default document class
             return self.document_class
     
-    async def add_documents(self, documents: List[D], index_id: Optional[str] = None) -> List[str]:
+    async def add_documents(self, documents: List[D], index_id: Optional[str] = None, show_progress: bool = False) -> List[str]:
         """
         Add documents to the Chroma collection.
         
@@ -132,6 +132,7 @@ class ChromaVectorStore(VectorStore[D]):
             
         Returns:
             List of document IDs that were added
+            :param show_progress:
         """
         if not documents:
             return []
