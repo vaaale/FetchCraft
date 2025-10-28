@@ -101,11 +101,11 @@ class CharacterChunkingStrategy(ChunkingStrategy):
                 metadata={**metadata, "total_chunks": len(chunk_tuples), "chunk_strategy": "character"}
             )
             
-            # Set parent if provided
+            # Set doc_id from parent_node (but don't set parent relationship for first-level chunks)
             if parent_node:
-                chunk.parent = parent_node
+                chunk.doc_id = parent_node.doc_id if hasattr(parent_node, 'doc_id') else parent_node.id
             
-            # Link to previous chunk
+            # Link to previous chunk (sibling relationship)
             if chunk_nodes:
                 chunk.link_to_previous(chunk_nodes[-1])
             
@@ -306,11 +306,11 @@ class HierarchicalChunkingStrategy(ChunkingStrategy):
                 metadata={**metadata, "total_chunks": len(chunk_tuples)}
             )
             
-            # Set parent if provided
+            # Set doc_id from parent_node (but don't set parent relationship for first-level chunks)
             if parent_node:
-                chunk.parent = parent_node
+                chunk.doc_id = parent_node.doc_id if hasattr(parent_node, 'doc_id') else parent_node.id
             
-            # Link to previous chunk
+            # Link to previous chunk (sibling relationship)
             if chunk_nodes:
                 chunk.link_to_previous(chunk_nodes[-1])
             
@@ -358,6 +358,10 @@ class HierarchicalChunkingStrategy(ChunkingStrategy):
                     "parent_chunk_index": parent_chunk.chunk_index
                 }
             )
+            # Set doc_id from parent chunk
+            sym_node.doc_id = parent_chunk.doc_id
+            # Add child to parent's children list (SymNodes are children of chunks, not first-level)
+            parent_chunk.add_child(sym_node)
             child_nodes.append(sym_node)
         
         return child_nodes

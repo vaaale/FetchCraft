@@ -11,6 +11,10 @@ class Node(BaseModel):
     
     Nodes can have parent-child relationships and can be linked
     in a sequence using next/previous pointers.
+    
+    Relationships:
+    - parent/children: Hierarchical relationships (any node can have both)
+    - next/previous: Sequential relationships (sibling ordering)
     """
     
     id: str = Field(default_factory=lambda: str(uuid4()))
@@ -18,13 +22,20 @@ class Node(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
     embedding: Optional[List[float]] = None
     
-    # Relationships
+    # Document reference
+    doc_id: Optional[str] = None  # All nodes from same document share this ID
+    
+    # Hierarchical relationships
     parent_id: Optional[str] = None
+    children_ids: List[str] = Field(default_factory=list)
+    
+    # Sequential relationships (sibling ordering)
     next_id: Optional[str] = None
     previous_id: Optional[str] = None
     
     # Cached references (not persisted)
     _parent: Optional['Node'] = PrivateAttr(default=None)
+    _children: List['Node'] = PrivateAttr(default_factory=list)
     _next: Optional['Node'] = PrivateAttr(default=None)
     _previous: Optional['Node'] = PrivateAttr(default=None)
     _hash: Optional[str] = PrivateAttr(default=None)
@@ -40,9 +51,28 @@ class Node(BaseModel):
     
     @parent.setter
     def parent(self, node: Optional['Node']) -> None:
-        """Set the parent node."""
+        """Set the parent node and update parent's children."""
         self._parent = node
         self.parent_id = node.id if node else None
+        if node and self.id not in node.children_ids:
+            node.children_ids.append(self.id)
+            if self not in node._children:
+                node._children.append(self)
+    
+    @property
+    def children(self) -> List['Node']:
+        """Get the child nodes."""
+        return self._children
+    
+    @children.setter
+    def children(self, nodes: List['Node']) -> None:
+        """Set the child nodes."""
+        self._children = nodes
+        self.children_ids = [node.id for node in nodes]
+        # Update each child's parent reference
+        for node in nodes:
+            node._parent = self
+            node.parent_id = self.id
     
     @property
     def next(self) -> Optional['Node']:
@@ -99,6 +129,38 @@ class Node(BaseModel):
         """Check if this node has a previous node."""
         return self.previous_id is not None
     
+    def has_children(self) -> bool:
+        """Check if this node has children."""
+        return len(self.children_ids) > 0
+    
+    def add_child(self, node: 'Node') -> None:
+        """
+        Add a child node to this node.
+        
+        Args:
+            node: The child node to add
+        """
+        if node.id not in self.children_ids:
+            self.children_ids.append(node.id)
+            self._children.append(node)
+        node._parent = self
+        node.parent_id = self.id
+    
+    def remove_child(self, node: 'Node') -> None:
+        """
+        Remove a child node from this node.
+        
+        Args:
+            node: The child node to remove
+        """
+        if node.id in self.children_ids:
+            self.children_ids.remove(node.id)
+        if node in self._children:
+            self._children.remove(node)
+        if node.parent_id == self.id:
+            node._parent = None
+            node.parent_id = None
+    
     @property
     def hash(self) -> str:
         """
@@ -130,6 +192,67 @@ class Node(BaseModel):
         if include_parent and self._parent:
             return f"Context: {self._parent.text}\n\n{self.text}"
         return self.text
+
+
+class DocumentNode(Node):
+    """
+    A node that represents an original document.
+    
+    DocumentNode is the root of a document hierarchy and typically has no parent.
+    It serves as the parent for all chunks created from the document.
+    
+    DocumentNodes typically don't have next/previous relationships (siblings),
+    as managing relationships between all documents would be memory-intensive.
+    """
+    
+    def __init__(self, **data):
+        """
+        Initialize a DocumentNode.
+        
+        Args:
+            **data: Keyword arguments for initialization
+        """
+        super().__init__(**data)
+        
+        # Set doc_id to self.id (document references itself)
+        if self.doc_id is None:
+            self.doc_id = self.id
+        
+        # Mark as document in metadata
+        if 'document' not in self.metadata:
+            self.metadata['document'] = True
+        
+        # Validate that DocumentNode typically has no parent
+        if self.parent_id is not None:
+            import warnings
+            warnings.warn(
+                "DocumentNode typically should not have a parent. "
+                "If this is intentional, you can ignore this warning."
+            )
+    
+    @classmethod
+    def from_text(
+        cls,
+        text: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ) -> 'DocumentNode':
+        """
+        Create a DocumentNode from text.
+        
+        Args:
+            text: The document text
+            metadata: Additional metadata
+            **kwargs: Additional keyword arguments
+            
+        Returns:
+            A new DocumentNode instance
+        """
+        return cls(
+            text=text,
+            metadata=metadata or {},
+            **kwargs
+        )
 
 
 class Chunk(Node):

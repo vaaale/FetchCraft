@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional
 
 from pydantic import Field
 
-from .node import Chunk, Node
+from .node import Chunk, Node, DocumentNode
 from .chunking import ChunkingStrategy, HierarchicalChunkingStrategy, CharacterChunkingStrategy
 
 
@@ -152,7 +152,7 @@ class TextFileDocumentParser(DocumentParser):
             }
         
         # Create parent document node
-        parent_node = Node(
+        parent_node = DocumentNode(
             text=text,
             metadata={
                 **metadata,
@@ -162,11 +162,14 @@ class TextFileDocumentParser(DocumentParser):
         )
         
         # Parse into chunks using the chunking strategy
-        return self.parse(
+        chunks = self.parse(
             text=text,
             metadata=metadata,
             parent_node=parent_node
         )
+        
+        # Return DocumentNode followed by all chunks
+        return [parent_node] + chunks
     
     def parse_directory(
         self,

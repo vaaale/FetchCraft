@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from .base import VectorStore, D
 from ..embeddings import Embeddings
-from ..node import Node, Chunk, SymNode
+from ..node import Node, DocumentNode, Chunk, SymNode
 
 try:
     from fastembed import SparseTextEmbedding
@@ -140,6 +140,8 @@ class QdrantVectorStore(VectorStore[Node]):
             return SymNode  # type: ignore
         elif class_name == 'Chunk':
             return Chunk  # type: ignore
+        elif class_name == 'DocumentNode':
+            return DocumentNode  # type: ignore
         elif class_name == 'Node':
             return Node  # type: ignore
         else:
@@ -174,8 +176,9 @@ class QdrantVectorStore(VectorStore[Node]):
         for doc in items:
             # Check if document already exists (hash is computed automatically via property)
             existing_doc = await self.get_document(doc.id, index_id=index_id)
-            if existing_doc.hash == doc.hash:  # type: ignore
+            if existing_doc and existing_doc.hash == doc.hash:  # type: ignore
                 # Document hasn't changed, skip
+                ids.append(doc.id)
                 continue
 
             # Generate dense embedding if needed
@@ -231,6 +234,7 @@ class QdrantVectorStore(VectorStore[Node]):
                 collection_name=self.collection_name,
                 points=[point]
             )
+            ids.append(doc.id)
         
         return ids
     

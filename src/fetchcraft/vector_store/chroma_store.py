@@ -7,7 +7,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field, ConfigDict
 
 from .base import VectorStore, D
-from ..node import Node, Chunk, SymNode
+from ..node import Node, DocumentNode, Chunk, SymNode
 
 
 try:
@@ -114,6 +114,8 @@ class ChromaVectorStore(VectorStore[D]):
             return SymNode  # type: ignore
         elif class_name == 'Chunk':
             return Chunk  # type: ignore
+        elif class_name == 'DocumentNode':
+            return DocumentNode  # type: ignore
         elif class_name == 'Node':
             return Node  # type: ignore
         else:
