@@ -26,17 +26,17 @@ class QdrantConfig(BaseModel):
     enable_hybrid: bool = False  # Enable hybrid search with sparse + dense vectors
     fusion_method: Literal["rrf", "dbsf"] = "rrf"  # Fusion method for hybrid search
 
-class QdrantVectorStore(VectorStore[D]):
+class QdrantVectorStore(VectorStore[Node]):
     """
     Qdrant implementation of the VectorStore interface.
     """
     
     client: Any = Field(description="QdrantClient instance")
     collection_name: str = Field(description="Name of the collection")
-    document_class: Optional[Type[D]] = Field(default=None, description="Document class type")
+    document_class: Optional[Type[Node]] = Field(default=None, description="Document class type")
     distance: str = Field(default="Cosine", description="Distance metric (Cosine, Euclid, or Dot)")
     enable_hybrid: bool = Field(default=False, description="Enable hybrid search with sparse + dense vectors")
-    fusion_method: Literal["rrf", "dbsf"] = Field(default="rrf", description="Fusion method for hybrid search")
+    fusion_method: Literal["rrf", "dbsf", "mmr"] = Field(default="rrf", description="Fusion method for hybrid search")
     _distance_metric: Any = None  # Computed field for models.Distance
     _sparse_embedder: Any = None  # Fastembed sparse embedder
     
@@ -50,7 +50,7 @@ class QdrantVectorStore(VectorStore[D]):
         client: QdrantClient,
         collection_name: str,
         embeddings: Optional[Embeddings] = None,
-        document_class: Optional[Type[D]] = None,
+        document_class: Optional[Type[Node]] = None,
         distance: str = "Cosine",
         enable_hybrid: bool = False,
         fusion_method: Literal["rrf", "dbsf"] = "rrf",
@@ -126,7 +126,7 @@ class QdrantVectorStore(VectorStore[D]):
                     )
                 )
     
-    def _get_doc_class(self, class_name: Optional[str]) -> Type[D]:
+    def _get_doc_class(self, class_name: Optional[str]) -> Type[Node]:
         """
         Get the document class based on the stored class name.
         
@@ -146,23 +146,25 @@ class QdrantVectorStore(VectorStore[D]):
             # Fall back to the default document class
             return self.document_class
     
-    async def add_documents(self, documents: List[D], index_id: Optional[str] = None, show_progress: bool = False) -> List[str]:
+    async def add_documents(self, documents: List[Node], index_id: Optional[str] = None, show_progress: bool = False) -> List[str]:
         """
         Add documents to the Qdrant collection.
         
         Automatically generates embeddings for documents that don't have them.
+        Checks for existing documents and only updates if content has changed (based on hash).
         
         Args:
             documents: List of document objects (with or without embeddings)
             index_id: Optional index identifier to isolate documents
+            show_progress: Whether to show progress bar
             
         Returns:
-            List of document IDs that were added
+            List of document IDs that were added or updated
         """
         if not documents:
             return []
         
-        # Single loop: check embedding, generate if needed, insert immediately
+        # Single loop: check hash, generate embeddings if needed, upsert if changed
         ids = []
         if show_progress:
             items = tqdm(documents, desc="Processing documents")
@@ -170,6 +172,12 @@ class QdrantVectorStore(VectorStore[D]):
             items = documents
 
         for doc in items:
+            # Check if document already exists (hash is computed automatically via property)
+            existing_doc = await self.get_document(doc.id, index_id=index_id)
+            if existing_doc.hash == doc.hash:  # type: ignore
+                # Document hasn't changed, skip
+                continue
+
             # Generate dense embedding if needed
             if not hasattr(doc, 'embedding') or not doc.embedding:  # type: ignore
                 if self._embeddings is None:
@@ -187,10 +195,6 @@ class QdrantVectorStore(VectorStore[D]):
                     indices=sparse_emb.indices.tolist(),
                     values=sparse_emb.values.tolist()
                 )
-            
-            # Use existing ID or generate new one
-            doc_id = doc.id if hasattr(doc, 'id') and doc.id else str(uuid4())  # type: ignore
-            ids.append(doc_id)
             
             # Extract vector and payload
             payload = doc.model_dump()
@@ -215,14 +219,14 @@ class QdrantVectorStore(VectorStore[D]):
             else:
                 vector = dense_vector
             
-            # Create point and insert immediately
+            # Create point and upsert (insert or update)
             point = models.PointStruct(
                 id=doc_id,
                 vector=vector,
                 payload=payload
             )
             
-            # Insert into index immediately
+            # Upsert into index (insert if new, update if exists)
             self.client.upsert(
                 collection_name=self.collection_name,
                 points=[point]
@@ -379,7 +383,7 @@ class QdrantVectorStore(VectorStore[D]):
             )
         return True
     
-    async def get_document(self, document_id: str, index_id: Optional[str] = None) -> Optional[D]:
+    async def get_document(self, document_id: str, index_id: Optional[str] = None) -> Optional[Node]:
         """
         Retrieve a single document by its ID.
         

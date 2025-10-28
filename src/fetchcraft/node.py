@@ -1,6 +1,8 @@
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr, computed_field
 from uuid import uuid4
+import hashlib
+import json
 
 
 class Node(BaseModel):
@@ -25,6 +27,7 @@ class Node(BaseModel):
     _parent: Optional['Node'] = PrivateAttr(default=None)
     _next: Optional['Node'] = PrivateAttr(default=None)
     _previous: Optional['Node'] = PrivateAttr(default=None)
+    _hash: Optional[str] = PrivateAttr(default=None)
     
     model_config = {
         "arbitrary_types_allowed": True,
@@ -95,6 +98,24 @@ class Node(BaseModel):
     def has_previous(self) -> bool:
         """Check if this node has a previous node."""
         return self.previous_id is not None
+    
+    @property
+    def hash(self) -> str:
+        """
+        Compute MD5 hash of text + metadata for change detection.
+        
+        The hash is computed dynamically and cached for performance.
+        
+        Returns:
+            MD5 hash as hex string
+        """
+        if self._hash is None:
+            # Create a deterministic string from text and metadata
+            # Sort metadata keys for consistent hashing
+            metadata_str = json.dumps(self.metadata, sort_keys=True)
+            content = f"{self.text}|{metadata_str}"
+            self._hash = hashlib.md5(content.encode('utf-8')).hexdigest()
+        return self._hash
     
     def get_text_with_context(self, include_parent: bool = True) -> str:
         """

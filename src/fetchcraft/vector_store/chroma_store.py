@@ -125,26 +125,18 @@ class ChromaVectorStore(VectorStore[D]):
         Add documents to the Chroma collection.
         
         Automatically generates embeddings for documents that don't have them.
+        Checks for existing documents and only updates if content has changed (based on hash).
         
         Args:
             documents: List of document objects (with or without embeddings)
             index_id: Optional index identifier to isolate documents
+            show_progress: Whether to show progress bar
             
         Returns:
-            List of document IDs that were added
-            :param show_progress:
+            List of document IDs that were added or updated
         """
         if not documents:
             return []
-        
-        # Generate embeddings for documents that don't have them
-        for doc in documents:
-            if not hasattr(doc, 'embedding') or not doc.embedding:  # type: ignore
-                if self._embeddings is None:
-                    raise ValueError("Document missing embedding and no embeddings model configured")
-                # Generate embedding
-                embedding = await self._embeddings.embed_documents([doc.text])  # type: ignore
-                doc.embedding = embedding[0]  # type: ignore
         
         # Prepare data for Chroma
         ids = []
@@ -158,6 +150,27 @@ class ChromaVectorStore(VectorStore[D]):
                 doc_id = doc.id  # type: ignore
             else:
                 doc_id = str(uuid4())
+            
+            # Check if document already exists (hash is computed automatically via property)
+            try:
+                existing_doc = await self.get_document(doc_id, index_id=index_id)
+                if existing_doc and hasattr(existing_doc, 'hash') and hasattr(doc, 'hash'):  # type: ignore
+                    if existing_doc.hash == doc.hash:  # type: ignore
+                        # Document hasn't changed, skip
+                        ids.append(doc_id)
+                        continue
+            except Exception:
+                # Document doesn't exist or error retrieving, proceed with insert
+                pass
+            
+            # Generate embedding if needed
+            if not hasattr(doc, 'embedding') or not doc.embedding:  # type: ignore
+                if self._embeddings is None:
+                    raise ValueError("Document missing embedding and no embeddings model configured")
+                # Generate embedding
+                embedding = await self._embeddings.embed_documents([doc.text])  # type: ignore
+                doc.embedding = embedding[0]  # type: ignore
+            
             ids.append(doc_id)
             
             # Extract embedding
@@ -188,13 +201,14 @@ class ChromaVectorStore(VectorStore[D]):
             metadatas.append(metadata)
             documents_text.append(doc.text if hasattr(doc, 'text') else "")  # type: ignore
         
-        # Add to Chroma collection
-        self._collection.add(
-            ids=ids,
-            embeddings=embeddings,
-            metadatas=metadatas,
-            documents=documents_text
-        )
+        # Upsert to Chroma collection (will update if exists)
+        if ids:
+            self._collection.upsert(
+                ids=ids,
+                embeddings=embeddings,
+                metadatas=metadatas,
+                documents=documents_text
+            )
         
         return ids
     
