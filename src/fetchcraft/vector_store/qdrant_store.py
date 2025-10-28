@@ -201,7 +201,7 @@ class QdrantVectorStore(VectorStore[Node]):
             dense_vector = payload.pop('embedding')
             
             # Store the document ID in the payload
-            payload['id'] = doc_id
+            payload['id'] = doc.id
             
             # Store the document class type for proper reconstruction
             payload['_doc_class'] = doc.__class__.__name__
@@ -221,7 +221,7 @@ class QdrantVectorStore(VectorStore[Node]):
             
             # Create point and upsert (insert or update)
             point = models.PointStruct(
-                id=doc_id,
+                id=doc.id,
                 vector=vector,
                 payload=payload
             )
