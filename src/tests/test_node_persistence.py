@@ -37,12 +37,11 @@ async def test_node_persistence():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="test_collection",
-        vector_size=384
+        embeddings=embeddings
     )
     
     index = VectorIndex(
         vector_store=vector_store,
-        embeddings=embeddings,
         index_id="test_index"
     )
     

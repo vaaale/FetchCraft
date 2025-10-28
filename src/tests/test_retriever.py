@@ -54,11 +54,10 @@ async def test_basic_retriever():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="test_retriever",
-        vector_size=384
+        embeddings=embeddings
     )
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     await index.add_documents(documents)
     
@@ -66,7 +65,7 @@ async def test_basic_retriever():
     retriever = index.as_retriever(top_k=2)
     
     # Retrieve
-    results = await retriever.retrieve("test query")
+    results = await retriever.aretrieve("test query")
     
     assert len(results) == 2
     assert all(isinstance(result, NodeWithScore) for result in results)
@@ -88,11 +87,10 @@ async def test_retriever_top_k_override():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="test_topk",
-        vector_size=384
+        embeddings=embeddings
     )
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     await index.add_documents(documents)
     
@@ -100,11 +98,11 @@ async def test_retriever_top_k_override():
     retriever = index.as_retriever(top_k=2)
     
     # Default top_k
-    results = await retriever.retrieve("query")
+    results = await retriever.aretrieve("query")
     assert len(results) == 2
     
     # Override top_k
-    results = await retriever.retrieve("query", top_k=4)
+    results = await retriever.aretrieve("query", top_k=4)
     assert len(results) == 4
 
 
@@ -122,11 +120,10 @@ async def test_retriever_update_config():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="test_config",
-        vector_size=384
+        embeddings=embeddings
     )
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     await index.add_documents(documents)
     
@@ -137,7 +134,7 @@ async def test_retriever_update_config():
     assert retriever.top_k == 3
     
     # Verify new config is used
-    results = await retriever.retrieve("query")
+    results = await retriever.aretrieve("query")
     assert len(results) == 3
 
 
@@ -162,12 +159,11 @@ async def test_retriever_with_symnode():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="test_symnode_retriever",
-        document_class=Node,
-        vector_size=384
+        embeddings=embeddings,
+        document_class=Node
     )
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     
     await index.add_documents([parent])
@@ -179,7 +175,7 @@ async def test_retriever_with_symnode():
         resolve_parents=True
     )
     
-    results = await retriever.retrieve("query")
+    results = await retriever.aretrieve("query")
     
     # Should get parent, not SymNodes
     for result in results:
@@ -205,12 +201,11 @@ async def test_retriever_without_parent_resolution():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="test_no_resolve",
-        document_class=Node,
-        vector_size=384
+        embeddings=embeddings,
+        document_class=Node
     )
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     
     await index.add_documents([parent, sym])
@@ -221,7 +216,7 @@ async def test_retriever_without_parent_resolution():
         resolve_parents=False
     )
     
-    results = await retriever.retrieve("query")
+    results = await retriever.aretrieve("query")
     
     # Should include SymNode
     has_symnode = any(isinstance(result.node, SymNode) for result in results)
@@ -239,22 +234,20 @@ async def test_direct_retriever_creation():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="test_direct",
-        vector_size=384
+        embeddings=embeddings
     )
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     await index.add_documents(documents)
     
     # Create directly
     retriever = VectorIndexRetriever(
         vector_index=index,
-        embeddings=embeddings,
         top_k=1
     )
     
-    results = await retriever.retrieve("test")
+    results = await retriever.aretrieve("test")
     assert len(results) == 1
 
 
@@ -269,18 +262,17 @@ async def test_aretrieve_alias():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="test_aretrieve",
-        vector_size=384
+        embeddings=embeddings
     )
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     await index.add_documents(documents)
     
     retriever = index.as_retriever(top_k=1)
     
     # Both should work
-    results1 = await retriever.retrieve("test")
+    results1 = await retriever.aretrieve("test")
     results2 = await retriever.aretrieve("test")
     
     assert len(results1) == len(results2)

@@ -43,22 +43,8 @@ async def example_basic_usage():
         print("Install with: pip install chromadb")
         return
     
-    # Step 1: Create ChromaDB client and vector store
-    print("\n1. Creating ChromaDB vector store...")
-    
-    client = chromadb.Client()  # In-memory mode
-    
-    vector_store = ChromaVectorStore(
-        client=client,
-        collection_name="demo_docs",
-        distance="cosine"  # Options: "cosine", "l2", "ip"
-    )
-    
-    print(f"   ✓ Created vector store with collection: {vector_store.collection_name}")
-    print(f"   ✓ Distance metric: {vector_store.distance}")
-    
-    # Step 2: Set up embeddings
-    print("\n2. Setting up embeddings...")
+    # Step 1: Set up embeddings
+    print("\n1. Setting up embeddings...")
     
     embeddings = OpenAIEmbeddings(
         model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"),
@@ -69,12 +55,26 @@ async def example_basic_usage():
     print(f"   ✓ Embeddings model: {embeddings.model}")
     print(f"   ✓ Dimension: {embeddings.dimension}")
     
+    # Step 2: Create ChromaDB client and vector store
+    print("\n2. Creating ChromaDB vector store...")
+    
+    client = chromadb.Client()  # In-memory mode
+    
+    vector_store = ChromaVectorStore(
+        client=client,
+        collection_name="demo_docs",
+        embeddings=embeddings,
+        distance="cosine"  # Options: "cosine", "l2", "ip"
+    )
+    
+    print(f"   ✓ Created vector store with collection: {vector_store.collection_name}")
+    print(f"   ✓ Distance metric: {vector_store.distance}")
+    
     # Step 3: Create vector index
     print("\n3. Creating vector index...")
     
     vector_index = VectorIndex(
         vector_store=vector_store,
-        embeddings=embeddings,
         index_id="demo_index"
     )
     
@@ -167,12 +167,20 @@ async def example_persistent_storage():
     
     print(f"\n1. Using persistent storage at: {persist_dir}")
     
+    # Set up embeddings
+    embeddings = OpenAIEmbeddings(
+        model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"),
+        api_key=os.getenv("OPENAI_API_KEY", "test-key"),
+        base_url=os.getenv("OPENAI_BASE_URL", None)
+    )
+    
     # Create persistent client
     client = chromadb.PersistentClient(path=persist_dir)
     
     vector_store = ChromaVectorStore(
         client=client,
         collection_name="persistent_docs",
+        embeddings=embeddings,
         distance="cosine"
     )
     
@@ -188,7 +196,7 @@ async def example_persistent_storage():
         distance="cosine"
     )
     
-    vector_store_from_config = ChromaVectorStore.from_config(config)
+    vector_store_from_config = ChromaVectorStore.from_config(config, embeddings=embeddings)
     
     print(f"   ✓ Created from config: {vector_store_from_config.collection_name}")
     
@@ -210,24 +218,25 @@ async def example_hierarchical_chunking():
     
     print("\n1. Setting up ChromaDB with hierarchical chunking...")
     
-    # Create ChromaDB client
-    client = chromadb.Client()
-    
-    vector_store = ChromaVectorStore(
-        client=client,
-        collection_name="hierarchical_docs",
-        distance="cosine"
-    )
-    
+    # Set up embeddings
     embeddings = OpenAIEmbeddings(
         model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"),
         api_key=os.getenv("OPENAI_API_KEY", "test-key"),
         base_url=os.getenv("OPENAI_BASE_URL", None)
     )
     
+    # Create ChromaDB client
+    client = chromadb.Client()
+    
+    vector_store = ChromaVectorStore(
+        client=client,
+        collection_name="hierarchical_docs",
+        embeddings=embeddings,
+        distance="cosine"
+    )
+    
     vector_index = VectorIndex(
         vector_store=vector_store,
-        embeddings=embeddings,
         index_id="hierarchical_index"
     )
     
@@ -332,12 +341,12 @@ async def example_comparison():
         vector_store = ChromaVectorStore(
             client=client,
             collection_name=f"test_{distance}",
+            embeddings=embeddings,
             distance=distance
         )
         
         vector_index = VectorIndex(
             vector_store=vector_store,
-            embeddings=embeddings,
             index_id=f"index_{distance}"
         )
         

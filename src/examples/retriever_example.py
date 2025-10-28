@@ -33,7 +33,7 @@ async def basic_retriever_example():
         api_key="sk-124",
         base_url="http://wingman:8000/v1"
     )
-    dimension = await embeddings.aget_dimension()
+    dimension = embeddings.dimension
     print(f"✓ Initialized embeddings (dimension: {dimension})\n")
     
     # Step 2: Create and populate index
@@ -63,13 +63,12 @@ async def basic_retriever_example():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="documents",
-        vector_size=dimension
+        embeddings=embeddings
     )
     
-    # VectorIndex now requires embeddings at initialization
+    # VectorIndex uses the vector store's embeddings
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     
     # Embeddings are auto-generated when adding documents!
@@ -93,11 +92,11 @@ async def basic_retriever_example():
         print(f"Query: '{query}'")
         
         # Simply pass the query text - embedding is handled internally!
-        results = await retriever.retrieve(query)
+        results = await retriever.aretrieve(query)
         
         print("  Top results:")
-        for i, (doc, score) in enumerate(results, 1):
-            print(f"    {i}. [Score: {score:.3f}] {doc.text[:60]}...")
+        for i, node_with_score in enumerate(results, 1):
+            print(f"    {i}. [Score: {node_with_score.score:.3f}] {node_with_score.text[:60]}...")
         print()
 
 
@@ -114,8 +113,7 @@ async def retriever_configuration_example():
         api_key="sk-124",
         base_url="http://wingman:8000/v1"
     )
-    dimension = await embeddings.aget_dimension()
-    
+
     documents_text = [
         "RAG is a technique for retrieval-augmented generation.",
         "Vector databases store embeddings for similarity search.",
@@ -133,11 +131,10 @@ async def retriever_configuration_example():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="rag_docs",
-        vector_size=dimension
+        embeddings=embeddings
     )
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     await index.add_documents(nodes)
     
@@ -150,18 +147,18 @@ async def retriever_configuration_example():
     )
     
     print("Retrieving with top_k=2:")
-    results = await retriever.retrieve("What is RAG?")
+    results = await retriever.aretrieve("What is RAG?")
     print(f"  Retrieved {len(results)} results\n")
     
     # Override top_k for a single query
     print("Retrieving with top_k=4 (override):")
-    results = await retriever.retrieve("What is RAG?", top_k=4)
+    results = await retriever.aretrieve("What is RAG?", top_k=4)
     print(f"  Retrieved {len(results)} results\n")
     
     # Update retriever configuration
     retriever.update_config(top_k=5)
     print("Updated retriever config to top_k=5")
-    results = await retriever.retrieve("What is RAG?")
+    results = await retriever.aretrieve("What is RAG?")
     print(f"  Retrieved {len(results)} results\n")
 
 
@@ -180,8 +177,7 @@ async def retriever_with_symnode_example():
         api_key="sk-124",
         base_url="http://wingman:8000/v1"
     )
-    dimension = await embeddings.aget_dimension()
-    
+
     # Create parent chunk
     parent_text = """
     Retrieval-Augmented Generation (RAG) is a technique that combines information 
@@ -210,12 +206,11 @@ async def retriever_with_symnode_example():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="hierarchical",
-        document_class=Node,
-        vector_size=dimension
+        embeddings=embeddings,
+        document_class=Node
     )
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     
     # Index parent first, then SymNodes (embeddings auto-generated!)
@@ -233,11 +228,11 @@ async def retriever_with_symnode_example():
     query = "What does RAG combine?"
     print(f"Query: '{query}'")
     print("With parent resolution (returns full context):")
-    results = await retriever.retrieve(query)
+    results = await retriever.aretrieve(query)
     
-    for i, (doc, score) in enumerate(results, 1):
-        print(f"\n  {i}. Type: {doc.__class__.__name__} [Score: {score:.3f}]")
-        print(f"     Text: {doc.text[:80]}...")
+    for i, node in enumerate(results, 1):
+        print(f"\n  {i}. Type: {node.__class__.__name__} [Score: {node.score:.3f}]")
+        print(f"     Text: {node.text[:80]}...")
     
     # Create retriever without parent resolution
     retriever_no_resolve = index.as_retriever(
@@ -246,11 +241,11 @@ async def retriever_with_symnode_example():
     )
     
     print(f"\n\nSame query without parent resolution (returns SymNodes):")
-    results = await retriever_no_resolve.retrieve(query)
+    results = await retriever_no_resolve.aretrieve(query)
     
-    for i, (doc, score) in enumerate(results, 1):
-        print(f"\n  {i}. Type: {doc.__class__.__name__} [Score: {score:.3f}]")
-        print(f"     Text: {doc.text}")
+    for i, node in enumerate(results, 1):
+        print(f"\n  {i}. Type: {node.__class__.__name__} [Score: {node.score:.3f}]")
+        print(f"     Text: {node.text[:80]}...")
 
 
 async def direct_retriever_creation():
@@ -266,8 +261,7 @@ async def direct_retriever_creation():
         api_key="sk-124",
         base_url="http://wingman:8000/v1"
     )
-    dimension = await embeddings.aget_dimension()
-    
+
     documents_text = [
         "Vector embeddings encode semantic meaning.",
         "Cosine similarity measures vector similarity.",
@@ -283,29 +277,28 @@ async def direct_retriever_creation():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="vectors",
-        vector_size=dimension
+        embeddings=embeddings
     )
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     await index.add_documents(nodes)
     
     # Create retriever directly (not using as_retriever)
     retriever = VectorIndexRetriever(
         vector_index=index,
-        embeddings=embeddings,
         top_k=2,
         resolve_parents=True
     )
     
     print(f"Created retriever: {retriever}\n")
     
-    results = await retriever.retrieve("semantic similarity")
+    results = await retriever.aretrieve("semantic similarity")
     print(f"Query: 'semantic similarity'")
     print(f"Retrieved {len(results)} results:")
-    for i, (doc, score) in enumerate(results, 1):
-        print(f"  {i}. [Score: {score:.3f}] {doc.text}")
+    for i, node in enumerate(results, 1):
+        print(f"\n  {i}. Type: {node.__class__.__name__} [Score: {node.score:.3f}]")
+        print(f"     Text: {node.text[:80]}...")
 
 
 async def main():

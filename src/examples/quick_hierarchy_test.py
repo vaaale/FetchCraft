@@ -90,13 +90,12 @@ computational linguistics.
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="hierarchy_test",
-        vector_size=embeddings.dimension,
+        embeddings=embeddings,
         distance="Cosine"
     )
     
     vector_index = VectorIndex(
         vector_store=vector_store,
-        embeddings=embeddings,
         index_id="test"
     )
     
@@ -107,7 +106,7 @@ computational linguistics.
     print(f"3. Testing retrieval with resolve_parents=True...")
     
     retriever = vector_index.as_retriever(top_k=10)
-    results = await retriever.retrieve("What is machine learning?")
+    results = await retriever.aretrieve("What is machine learning?")
     
     print(f"   ✓ Retrieved {len(results)} results\n")
     

@@ -145,13 +145,12 @@ chatbots, and text summarization.
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="test_hierarchical",
-        vector_size=embeddings.dimension,
+        embeddings=embeddings,
         distance="Cosine"
     )
     
     vector_index = VectorIndex(
         vector_store=vector_store,
-        embeddings=embeddings,
         index_id="test_index"
     )
     
@@ -192,7 +191,7 @@ chatbots, and text summarization.
         print(f"Query {query_num}: '{query}'")
         print(f"{'─'*80}")
         
-        results = await retriever.retrieve(query)
+        results = await retriever.aretrieve(query)
         
         print(f"\nRetrieved {len(results)} results:")
         
@@ -231,7 +230,7 @@ chatbots, and text summarization.
     # Count how many results are parents vs children
     all_results = []
     for query in test_queries:
-        results = await retriever.retrieve(query)
+        results = await retriever.aretrieve(query)
         all_results.extend(results)
     
     parent_results = sum(1 for r in all_results if isinstance(r.node, Chunk) and not isinstance(r.node, SymNode))
@@ -315,14 +314,14 @@ technologies are revolutionizing industries from healthcare to finance.
     char_store = QdrantVectorStore(
         client=client,
         collection_name="test_character",
-        vector_size=embeddings.dimension,
+        embeddings=embeddings,
         distance="Cosine"
     )
-    char_index = VectorIndex(char_store, embeddings, index_id="char_test")
+    char_index = VectorIndex(char_store, index_id="char_test")
     await char_index.add_documents(char_chunks)
     
     char_retriever = char_index.as_retriever(top_k=2, resolve_parents=False)
-    char_results = await char_retriever.retrieve("machine learning")
+    char_results = await char_retriever.aretrieve("machine learning")
     
     print(f"\nRetrieved {len(char_results)} results:")
     for i, result in enumerate(char_results, 1):
@@ -354,14 +353,14 @@ technologies are revolutionizing industries from healthcare to finance.
     hier_store = QdrantVectorStore(
         client=client,
         collection_name="test_hierarchical_compare",
-        vector_size=embeddings.dimension,
+        embeddings=embeddings,
         distance="Cosine"
     )
-    hier_index = VectorIndex(hier_store, embeddings, index_id="hier_test")
+    hier_index = VectorIndex(hier_store, index_id="hier_test")
     await hier_index.add_documents(hier_nodes)
     
     hier_retriever = hier_index.as_retriever(top_k=2, resolve_parents=True)
-    hier_results = await hier_retriever.retrieve("machine learning")
+    hier_results = await hier_retriever.aretrieve("machine learning")
     
     print(f"\nRetrieved {len(hier_results)} results:")
     for i, result in enumerate(hier_results, 1):

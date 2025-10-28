@@ -1,10 +1,9 @@
 from typing import List, TypeVar, Optional, Annotated
 from uuid import uuid4
 
-from pydantic import Field, SkipValidation, PrivateAttr
+from pydantic import Field, SkipValidation
 from tqdm import tqdm
 
-from fetchcraft.embeddings.base import Embeddings
 from fetchcraft.index.base import BaseIndex
 from fetchcraft.node import Node
 from fetchcraft.vector_store.base import VectorStore
@@ -19,26 +18,23 @@ class VectorIndex(BaseIndex[D]):
     making it easier to perform common operations like adding documents,
     searching, and managing the index.
     
-    The index handles embedding generation automatically when adding documents.
+    The vector store handles embedding generation automatically when adding documents.
     Multiple indices can coexist in the same vector store by using unique index_id values.
     """
     
     vector_store: Annotated[VectorStore[D], SkipValidation()] = Field(description="Vector store instance")
-    _embeddings: Embeddings = PrivateAttr(default=None)
 
     def __init__(
         self, 
-        vector_store: VectorStore[D], 
-        embeddings: Embeddings,
+        vector_store: VectorStore[D],
         index_id: Optional[str] = None,
         **kwargs
     ):
         """
-        Initialize the vector index with a vector store and embeddings model.
+        Initialize the vector index with a vector store.
         
         Args:
-            vector_store: An instance of a VectorStore implementation
-            embeddings: An embeddings model for generating document embeddings
+            vector_store: An instance of a VectorStore implementation (with embeddings configured)
             index_id: Unique identifier for this index. If None, a UUID will be generated.
                      Multiple indices can share the same vector store with different index_ids.
         """
@@ -47,57 +43,43 @@ class VectorIndex(BaseIndex[D]):
             index_id=index_id or str(uuid4()),
             **kwargs
         )
-        self._embeddings=embeddings
 
     @classmethod
     def from_vector_store(
         cls,
         vector_store: VectorStore[D],
-        embeddings: Embeddings,
         index_id: Optional[str] = None,
     ) -> 'VectorIndex[D]':
         """
         Create a VectorIndex from an existing vector store.
         
         Args:
-            vector_store: An instance of a VectorStore implementation
-            embeddings: An embeddings model for generating document embeddings
+            vector_store: An instance of a VectorStore implementation (with embeddings configured)
             index_id: Unique identifier for this index
             
         Returns:
             A new VectorIndex instance
         """
-        return cls(vector_store=vector_store, embeddings=embeddings, index_id=index_id)
+        return cls(vector_store=vector_store, index_id=index_id)
     
     async def add_documents(self, documents: List[D], show_progress: bool = False) -> List[str]:
         """
         Add documents to the index.
         
-        Automatically generates embeddings for documents that don't have them.
+        The vector store automatically generates embeddings for documents that don't have them.
         
         Args:
             documents: List of document objects to add
-            auto_embed: If True, automatically generate embeddings for documents without them
+            show_progress: If True, show a progress bar
             
         Returns:
             List of document IDs that were added
         """
-
-        # Generate embeddings for documents that don't have them
-        ids = []
         if show_progress:
-            documents = tqdm(documents, desc="Adding documents")
-
-        for i, doc in enumerate(documents):
-            if doc.embedding is None:
-                embeddings = await self._embeddings.embed_documents([doc.text])
-                doc.embedding = embeddings[0]
-                added_ids = await self.vector_store.add_documents([doc], index_id=self.index_id)
-                ids.append(added_ids[0])
-            else:
-                added_ids = await self.vector_store.add_documents([doc], index_id=self.index_id)
-                ids.append(added_ids[0])
-        return ids
+            documents = list(tqdm(documents, desc="Adding documents"))
+        
+        # Delegate to vector store which handles embedding generation
+        return await self.vector_store.add_documents(documents, index_id=self.index_id)
 
 
     async def search(
@@ -142,7 +124,7 @@ class VectorIndex(BaseIndex[D]):
     ) -> List[tuple[D, float]]:
         """
         Search for similar documents using a text query.
-        Automatically generates the query embedding.
+        Automatically generates the query embedding using the vector store's embeddings.
         
         Args:
             query: The query text
@@ -153,8 +135,8 @@ class VectorIndex(BaseIndex[D]):
         Returns:
             List of tuples containing (document, similarity_score)
         """
-        # Generate query embedding
-        query_embedding = await self._embeddings.embed_query(query)
+        # Generate query embedding using vector store's embeddings
+        query_embedding = await self.vector_store.embed_query(query)
         
         # Perform search with the generated embedding
         return await self.search(
@@ -199,7 +181,7 @@ class VectorIndex(BaseIndex[D]):
         """
         Create a retriever from this index.
         
-        Uses the index's embeddings model for query encoding.
+        Uses the vector store's embeddings model for query encoding.
         
         Args:
             top_k: Number of results to return (default: 4)
@@ -213,7 +195,6 @@ class VectorIndex(BaseIndex[D]):
         
         return VectorIndexRetriever(
             vector_index=self,
-            embeddings=self._embeddings,
             top_k=top_k,
             resolve_parents=resolve_parents,
             **search_kwargs

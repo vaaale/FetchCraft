@@ -50,21 +50,20 @@ def qdrant_client():
 
 
 @pytest.fixture
-async def vector_store(qdrant_client):
+async def vector_store(qdrant_client, mock_embeddings):
     """Fixture for vector store."""
     return QdrantVectorStore(
         client=qdrant_client,
         collection_name="test_collection",
-        vector_size=384
+        embeddings=mock_embeddings
     )
 
 
 @pytest.fixture
-async def vector_index(vector_store, mock_embeddings):
+async def vector_index(vector_store):
     """Fixture for vector index."""
     return VectorIndex(
-        vector_store=vector_store,
-        embeddings=mock_embeddings
+        vector_store=vector_store
     )
 
 

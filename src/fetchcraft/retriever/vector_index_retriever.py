@@ -3,10 +3,9 @@ Vector index retriever implementation.
 """
 from typing import List, TypeVar, Optional, Any, Dict, Annotated
 
-from pydantic import Field, ConfigDict, SkipValidation, PrivateAttr
+from pydantic import Field, ConfigDict, SkipValidation
 
 from .base import Retriever
-from ..embeddings.base import Embeddings
 from ..node import Node, NodeWithScore
 
 D = TypeVar('D', bound=Node)
@@ -16,13 +15,11 @@ class VectorIndexRetriever(Retriever[D]):
     """
     Retriever that uses a VectorIndex for retrieval.
     
-    This retriever wraps a VectorIndex and an embedding model to provide
-    a simple text-to-documents retrieval interface. It handles embedding
-    generation internally.
+    This retriever wraps a VectorIndex to provide a simple text-to-documents
+    retrieval interface. It uses the vector store's embeddings for query encoding.
     """
     
     vector_index: Annotated[Any, SkipValidation()] = Field(description="VectorIndex instance")
-    _embeddings: Embeddings = PrivateAttr(default=None)
     search_kwargs: Dict[str, Any] = Field(default_factory=dict, description="Additional search parameters")
     
     model_config = ConfigDict(
@@ -33,7 +30,6 @@ class VectorIndexRetriever(Retriever[D]):
     def __init__(
         self,
         vector_index: Any,  # VectorIndex[D] - using Any to avoid circular import
-        embeddings: Embeddings,
         top_k: int = 4,
         resolve_parents: bool = True,
         **search_kwargs
@@ -42,8 +38,7 @@ class VectorIndexRetriever(Retriever[D]):
         Initialize the VectorIndexRetriever.
         
         Args:
-            vector_index: The VectorIndex instance to use for retrieval
-            embeddings: The embeddings model to use for query encoding
+            vector_index: The VectorIndex instance to use for retrieval (with vector store configured)
             top_k: Number of results to return (default: 4)
             resolve_parents: Whether to resolve parent nodes for SymNodes (default: True)
             **search_kwargs: Additional keyword arguments to pass to search
@@ -54,7 +49,6 @@ class VectorIndexRetriever(Retriever[D]):
             resolve_parents=resolve_parents,
             search_kwargs=search_kwargs
         )
-        self._embeddings = embeddings
 
     async def aretrieve(
         self, 
@@ -73,8 +67,8 @@ class VectorIndexRetriever(Retriever[D]):
         Returns:
             List of NodeWithScore objects containing documents and their relevance scores
         """
-        # Generate query embedding
-        query_embedding = await self._embeddings.embed_query(query)
+        # Generate query embedding using vector store's embeddings
+        query_embedding = await self.vector_index.vector_store.embed_query(query)
 
         # Merge kwargs with defaults
         search_params = {**self.search_kwargs, **kwargs}

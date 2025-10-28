@@ -6,6 +6,7 @@ from qdrant_client.http import models
 from pydantic import BaseModel, Field, ConfigDict
 
 from .base import VectorStore, D
+from ..embeddings import Embeddings
 from ..node import Node, Chunk, SymNode
 
 class QdrantConfig(BaseModel):
@@ -13,7 +14,6 @@ class QdrantConfig(BaseModel):
     url: Optional[str] = None
     api_key: Optional[str] = None
     collection_name: str = "documents"
-    vector_size: int = 384  # Default to a common embedding size
     distance: str = "Cosine"  # Can be "Cosine", "Euclid", or "Dot"
 
 class QdrantVectorStore(VectorStore[D]):
@@ -24,7 +24,6 @@ class QdrantVectorStore(VectorStore[D]):
     client: Any = Field(description="QdrantClient instance")
     collection_name: str = Field(description="Name of the collection")
     document_class: Optional[Type[D]] = Field(default=None, description="Document class type")
-    vector_size: int = Field(default=384, description="Size of embedding vectors")
     distance: str = Field(default="Cosine", description="Distance metric (Cosine, Euclid, or Dot)")
     _distance_metric: Any = None  # Computed field for models.Distance
     
@@ -37,8 +36,8 @@ class QdrantVectorStore(VectorStore[D]):
         self,
         client: QdrantClient,
         collection_name: str,
+        embeddings: Optional[Embeddings] = None,
         document_class: Optional[Type[D]] = None,
-        vector_size: int = 384,
         distance: str = "Cosine",
         **kwargs
     ):
@@ -48,18 +47,18 @@ class QdrantVectorStore(VectorStore[D]):
         Args:
             client: QdrantClient instance
             collection_name: Name of the collection to use
+            embeddings: Embeddings model for generating document embeddings
             document_class: The document model class (defaults to Node if not provided)
-            vector_size: Size of the embedding vectors
             distance: Distance metric to use ("Cosine", "Euclid", or "Dot")
         """
         super().__init__(
             client=client,
             collection_name=collection_name,
             document_class=document_class or Node,  # type: ignore
-            vector_size=vector_size,
             distance=distance,
             **kwargs
         )
+        self._embeddings = embeddings
         self._distance_metric = getattr(models.Distance, distance.upper())
         
         # Create collection if it doesn't exist
@@ -74,7 +73,7 @@ class QdrantVectorStore(VectorStore[D]):
             self.client.create_collection(
                 collection_name=self.collection_name,
                 vectors_config=models.VectorParams(
-                    size=self.vector_size,
+                    size=self._embeddings.dimension,
                     distance=self._distance_metric
                 )
             )
@@ -103,8 +102,10 @@ class QdrantVectorStore(VectorStore[D]):
         """
         Add documents to the Qdrant collection.
         
+        Automatically generates embeddings for documents that don't have them.
+        
         Args:
-            documents: List of document objects with embeddings
+            documents: List of document objects (with or without embeddings)
             index_id: Optional index identifier to isolate documents
             
         Returns:
@@ -112,6 +113,15 @@ class QdrantVectorStore(VectorStore[D]):
         """
         if not documents:
             return []
+        
+        # Generate embeddings for documents that don't have them
+        for doc in documents:
+            if not hasattr(doc, 'embedding') or not doc.embedding:  # type: ignore
+                if self._embeddings is None:
+                    raise ValueError("Document missing embedding and no embeddings model configured")
+                # Generate embedding
+                embedding = await self._embeddings.embed_documents([doc.text])  # type: ignore
+                doc.embedding = embedding[0]  # type: ignore
             
         # Use existing document IDs or generate new ones
         ids = []
@@ -308,12 +318,13 @@ class QdrantVectorStore(VectorStore[D]):
         return doc_class(**doc_data)
     
     @classmethod
-    def from_config(cls, config: Union[Dict[str, Any], QdrantConfig]) -> 'QdrantVectorStore':
+    def from_config(cls, config: Union[Dict[str, Any], QdrantConfig], embeddings: Optional[Any] = None) -> 'QdrantVectorStore':
         """
         Create a QdrantVectorStore instance from a configuration.
         
         Args:
             config: Either a QdrantConfig or a dictionary with configuration
+            embeddings: Optional embeddings model for generating document embeddings
             
         Returns:
             An instance of QdrantVectorStore
@@ -329,7 +340,7 @@ class QdrantVectorStore(VectorStore[D]):
         return cls(
             client=client,
             collection_name=config.collection_name,
+            embeddings=embeddings,
             document_class=Node,  # Defaults to Node
-            vector_size=config.vector_size,
             distance=config.distance
         )

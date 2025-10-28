@@ -28,7 +28,7 @@ async def main():
         api_key="sk-124",
         base_url="http://wingman:8000/v1"
     )
-    dimension = await embeddings.aget_dimension()
+    dimension = embeddings.dimension
     print(f"✓ Embeddings model ready (dimension: {dimension})\n")
     
     # 2. Create documents WITHOUT embeddings
@@ -48,13 +48,12 @@ async def main():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="simple_example",
-        vector_size=dimension
+        embeddings=embeddings
     )
     
-    # VectorIndex takes embeddings at initialization
+    # VectorIndex uses the vector store's embeddings
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     print("✓ Vector index created\n")
     
@@ -93,10 +92,10 @@ async def main():
     
     for query in queries:
         print(f"Query: '{query}'")
-        results = await retriever.retrieve(query)
+        results = await retriever.aretrieve(query)
         
-        for i, (doc, score) in enumerate(results, 1):
-            print(f"  {i}. {doc.text}")
+        for i, node in enumerate(results, 1):
+            print(f"  {i}. {node.text}")
         print()
     
     print("="*60)

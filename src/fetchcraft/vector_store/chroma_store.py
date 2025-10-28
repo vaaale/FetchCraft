@@ -47,6 +47,7 @@ class ChromaVectorStore(VectorStore[D]):
         self,
         client: Any,  # chromadb.Client
         collection_name: str,
+        embeddings: Optional[Any] = None,
         document_class: Optional[Type[D]] = None,
         distance: str = "cosine",
         **kwargs
@@ -57,6 +58,7 @@ class ChromaVectorStore(VectorStore[D]):
         Args:
             client: ChromaDB Client instance
             collection_name: Name of the collection to use
+            embeddings: Embeddings model for generating document embeddings
             document_class: The document model class (defaults to Node if not provided)
             distance: Distance metric to use ("cosine", "l2", or "ip")
         """
@@ -73,6 +75,7 @@ class ChromaVectorStore(VectorStore[D]):
             distance=distance,
             **kwargs
         )
+        self._embeddings = embeddings
         
         # Get or create collection
         self._collection = self._ensure_collection()
@@ -121,8 +124,10 @@ class ChromaVectorStore(VectorStore[D]):
         """
         Add documents to the Chroma collection.
         
+        Automatically generates embeddings for documents that don't have them.
+        
         Args:
-            documents: List of document objects with embeddings
+            documents: List of document objects (with or without embeddings)
             index_id: Optional index identifier to isolate documents
             
         Returns:
@@ -130,6 +135,15 @@ class ChromaVectorStore(VectorStore[D]):
         """
         if not documents:
             return []
+        
+        # Generate embeddings for documents that don't have them
+        for doc in documents:
+            if not hasattr(doc, 'embedding') or not doc.embedding:  # type: ignore
+                if self._embeddings is None:
+                    raise ValueError("Document missing embedding and no embeddings model configured")
+                # Generate embedding
+                embedding = await self._embeddings.embed_documents([doc.text])  # type: ignore
+                doc.embedding = embedding[0]  # type: ignore
         
         # Prepare data for Chroma
         ids = []
@@ -361,12 +375,13 @@ class ChromaVectorStore(VectorStore[D]):
         return doc_class(**doc_dict)
     
     @classmethod
-    def from_config(cls, config: Union[Dict[str, Any], ChromaConfig]) -> 'ChromaVectorStore':
+    def from_config(cls, config: Union[Dict[str, Any], ChromaConfig], embeddings: Optional[Any] = None) -> 'ChromaVectorStore':
         """
         Create a ChromaVectorStore instance from a configuration.
         
         Args:
             config: Either a ChromaConfig or a dictionary with configuration
+            embeddings: Optional embeddings model for generating document embeddings
             
         Returns:
             An instance of ChromaVectorStore
@@ -392,6 +407,7 @@ class ChromaVectorStore(VectorStore[D]):
         return cls(
             client=client,
             collection_name=config.collection_name,
+            embeddings=embeddings,
             document_class=Node,  # Defaults to Node
             distance=config.distance
         )

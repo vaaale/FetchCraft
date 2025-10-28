@@ -12,7 +12,7 @@ from fetchcraft import (
     QdrantVectorStore,
     VectorIndex,
     Node,
-    Chunk
+    Chunk, CharacterChunkingStrategy
 )
 
 
@@ -34,7 +34,7 @@ async def basic_embeddings_example():
     print(f"Initialized: {embeddings}")
     
     # Determine dimension asynchronously
-    dimension = await embeddings.aget_dimension()
+    dimension = embeddings.dimension
     print(f"Embedding dimension: {dimension}\n")
     
     # Embed a single query
@@ -79,7 +79,7 @@ async def rag_pipeline_example():
     )
     
     # Determine dimension asynchronously
-    dimension = await embeddings.aget_dimension()
+    dimension = embeddings.dimension
     print(f"✓ Initialized embeddings (dimension: {dimension})")
     
     # Step 2: Create sample documents
@@ -107,13 +107,12 @@ async def rag_pipeline_example():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="documents",
-        vector_size=dimension
+        embeddings=embeddings
     )
     
-    # VectorIndex now takes embeddings at initialization
+    # VectorIndex uses the vector store's embeddings
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     
     # Step 5: Add documents to index (embeddings auto-generated!)
@@ -160,10 +159,11 @@ async def document_parsing_with_embeddings():
     sample_file.write_text(sample_text)
     
     # Parse the document into chunks
-    chunks = TextFileDocumentParser.from_file(
-        file_path=sample_file,
-        chunk_size=100,
-        overlap=20
+    parser = TextFileDocumentParser(
+        chunker=CharacterChunkingStrategy(chunk_size=100,overlap=20)
+    )
+    chunks = parser.from_file(
+        file_path=sample_file
     )
     
     print(f"✓ Parsed document into {len(chunks)} chunks\n")
@@ -176,7 +176,7 @@ async def document_parsing_with_embeddings():
     )
     
     # Get dimension
-    dimension = await embeddings.aget_dimension()
+    dimension = embeddings.dimension
     print(f"✓ Initialized embeddings (dimension: {dimension})\n")
     
     # Create vector store with Chunk as document class
@@ -184,14 +184,13 @@ async def document_parsing_with_embeddings():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="chunks",
-        document_class=Chunk,  # Use Chunk to preserve chunk-specific properties
-        vector_size=dimension
+        embeddings=embeddings,
+        document_class=Chunk  # Use Chunk to preserve chunk-specific properties
     )
     
-    # VectorIndex with embeddings - will auto-generate embeddings for chunks!
+    # VectorIndex uses the vector store's embeddings - will auto-generate embeddings for chunks!
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     
     # Index the chunks (embeddings auto-generated!)
@@ -234,7 +233,7 @@ async def custom_endpoint_example():
         print(f"Model: {embeddings.model}")
         
         # Determine dimension asynchronously
-        dimension = await embeddings.aget_dimension()
+        dimension = embeddings.dimension
         print(f"Dimension: {dimension}")
         
     except Exception as e:

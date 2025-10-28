@@ -84,10 +84,10 @@ class AgentResponse(BaseModel):
     all_citations: List[Citation] = Field(description="List of all citations", default=[])
 
     def __str__(self):
-        return self.response
+        return self.response.content
 
     def __repr__(self):
-        return self.response
+        return self.response.content
 
 
 class BaseAgent(BaseModel, ABC):

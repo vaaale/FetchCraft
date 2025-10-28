@@ -1,8 +1,11 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+
+from pydantic import Field
+
 from .node import Chunk, Node
-from .chunking import ChunkingStrategy, HierarchicalChunkingStrategy
+from .chunking import ChunkingStrategy, HierarchicalChunkingStrategy, CharacterChunkingStrategy
 
 
 class DocumentParser(ABC):
@@ -46,7 +49,7 @@ class TextFileDocumentParser(DocumentParser):
     
     def __init__(
         self,
-        chunker: Optional[ChunkingStrategy] = None,
+        chunker: Optional[ChunkingStrategy] = Field(default=CharacterChunkingStrategy()),
         chunk_size: int = 4096,
         overlap: int = 200,
         separator: str = " ",

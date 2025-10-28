@@ -3,7 +3,7 @@ Example demonstrating the use of DocumentParser and TextFileDocumentParser.
 """
 
 from pathlib import Path
-from fetchcraft import TextFileDocumentParser, Chunk
+from fetchcraft import TextFileDocumentParser, Chunk, CharacterChunkingStrategy
 
 
 def create_sample_file(file_path: Path) -> None:
@@ -39,10 +39,13 @@ def example_basic_parsing():
     create_sample_file(sample_file)
     
     # Parse the file with default settings
-    chunks = TextFileDocumentParser.from_file(
+    chunks = TextFileDocumentParser(
+        chunker=CharacterChunkingStrategy(
+            chunk_size=200,
+            overlap=20,
+        )
+    ).from_file(
         file_path=sample_file,
-        chunk_size=200,
-        overlap=20
     )
     
     print(f"Total chunks created: {len(chunks)}\n")
@@ -68,13 +71,15 @@ def example_custom_chunking():
     sample_file = Path("temp_examples/sample_document.txt")
     
     # Parse with larger chunks and more overlap
-    chunks = TextFileDocumentParser.from_file(
+    chunks = TextFileDocumentParser(
+        chunker=CharacterChunkingStrategy(
+            chunk_size=300,
+            overlap=50,
+        )
+    ).from_file(
         file_path=sample_file,
-        chunk_size=300,
-        overlap=50,
-        separator=" "
     )
-    
+
     print(f"Total chunks created: {len(chunks)}\n")
     
     # Show the overlap between first two chunks
@@ -95,12 +100,15 @@ def example_with_context():
     print("="*60 + "\n")
     
     sample_file = Path("temp_examples/sample_document.txt")
-    chunks = TextFileDocumentParser.from_file(
+    chunks = TextFileDocumentParser(
+        chunker=CharacterChunkingStrategy(
+            chunk_size=200,
+            overlap=20
+        )
+    ).from_file(
         file_path=sample_file,
-        chunk_size=200,
-        overlap=20
     )
-    
+
     # Get a middle chunk with context
     if len(chunks) >= 3:
         middle_chunk = chunks[1]
@@ -133,10 +141,13 @@ def example_directory_parsing():
         file_path.write_text(f"This is document number {i}. " * 50)
     
     # Parse all files in the directory
-    results = TextFileDocumentParser.parse_directory(
+    results = TextFileDocumentParser(
+        chunker=CharacterChunkingStrategy(
+            chunk_size=200,
+            overlap=20
+        )
+    ).parse_directory(
         directory_path=temp_dir,
-        chunk_size=150,
-        overlap=15,
         pattern="*.txt"
     )
     
@@ -156,10 +167,13 @@ def example_metadata_inspection():
     print("="*60 + "\n")
     
     sample_file = Path("temp_examples/sample_document.txt")
-    chunks = TextFileDocumentParser.from_file(
+    chunks = TextFileDocumentParser(
+        chunker=CharacterChunkingStrategy(
+            chunk_size=200,
+            overlap=20
+        )
+    ).from_file(
         file_path=sample_file,
-        chunk_size=200,
-        overlap=20
     )
     
     if chunks:

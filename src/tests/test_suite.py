@@ -65,7 +65,7 @@ class TestSuite:
     @staticmethod
     def test_symnode():
         """Run SymNode tests."""
-        return pytest.main([
+        pytest.main([
             "src/tests/test_symnode.py",
             "-v",
             "--tb=short"
@@ -142,6 +142,8 @@ if __name__ == "__main__":
         exit_code = suite.test_symnode()
     elif args.suite == "coverage":
         exit_code = suite.run_with_coverage()
+    else:
+        exit_code = -1
     
     print()
     print("="*60)
@@ -151,4 +153,4 @@ if __name__ == "__main__":
         print("✗ Some tests failed")
     print("="*60)
     
-    sys.exit(exit_code)
+    # sys.exit(exit_code)

@@ -115,13 +115,12 @@ async def test_parent_resolution_in_index():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="test_symnode",
-        document_class=Node,
-        vector_size=384
+        embeddings=embeddings,
+        document_class=Node
     )
     
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     
     # Add parent first, then SymNodes
@@ -187,13 +186,12 @@ async def test_multiple_parents_resolution():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="test_multi_parent",
-        document_class=Node,
-        vector_size=384
+        embeddings=embeddings,
+        document_class=Node
     )
     
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     
     await index.add_documents([parent1, parent2])
@@ -230,13 +228,12 @@ async def test_deduplication_same_parent():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="test_dedup",
-        document_class=Node,
-        vector_size=384
+        embeddings=embeddings,
+        document_class=Node
     )
     
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     
     await index.add_documents([parent])

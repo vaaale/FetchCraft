@@ -85,7 +85,7 @@ async def basic_symnode_example():
         base_url="http://wingman:8000/v1"
     )
     
-    dimension = await embeddings.aget_dimension()
+    dimension = embeddings.dimension
     print(f"✓ Initialized embeddings (dimension: {dimension})\n")
     
     # Step 4: Setup vector store and index
@@ -93,14 +93,13 @@ async def basic_symnode_example():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="hierarchical_docs",
-        document_class=Node,  # Use base Node to support both Chunk and SymNode
-        vector_size=dimension
+        embeddings=embeddings,
+        document_class=Node  # Use base Node to support both Chunk and SymNode
     )
     
-    # VectorIndex with embeddings - will auto-generate embeddings!
+    # VectorIndex uses the vector store's embeddings - will auto-generate embeddings!
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     
     # Step 5: Add parent chunk first (must exist before SymNodes can reference it)
@@ -175,20 +174,18 @@ async def hierarchical_chunking_example():
         api_key="sk-124",
         base_url="http://wingman:8000/v1"
     )
-    dimension = await embeddings.aget_dimension()
-    
+
     # Setup vector store
     client = QdrantClient(":memory:")
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="hierarchical",
-        document_class=Node,
-        vector_size=dimension
+        embeddings=embeddings,
+        document_class=Node
     )
-    # VectorIndex with embeddings for auto-generation
+    # VectorIndex uses the vector store's embeddings for auto-generation
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     
     # Process each document

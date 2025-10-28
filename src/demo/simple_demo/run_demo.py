@@ -187,7 +187,7 @@ async def setup_rag_system():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name=COLLECTION_NAME,
-        vector_size=dimension,
+        embeddings=embeddings,
         distance="Cosine"
     )
     
@@ -195,7 +195,6 @@ async def setup_rag_system():
     # This ensures documents can be found across multiple runs
     vector_index = VectorIndex(
         vector_store=vector_store,
-        embeddings=embeddings,
         index_id=INDEX_ID
     )
     

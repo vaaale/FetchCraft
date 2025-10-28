@@ -80,12 +80,11 @@ async def basic_agent_example():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="knowledge_base",
-        vector_size=dimension
+        embeddings=embeddings
     )
     
     index = VectorIndex(
-        vector_store=vector_store,
-        embeddings=embeddings
+        vector_store=vector_store
     )
     
     await index.add_documents(nodes)
@@ -160,10 +159,10 @@ async def custom_system_prompt_example():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="landmarks",
-        vector_size=embeddings.dimension
+        embeddings=embeddings
     )
     
-    index = VectorIndex(vector_store=vector_store, embeddings=embeddings)
+    index = VectorIndex(vector_store=vector_store)
     await index.add_documents(nodes)
     
     retriever = index.as_retriever(top_k=2)
@@ -237,10 +236,10 @@ async def multi_step_reasoning_example():
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="tech_history",
-        vector_size=embeddings.dimension
+        embeddings=embeddings
     )
     
-    index = VectorIndex(vector_store=vector_store, embeddings=embeddings)
+    index = VectorIndex(vector_store=vector_store)
     await index.add_documents(nodes)
     
     retriever = index.as_retriever(top_k=2)
