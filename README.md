@@ -8,6 +8,7 @@ A flexible and extensible framework for building Retrieval-Augmented Generation 
 - 🗂️ **Multiple Vector Store Support**: Currently supports Qdrant (more backends can be added)
 - 🔢 **Multiple Indices**: Support multiple isolated indices in the same vector store
 - 🤖 **Embedding Models**: Built-in support for OpenAI embeddings with extensible architecture
+- 🔍 **Hybrid Search**: Combine dense (semantic) + sparse (keyword) vectors for better results
 - 📄 **Document Parsing**: Built-in text file parser with chunking strategies
 - 🔗 **Relationship Management**: Node-based system with parent/child and sequential relationships
 - 🧩 **Smart Chunking**: Configurable chunk size with overlap support

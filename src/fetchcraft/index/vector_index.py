@@ -87,6 +87,7 @@ class VectorIndex(BaseIndex[D]):
         query_embedding: List[float],
         k: int = 4,
         resolve_parents: bool = True,
+        query_text: Optional[str] = None,
         **kwargs
     ) -> List[tuple[D, float]]:
         """
@@ -97,6 +98,7 @@ class VectorIndex(BaseIndex[D]):
             query_embedding: The embedding vector to search with
             k: Number of results to return
             resolve_parents: If True, automatically resolve parent nodes for SymNode results
+            query_text: Original query text (required for hybrid search)
             **kwargs: Additional search parameters
             
         Returns:
@@ -106,6 +108,7 @@ class VectorIndex(BaseIndex[D]):
             query_embedding=query_embedding,
             k=k,
             index_id=self.index_id,
+            query_text=query_text,
             **kwargs
         )
         
@@ -138,11 +141,12 @@ class VectorIndex(BaseIndex[D]):
         # Generate query embedding using vector store's embeddings
         query_embedding = await self.vector_store.embed_query(query)
         
-        # Perform search with the generated embedding
+        # Perform search with the generated embedding, passing query text for hybrid search
         return await self.search(
             query_embedding=query_embedding,
             k=k,
             resolve_parents=resolve_parents,
+            query_text=query,  # Pass query text for hybrid search support
             **kwargs
         )
 

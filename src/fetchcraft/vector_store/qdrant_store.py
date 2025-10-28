@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional, Type, TypeVar, Generic, Union
+from typing import List, Dict, Any, Optional, Type, TypeVar, Generic, Union, Literal
 from uuid import uuid4
 
 from qdrant_client import QdrantClient
@@ -9,12 +9,21 @@ from .base import VectorStore, D
 from ..embeddings import Embeddings
 from ..node import Node, Chunk, SymNode
 
+try:
+    from fastembed import SparseTextEmbedding
+    FASTEMBED_AVAILABLE = True
+except ImportError:
+    FASTEMBED_AVAILABLE = False
+    SparseTextEmbedding = None
+
 class QdrantConfig(BaseModel):
     """Configuration for Qdrant vector store."""
     url: Optional[str] = None
     api_key: Optional[str] = None
     collection_name: str = "documents"
     distance: str = "Cosine"  # Can be "Cosine", "Euclid", or "Dot"
+    enable_hybrid: bool = False  # Enable hybrid search with sparse + dense vectors
+    fusion_method: Literal["rrf", "dbsf"] = "rrf"  # Fusion method for hybrid search
 
 class QdrantVectorStore(VectorStore[D]):
     """
@@ -25,7 +34,10 @@ class QdrantVectorStore(VectorStore[D]):
     collection_name: str = Field(description="Name of the collection")
     document_class: Optional[Type[D]] = Field(default=None, description="Document class type")
     distance: str = Field(default="Cosine", description="Distance metric (Cosine, Euclid, or Dot)")
+    enable_hybrid: bool = Field(default=False, description="Enable hybrid search with sparse + dense vectors")
+    fusion_method: Literal["rrf", "dbsf"] = Field(default="rrf", description="Fusion method for hybrid search")
     _distance_metric: Any = None  # Computed field for models.Distance
+    _sparse_embedder: Any = None  # Fastembed sparse embedder
     
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
@@ -39,6 +51,9 @@ class QdrantVectorStore(VectorStore[D]):
         embeddings: Optional[Embeddings] = None,
         document_class: Optional[Type[D]] = None,
         distance: str = "Cosine",
+        enable_hybrid: bool = False,
+        fusion_method: Literal["rrf", "dbsf"] = "rrf",
+        sparse_model: str = "Qdrant/bm25",
         **kwargs
     ):
         """
@@ -50,16 +65,30 @@ class QdrantVectorStore(VectorStore[D]):
             embeddings: Embeddings model for generating document embeddings
             document_class: The document model class (defaults to Node if not provided)
             distance: Distance metric to use ("Cosine", "Euclid", or "Dot")
+            enable_hybrid: Enable hybrid search with sparse + dense vectors
+            fusion_method: Fusion method for hybrid search ("rrf" or "dbsf")
+            sparse_model: Model name for sparse embeddings (default: "Qdrant/bm25")
         """
         super().__init__(
             client=client,
             collection_name=collection_name,
             document_class=document_class or Node,  # type: ignore
             distance=distance,
+            enable_hybrid=enable_hybrid,
+            fusion_method=fusion_method,
             **kwargs
         )
         self._embeddings = embeddings
         self._distance_metric = getattr(models.Distance, distance.upper())
+        
+        # Initialize sparse embedder if hybrid search is enabled
+        if enable_hybrid:
+            if not FASTEMBED_AVAILABLE:
+                raise ImportError(
+                    "fastembed is required for hybrid search. "
+                    "Install it with: pip install fastembed"
+                )
+            self._sparse_embedder = SparseTextEmbedding(model_name=sparse_model)
         
         # Create collection if it doesn't exist
         self._ensure_collection()
@@ -70,13 +99,31 @@ class QdrantVectorStore(VectorStore[D]):
         collection_names = [collection.name for collection in collections]
         
         if self.collection_name not in collection_names:
-            self.client.create_collection(
-                collection_name=self.collection_name,
-                vectors_config=models.VectorParams(
-                    size=self._embeddings.dimension,
-                    distance=self._distance_metric
+            if self.enable_hybrid:
+                # Create collection with named dense vectors and sparse vectors for hybrid search
+                self.client.create_collection(
+                    collection_name=self.collection_name,
+                    vectors_config={
+                        "dense": models.VectorParams(
+                            size=self._embeddings.dimension,
+                            distance=self._distance_metric
+                        )
+                    },
+                    sparse_vectors_config={
+                        "sparse": models.SparseVectorParams(
+                            modifier=models.Modifier.IDF  # Use IDF modifier for BM25-style scoring
+                        )
+                    }
                 )
-            )
+            else:
+                # Create collection with single vector for standard search
+                self.client.create_collection(
+                    collection_name=self.collection_name,
+                    vectors_config=models.VectorParams(
+                        size=self._embeddings.dimension,
+                        distance=self._distance_metric
+                    )
+                )
     
     def _get_doc_class(self, class_name: Optional[str]) -> Type[D]:
         """
@@ -122,6 +169,13 @@ class QdrantVectorStore(VectorStore[D]):
                 # Generate embedding
                 embedding = await self._embeddings.embed_documents([doc.text])  # type: ignore
                 doc.embedding = embedding[0]  # type: ignore
+        
+        # Generate sparse embeddings if hybrid mode is enabled
+        sparse_embeddings = None
+        if self.enable_hybrid:
+            texts = [doc.text for doc in documents]  # type: ignore
+            # Fastembed returns a generator, convert to list
+            sparse_embeddings = list(self._sparse_embedder.embed(texts))
             
         # Use existing document IDs or generate new ones
         ids = []
@@ -133,13 +187,13 @@ class QdrantVectorStore(VectorStore[D]):
         
         # Convert documents to Qdrant points
         points = []
-        for doc_id, doc in zip(ids, documents):
+        for idx, (doc_id, doc) in enumerate(zip(ids, documents)):
             # Extract vector and payload
             if not hasattr(doc, 'embedding') or not doc.embedding:  # type: ignore
                 raise ValueError("Document must have an 'embedding' field")
                 
             payload = doc.model_dump()
-            vector = payload.pop('embedding')
+            dense_vector = payload.pop('embedding')
             
             # Store the document ID in the payload as well
             payload['id'] = doc_id
@@ -150,6 +204,20 @@ class QdrantVectorStore(VectorStore[D]):
             # Add index_id to payload if provided
             if index_id is not None:
                 payload['_index_id'] = index_id
+            
+            # Prepare vectors based on hybrid mode
+            if self.enable_hybrid:
+                # Convert fastembed sparse embedding to Qdrant format
+                sparse_emb = sparse_embeddings[idx]
+                vector = {
+                    "dense": dense_vector,
+                    "sparse": models.SparseVector(
+                        indices=sparse_emb.indices.tolist(),
+                        values=sparse_emb.values.tolist()
+                    )
+                }
+            else:
+                vector = dense_vector
             
             points.append(
                 models.PointStruct(
@@ -172,6 +240,7 @@ class QdrantVectorStore(VectorStore[D]):
         query_embedding: List[float],
         k: int = 4,
         index_id: Optional[str] = None,
+        query_text: Optional[str] = None,
         **kwargs
     ) -> List[tuple[D, float]]:
         """
@@ -181,6 +250,7 @@ class QdrantVectorStore(VectorStore[D]):
             query_embedding: The embedding vector to search with
             k: Number of results to return
             index_id: Optional index identifier to filter search results
+            query_text: Original query text (required for hybrid search)
             **kwargs: Additional search parameters
             
         Returns:
@@ -206,14 +276,50 @@ class QdrantVectorStore(VectorStore[D]):
             else:
                 query_filter = index_filter
         
-        search_result = self.client.query_points(
-            collection_name=self.collection_name,
-            query=query_embedding,
-            limit=k,
-            query_filter=query_filter,
-            with_vectors=True,  # Include vectors in results
-            **kwargs
-        )
+        # Perform hybrid search if enabled
+        if self.enable_hybrid:
+            if query_text is None:
+                raise ValueError("query_text is required for hybrid search")
+            
+            # Generate sparse embedding for query
+            sparse_query = list(self._sparse_embedder.embed([query_text]))[0]
+            
+            # Use prefetch + fusion query for hybrid search
+            search_result = self.client.query_points(
+                collection_name=self.collection_name,
+                prefetch=[
+                    models.Prefetch(
+                        query=models.SparseVector(
+                            indices=sparse_query.indices.tolist(),
+                            values=sparse_query.values.tolist()
+                        ),
+                        using="sparse",
+                        limit=k * 2,  # Fetch more candidates for fusion
+                    ),
+                    models.Prefetch(
+                        query=query_embedding,
+                        using="dense",
+                        limit=k * 2,  # Fetch more candidates for fusion
+                    ),
+                ],
+                query=models.FusionQuery(
+                    fusion=models.Fusion.RRF if self.fusion_method == "rrf" else models.Fusion.DBSF
+                ),
+                limit=k,
+                query_filter=query_filter,
+                with_vectors=True,
+                **kwargs
+            )
+        else:
+            # Standard dense vector search
+            search_result = self.client.query_points(
+                collection_name=self.collection_name,
+                query=query_embedding,
+                limit=k,
+                query_filter=query_filter,
+                with_vectors=True,  # Include vectors in results
+                **kwargs
+            )
         
         results = []
         for hit in search_result.points:
@@ -228,7 +334,11 @@ class QdrantVectorStore(VectorStore[D]):
             # Add embedding back if the document class expects it
             if 'embedding' not in doc_dict and hasattr(self.document_class, 'model_fields'):
                 if 'embedding' in self.document_class.model_fields:
-                    doc_dict['embedding'] = hit.vector
+                    # For hybrid mode, store the dense vector
+                    if self.enable_hybrid and isinstance(hit.vector, dict):
+                        doc_dict['embedding'] = hit.vector.get('dense')
+                    else:
+                        doc_dict['embedding'] = hit.vector
             
             # Reconstruct using the correct class type
             doc_class = self._get_doc_class(doc_class_name)
@@ -311,7 +421,11 @@ class QdrantVectorStore(VectorStore[D]):
         # Add embedding back if the document class expects it
         if 'embedding' not in doc_data and hasattr(self.document_class, 'model_fields'):
             if 'embedding' in self.document_class.model_fields:
-                doc_data['embedding'] = result[0].vector
+                # For hybrid mode, store the dense vector
+                if self.enable_hybrid and isinstance(result[0].vector, dict):
+                    doc_data['embedding'] = result[0].vector.get('dense')
+                else:
+                    doc_data['embedding'] = result[0].vector
         
         # Reconstruct using the correct class type
         doc_class = self._get_doc_class(doc_class_name)
@@ -342,5 +456,7 @@ class QdrantVectorStore(VectorStore[D]):
             collection_name=config.collection_name,
             embeddings=embeddings,
             document_class=Node,  # Defaults to Node
-            distance=config.distance
+            distance=config.distance,
+            enable_hybrid=config.enable_hybrid,
+            fusion_method=config.fusion_method
         )

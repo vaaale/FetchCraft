@@ -71,6 +71,7 @@ class VectorStore(BaseModel, ABC, Generic[D]):
         query_embedding: List[float],
         k: int = 4,
         index_id: Optional[str] = None,
+        query_text: Optional[str] = None,
         **kwargs
     ) -> List[tuple[D, float]]:
         """
@@ -80,6 +81,7 @@ class VectorStore(BaseModel, ABC, Generic[D]):
             query_embedding: The embedding vector to search with
             k: Number of results to return
             index_id: Optional index identifier to filter search results
+            query_text: Original query text (required for hybrid search)
             **kwargs: Additional search parameters
             
         Returns:
