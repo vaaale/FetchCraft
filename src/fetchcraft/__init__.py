@@ -17,7 +17,7 @@ from .parser import DocumentParser, TextFileDocumentParser
 from .chunking import ChunkingStrategy, CharacterChunkingStrategy, HierarchicalChunkingStrategy
 from .embeddings import Embeddings, OpenAIEmbeddings
 from .retriever import Retriever, VectorIndexRetriever
-from .agents import BaseAgent, ReActAgent, RetrieverTool
+from .agents import BaseAgent, ReActAgent, RetrieverTool, FileSearchTool, FileSearchResult
 
 __all__ = [
     'VectorIndex',
@@ -46,4 +46,6 @@ __all__ = [
     'BaseAgent',
     'ReActAgent',
     'RetrieverTool',
+    'FileSearchTool',
+    'FileSearchResult',
 ]

@@ -3417,6 +3417,7 @@ source = { editable = "." }
 dependencies = [
     { name = "chromadb" },
     { name = "fastembed" },
+    { name = "fsspec" },
     { name = "openai" },
     { name = "pydantic" },
     { name = "pydantic-ai" },
@@ -3443,6 +3444,7 @@ requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
     { name = "chromadb", specifier = ">=1.2.2" },
     { name = "fastembed", specifier = ">=0.7.3" },
+    { name = "fsspec", specifier = ">=2025.9.0" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.12.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "openai", specifier = ">=1.0.0" },

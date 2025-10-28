@@ -17,6 +17,7 @@ dependencies = [
     "chromadb>=1.2.2",
     "fastembed>=0.7.3",
     "pymongo>=4.15.3",
+    "fsspec>=2025.9.0",
 ]
 
 [project.optional-dependencies]
