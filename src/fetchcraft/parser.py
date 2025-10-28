@@ -1,11 +1,14 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
 
 from pydantic import Field
 
 from .node import Chunk, Node, DocumentNode
 from .chunking import ChunkingStrategy, HierarchicalChunkingStrategy, CharacterChunkingStrategy
+
+if TYPE_CHECKING:
+    from .document_store.base import DocumentStore
 
 
 class DocumentParser(ABC):
@@ -26,9 +29,8 @@ class DocumentParser(ABC):
         """
         pass
     
-    @classmethod
     @abstractmethod
-    def from_file(cls, file_path: Path, **kwargs) -> List[Chunk]:
+    async def from_file(self, file_path: Path, **kwargs) -> List[Chunk]:
         """
         Parse a document from a file path.
         
@@ -53,7 +55,8 @@ class TextFileDocumentParser(DocumentParser):
         chunk_size: int = 4096,
         overlap: int = 200,
         separator: str = " ",
-        keep_separator: bool = True
+        keep_separator: bool = True,
+        doc_store: Optional['DocumentStore'] = None
     ):
         """
         Initialize the text file parser.
@@ -64,6 +67,7 @@ class TextFileDocumentParser(DocumentParser):
             overlap: Number of characters to overlap between chunks (used if chunker not provided)
             separator: Character/string to use as split boundaries (used if chunker not provided)
             keep_separator: Whether to keep the separator in chunks (used if chunker not provided)
+            doc_store: Optional DocumentStore to automatically store DocumentNodes during parsing
         """
         # Use provided chunker or create default HierarchicalChunkingStrategy
         if chunker is None:
@@ -81,6 +85,7 @@ class TextFileDocumentParser(DocumentParser):
         self.overlap = overlap
         self.separator = separator
         self.keep_separator = keep_separator
+        self.doc_store = doc_store
     
     def parse(
         self,
@@ -111,19 +116,23 @@ class TextFileDocumentParser(DocumentParser):
             parent_node=parent_node
         )
     
-    def from_file(
+    async def from_file(
         self,
         file_path: Path,
         encoding: str | None = None,
-        include_file_metadata: bool = True
+        include_file_metadata: bool = True,
+        doc_store: Optional['DocumentStore'] = None
     ) -> List[Chunk]:
         """
         Parse a text file into chunks using the configured chunking strategy.
+        
+        Automatically stores the DocumentNode in the configured DocumentStore if provided.
         
         Args:
             file_path: Path to the text file
             encoding: File encoding (auto-detect if None)
             include_file_metadata: Whether to include file metadata in chunks
+            doc_store: Optional DocumentStore to store the DocumentNode (overrides instance doc_store)
             
         Returns:
             List of Chunk objects (and SymNodes if hierarchical strategy)
@@ -168,24 +177,33 @@ class TextFileDocumentParser(DocumentParser):
             parent_node=parent_node
         )
         
+        # Store DocumentNode in doc_store if provided
+        store = doc_store or self.doc_store
+        if store is not None:
+            await store.add_document(parent_node)
+        
         # Return DocumentNode followed by all chunks
         return [parent_node] + chunks
     
-    def parse_directory(
+    async def parse_directory(
         self,
         directory_path: Path,
         pattern: str = "*.txt",
         encoding: str | None = None,
-        recursive: bool = False
+        recursive: bool = False,
+        doc_store: Optional['DocumentStore'] = None
     ) -> Dict[str, List[Chunk]]:
         """
         Parse all files in a directory using the configured chunking strategy.
+        
+        Automatically stores DocumentNodes in the configured DocumentStore if provided.
         
         Args:
             directory_path: Path to the directory
             pattern: Glob pattern for file matching (default: "*.txt")
             encoding: File encoding (auto-detect if None)
             recursive: Whether to search subdirectories recursively
+            doc_store: Optional DocumentStore to store DocumentNodes (overrides instance doc_store)
             
         Returns:
             Dictionary mapping file paths to their chunk lists
@@ -203,9 +221,10 @@ class TextFileDocumentParser(DocumentParser):
         
         for file_path in files:
             if file_path.is_file():
-                chunks = self.from_file(
+                chunks = await self.from_file(
                     file_path=file_path,
-                    encoding=encoding
+                    encoding=encoding,
+                    doc_store=doc_store
                 )
                 results[str(file_path)] = chunks
         

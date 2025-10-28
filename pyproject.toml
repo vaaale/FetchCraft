@@ -16,6 +16,7 @@ dependencies = [
     "pytest-asyncio>=1.2.0",
     "chromadb>=1.2.2",
     "fastembed>=0.7.3",
+    "pymongo>=4.15.3",
 ]
 
 [project.optional-dependencies]
