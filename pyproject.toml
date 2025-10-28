@@ -19,6 +19,7 @@ dependencies = [
     "pymongo>=4.15.3",
     "fsspec>=2025.9.0",
     "gradio>=5.49.1",
+    "motor>=3.7.1",
 ]
 
 [project.optional-dependencies]

@@ -18,6 +18,7 @@ from .chunking import ChunkingStrategy, CharacterChunkingStrategy, HierarchicalC
 from .embeddings import Embeddings, OpenAIEmbeddings
 from .retriever import Retriever, VectorIndexRetriever
 from .agents import BaseAgent, ReActAgent, RetrieverTool, FileSearchTool, FileSearchResult
+from .evaluation import DatasetGenerator, EvaluationDataset, RetrieverEvaluator, EvaluationMetrics
 
 __all__ = [
     'VectorIndex',
@@ -48,4 +49,8 @@ __all__ = [
     'RetrieverTool',
     'FileSearchTool',
     'FileSearchResult',
+    'DatasetGenerator',
+    'EvaluationDataset',
+    'RetrieverEvaluator',
+    'EvaluationMetrics',
 ]
