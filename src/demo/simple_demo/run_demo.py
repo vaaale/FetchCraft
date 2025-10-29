@@ -122,7 +122,7 @@ async def load_and_index_documents(
     # Create parser with the chunking strategy
     parser = TextFileDocumentParser(chunker=chunker)
     
-    results = parser.parse_directory(
+    results = await parser.parse_directory(
         directory_path=documents_path,
         pattern="*",
         recursive=True

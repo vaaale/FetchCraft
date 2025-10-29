@@ -103,7 +103,7 @@ class CharacterChunkingStrategy(ChunkingStrategy):
             
             # Set doc_id from parent_node (but don't set parent relationship for first-level chunks)
             if parent_node:
-                chunk.doc_id = parent_node.doc_id if hasattr(parent_node, 'doc_id') else parent_node.id
+                chunk.doc_id = parent_node.doc_id
             
             # Link to previous chunk (sibling relationship)
             if chunk_nodes:
@@ -218,7 +218,7 @@ class HierarchicalChunkingStrategy(ChunkingStrategy):
         """
         self.chunk_size = chunk_size
         self.overlap = overlap
-        self.child_chunks = child_chunks or [chunk_size // 8]  # Default: 512 for 4096
+        self.child_chunks = child_chunks or [1024]  # Default: 512 for 4096
         self.child_overlap = child_overlap
         self.separators = separators or self.SEPARATORS
         self.keep_separator = keep_separator
@@ -249,7 +249,7 @@ class HierarchicalChunkingStrategy(ChunkingStrategy):
         metadata = metadata or {}
         
         # Step 1: Create parent chunks using recursive splitting
-        parent_chunks = self._split_into_parent_chunks(
+        base_nodes = self._get_base_nodes(
             text=text,
             metadata={**metadata, "chunk_strategy": "hierarchical", "chunk_type": "parent"},
             parent_node=parent_node
@@ -258,14 +258,14 @@ class HierarchicalChunkingStrategy(ChunkingStrategy):
         # Step 2: Create child SymNodes for each parent chunk at multiple sizes
         all_nodes = []
         
-        for parent_chunk in parent_chunks:
+        for base_node in base_nodes:
             # Add the parent chunk to the result
-            all_nodes.append(parent_chunk)
+            all_nodes.append(base_node)
             
             # Create child chunks as SymNodes for each specified size
             for child_size in self.child_chunks:
                 child_nodes = self._create_child_nodes(
-                    parent_chunk=parent_chunk,
+                    parent_chunk=base_node,
                     child_size=child_size,
                     metadata=metadata
                 )
@@ -273,7 +273,7 @@ class HierarchicalChunkingStrategy(ChunkingStrategy):
         
         return all_nodes
     
-    def _split_into_parent_chunks(
+    def _get_base_nodes(
         self,
         text: str,
         metadata: dict,

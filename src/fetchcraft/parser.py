@@ -54,7 +54,7 @@ class TextFileDocumentParser(DocumentParser):
         chunker: Optional[ChunkingStrategy] = Field(default=CharacterChunkingStrategy()),
         chunk_size: int = 4096,
         overlap: int = 200,
-        separator: str = " ",
+        separators: str | List[str] = None,
         keep_separator: bool = True,
         doc_store: Optional['DocumentStore'] = None
     ):
@@ -69,12 +69,13 @@ class TextFileDocumentParser(DocumentParser):
             keep_separator: Whether to keep the separator in chunks (used if chunker not provided)
             doc_store: Optional DocumentStore to automatically store DocumentNodes during parsing
         """
+
         # Use provided chunker or create default HierarchicalChunkingStrategy
         if chunker is None:
             self.chunker = HierarchicalChunkingStrategy(
                 chunk_size=chunk_size,
                 overlap=overlap,
-                separator=separator,
+                separators=separators,
                 keep_separator=keep_separator
             )
         else:
@@ -83,7 +84,10 @@ class TextFileDocumentParser(DocumentParser):
         # Keep these for backward compatibility with parse_directory
         self.chunk_size = chunk_size
         self.overlap = overlap
-        self.separator = separator
+        if not separators:
+            self.separators = ["\n\n", "\n", ". ", "? ", "! ", " "]
+        else:
+            self.separators = separators
         self.keep_separator = keep_separator
         self.doc_store = doc_store
     
