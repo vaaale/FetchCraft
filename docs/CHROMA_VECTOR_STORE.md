@@ -72,7 +72,7 @@ vector_index = VectorIndex(
 )
 
 # Add documents
-await vector_index.add_documents(chunks)
+await vector_index.add_nodes(chunks)
 
 # Search
 results = await vector_index.search_by_text("your query", k=5)
@@ -220,7 +220,7 @@ parser = TextFileDocumentParser(chunker=chunker)
 nodes = parser.parse_directory("docs/", pattern="*.md", recursive=True)
 
 # Index all nodes (parents + children)
-await vector_index.add_documents(nodes)
+await vector_index.add_nodes(nodes)
 
 # Search with parent resolution
 retriever = vector_index.as_retriever(top_k=5, resolve_parents=True)
@@ -241,7 +241,7 @@ chunks = parser.parse(text, metadata={
     "category": "installation"
 })
 
-await vector_index.add_documents(chunks)
+await vector_index.insert_nodes(chunks)
 
 # Search with metadata filter
 results = await vector_store.similarity_search(
@@ -410,11 +410,11 @@ Use `index_id` to isolate different indices in the same collection:
 ```python
 # Index 1
 index1 = VectorIndex(vector_store, embeddings, index_id="user_docs")
-await index1.add_documents(user_chunks)
+await index1.insert_nodes(user_chunks)
 
 # Index 2
 index2 = VectorIndex(vector_store, embeddings, index_id="admin_docs")
-await index2.add_documents(admin_chunks)
+await index2.insert_nodes(admin_chunks)
 
 # Searches are isolated by index_id
 results1 = await index1.search_by_text("query")  # Only searches user_docs
@@ -425,10 +425,10 @@ results2 = await index2.search_by_text("query")  # Only searches admin_docs
 
 ```python
 # Add documents
-doc_ids = await vector_store.add_documents(chunks, index_id="my_index")
+doc_ids = await vector_store.insert_nodes(chunks, index_id="my_index")
 
 # Retrieve a single document
-doc = await vector_store.get_document("doc_id", index_id="my_index")
+doc = await vector_store.get_node("doc_id", index_id="my_index")
 
 # Delete documents
 await vector_store.delete(["doc_id1", "doc_id2"], index_id="my_index")

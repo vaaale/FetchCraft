@@ -59,7 +59,7 @@ async def main():
     
     # 4. Add documents - embeddings generated automatically!
     print("Adding documents to index...")
-    await index.add_documents(nodes)
+    await index.add_nodes(nodes)
     print("✓ Documents indexed (embeddings auto-generated!)\n")
     
     # 5. Search with text query

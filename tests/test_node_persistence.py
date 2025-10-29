@@ -71,7 +71,7 @@ async def test_node_persistence():
     node1.next_id = node2.id
     
     # Add nodes to index
-    node_ids = await index.add_documents([parent_node, node1, node2])
+    node_ids = await index.add_nodes([parent_node, node1, node2])
     
     print("✓ Added 3 nodes to the index")
     print(f"  Parent ID: {parent_node.id}")
@@ -129,7 +129,7 @@ async def test_node_persistence():
     )
     chunk.embedding = [0.4] * 384
     
-    chunk_ids = await index.add_documents([chunk])
+    chunk_ids = await index.add_nodes([chunk])
     print("✓ Added Chunk to the index")
     
     # Retrieve chunk and verify all properties

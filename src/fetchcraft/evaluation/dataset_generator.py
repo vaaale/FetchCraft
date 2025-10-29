@@ -214,7 +214,7 @@ class DatasetGenerator(BaseModel):
         # Fetch all child nodes from vector store
         nodes = []
         for child_id in document.children_ids:
-            node = await vector_store.get_document(child_id, index_id=index_id)
+            node = await vector_store.get_node(child_id, index_id=index_id)
             if node:
                 nodes.append(node)
 
@@ -335,7 +335,7 @@ class DatasetGenerator(BaseModel):
 
         for node_id in node_iterator:
             # Get node from vector store
-            node = await vector_store.get_document(node_id, index_id=index_id)
+            node = await vector_store.get_node(node_id, index_id=index_id)
             if not node:
                 logger.warning(f"Node {node_id} not found")
                 continue

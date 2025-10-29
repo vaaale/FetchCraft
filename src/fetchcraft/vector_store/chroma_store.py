@@ -122,7 +122,7 @@ class ChromaVectorStore(VectorStore[D]):
             # Fall back to the default document class
             return self.document_class
     
-    async def add_documents(self, documents: List[D], index_id: Optional[str] = None, show_progress: bool = False) -> List[str]:
+    async def insert_nodes(self, documents: List[D], index_id: Optional[str] = None, show_progress: bool = False) -> List[str]:
         """
         Add documents to the Chroma collection.
         
@@ -155,7 +155,7 @@ class ChromaVectorStore(VectorStore[D]):
             
             # Check if document already exists (hash is computed automatically via property)
             try:
-                existing_doc = await self.get_document(doc_id, index_id=index_id)
+                existing_doc = await self.get_node(doc_id, index_id=index_id)
                 if existing_doc and hasattr(existing_doc, 'hash') and hasattr(doc, 'hash'):  # type: ignore
                     if existing_doc.hash == doc.hash:  # type: ignore
                         # Document hasn't changed, skip
@@ -333,7 +333,7 @@ class ChromaVectorStore(VectorStore[D]):
         
         return True
     
-    async def get_document(self, document_id: str, index_id: Optional[str] = None) -> Optional[D]:
+    async def get_node(self, document_id: str, index_id: Optional[str] = None) -> Optional[D]:
         """
         Retrieve a single document by its ID.
         

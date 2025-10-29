@@ -148,7 +148,7 @@ class QdrantVectorStore(VectorStore[Node]):
             # Fall back to the default document class
             return self.document_class
     
-    async def add_documents(self, documents: List[Node], index_id: Optional[str] = None, show_progress: bool = False) -> List[str]:
+    async def insert_nodes(self, nodes: List[Node], index_id: Optional[str] = None, show_progress: bool = False) -> List[str]:
         """
         Add documents to the Qdrant collection.
         
@@ -156,26 +156,26 @@ class QdrantVectorStore(VectorStore[Node]):
         Checks for existing documents and only updates if content has changed (based on hash).
         
         Args:
-            documents: List of document objects (with or without embeddings)
+            nodes: List of node objects (with or without embeddings)
             index_id: Optional index identifier to isolate documents
             show_progress: Whether to show progress bar
             
         Returns:
             List of document IDs that were added or updated
         """
-        if not documents:
+        if not nodes:
             return []
         
         # Single loop: check hash, generate embeddings if needed, upsert if changed
         ids = []
         if show_progress:
-            items = tqdm(documents, desc="Processing documents")
+            items = tqdm(nodes, desc="Processing documents")
         else:
-            items = documents
+            items = nodes
 
         for doc in items:
             # Check if document already exists (hash is computed automatically via property)
-            existing_doc = await self.get_document(doc.id, index_id=index_id)
+            existing_doc = await self.get_node(doc.id, index_id=index_id)
             if existing_doc and existing_doc.hash == doc.hash:  # type: ignore
                 # Document hasn't changed, skip
                 ids.append(doc.id)
@@ -387,12 +387,12 @@ class QdrantVectorStore(VectorStore[Node]):
             )
         return True
     
-    async def get_document(self, document_id: str, index_id: Optional[str] = None) -> Optional[Node]:
+    async def get_node(self, node_id: str, index_id: Optional[str] = None) -> Optional[Node]:
         """
         Retrieve a single document by its ID.
         
         Args:
-            document_id: The ID of the document to retrieve
+            node_id: The ID of the document to retrieve
             index_id: Optional index identifier to filter retrieval
             
         Returns:
@@ -400,7 +400,7 @@ class QdrantVectorStore(VectorStore[Node]):
         """
         result = self.client.retrieve(
             collection_name=self.collection_name,
-            ids=[document_id],
+            ids=[node_id],
             with_vectors=True  # Include vectors in results
         )
         

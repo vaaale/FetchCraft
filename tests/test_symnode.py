@@ -124,8 +124,8 @@ async def test_parent_resolution_in_index():
     )
     
     # Add parent first, then SymNodes
-    await index.add_documents([parent_chunk])
-    await index.add_documents([sym_node1, sym_node2])
+    await index.add_nodes([parent_chunk])
+    await index.add_nodes([sym_node1, sym_node2])
     
     # Search with parent resolution
     query_embedding = [0.11] * 384
@@ -194,8 +194,8 @@ async def test_multiple_parents_resolution():
         vector_store=vector_store
     )
     
-    await index.add_documents([parent1, parent2])
-    await index.add_documents([sym1, sym2])
+    await index.add_nodes([parent1, parent2])
+    await index.add_nodes([sym1, sym2])
     
     # Search should return both parents
     query_embedding = [0.15] * 384
@@ -236,8 +236,8 @@ async def test_deduplication_same_parent():
         vector_store=vector_store
     )
     
-    await index.add_documents([parent])
-    await index.add_documents([sym1, sym2, sym3])
+    await index.add_nodes([parent])
+    await index.add_nodes([sym1, sym2, sym3])
     
     # Search might return multiple SymNodes with same parent
     query_embedding = [0.12] * 384

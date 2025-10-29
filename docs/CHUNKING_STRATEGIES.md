@@ -218,7 +218,7 @@ parser = TextFileDocumentParser(chunker=chunker)
 chunks = parser.parse_directory("docs/")
 
 # 2. Index (includes parents and children)
-await vector_index.add_documents(chunks)
+await vector_index.insert_nodes(chunks)
 
 # 3. Search (searches child nodes)
 results = await vector_index.search_by_text("machine learning")

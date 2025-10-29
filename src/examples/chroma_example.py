@@ -125,7 +125,7 @@ in valuable ways.
     # Step 5: Index documents
     print("\n5. Indexing documents...")
     
-    await vector_index.add_documents(all_chunks, show_progress=True)
+    await vector_index.add_nodes(all_chunks, show_progress=True)
     
     print(f"   ✓ Indexed {len(all_chunks)} chunks")
     
@@ -285,7 +285,7 @@ become more powerful and widespread.
     # Index all nodes
     print("\n3. Indexing hierarchical chunks...")
     
-    await vector_index.add_documents(nodes, show_progress=True)
+    await vector_index.add_nodes(nodes, show_progress=True)
     
     print(f"   ✓ Indexed all {len(nodes)} nodes")
     
@@ -352,7 +352,7 @@ async def example_comparison():
             index_id=f"index_{distance}"
         )
         
-        await vector_index.add_documents(chunks)
+        await vector_index.add_nodes(chunks)
         results = await vector_index.search_by_text("AI and ML", k=1)
         
         if results:

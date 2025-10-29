@@ -50,7 +50,7 @@ class VectorStore(BaseModel, ABC, Generic[D]):
         return await self._embeddings.embed_documents(texts)
     
     @abstractmethod
-    async def add_documents(self, documents: List[D], index_id: Optional[str] = None, show_progress: bool = False) -> List[str]:
+    async def insert_nodes(self, documents: List[D], index_id: Optional[str] = None, show_progress: bool = False) -> List[str]:
         """
         Add documents to the vector store.
         
@@ -137,7 +137,7 @@ class VectorStore(BaseModel, ABC, Generic[D]):
         pass
     
     @abstractmethod
-    async def get_document(self, document_id: str, index_id: Optional[str] = None) -> Optional[D]:
+    async def get_node(self, document_id: str, index_id: Optional[str] = None) -> Optional[D]:
         """
         Retrieve a single document by its ID.
         

@@ -68,7 +68,7 @@ async def basic_hybrid_search_example():
     index = VectorIndex(vector_store=vector_store, index_id="hybrid_test")
     
     nodes = [Node(text=text, metadata={"index": i}) for i, text in enumerate(documents_text)]
-    await index.add_documents(nodes)
+    await index.add_nodes(nodes)
     
     print(f"   ✓ Indexed {len(nodes)} documents")
     print(f"   ✓ Each document has both:")
@@ -151,8 +151,8 @@ async def compare_hybrid_vs_dense():
     
     # Index same documents in both
     nodes = [Node(text=text) for text in documents_text]
-    await dense_index.add_documents(nodes)
-    await hybrid_index.add_documents(nodes)
+    await dense_index.add_nodes(nodes)
+    await hybrid_index.add_nodes(nodes)
     
     print(f"   ✓ Indexed {len(nodes)} documents in both stores")
     
@@ -231,8 +231,8 @@ async def fusion_methods_comparison():
     rrf_index = VectorIndex(vector_store=rrf_store)
     dbsf_index = VectorIndex(vector_store=dbsf_store)
     
-    await rrf_index.add_documents(nodes)
-    await dbsf_index.add_documents(nodes)
+    await rrf_index.add_nodes(nodes)
+    await dbsf_index.add_nodes(nodes)
     
     print(f"   ✓ Indexed {len(nodes)} documents with both methods")
     

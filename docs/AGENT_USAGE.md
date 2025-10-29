@@ -34,20 +34,21 @@ from rag_framework import (
     RetrieverTool
 )
 
+
 async def main():
     # 1. Setup embeddings
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
     dimension = await embeddings.aget_dimension()
-    
+
     # 2. Create knowledge base
     documents = [
         "Bill Gates was born on October 28, 1955.",
         "Bill Gates co-founded Microsoft in 1975.",
         "Python was created by Guido van Rossum in 1991.",
     ]
-    
+
     nodes = [Node(text=text) for text in documents]
-    
+
     # 3. Setup index
     client = QdrantClient(":memory:")
     vector_store = QdrantVectorStore(
@@ -55,24 +56,25 @@ async def main():
         collection_name="knowledge_base",
         vector_size=dimension
     )
-    
+
     index = VectorIndex(
         vector_store=vector_store,
         embeddings=embeddings
     )
-    
-    await index.add_documents(nodes)
-    
+
+    await index.insert_nodes(nodes)
+
     # 4. Create retriever and tool
     retriever = index.as_retriever(top_k=2)
     retriever_tool = RetrieverTool.from_retriever(retriever)
-    
+
     # 5. Create agent with retriever tool
     agent = ReActAgent.create(retriever_tool=retriever_tool)
-    
+
     # 6. Query the agent
     answer = await agent.query("When was Bill Gates born?")
     print(answer)
+
 
 asyncio.run(main())
 ```
@@ -300,7 +302,7 @@ index = VectorIndex(
 )
 
 # Add documents (auto-embedded)
-await index.add_documents(nodes)
+await index.insert_nodes(nodes)
 
 # Create retriever with specific settings
 retriever = index.as_retriever(

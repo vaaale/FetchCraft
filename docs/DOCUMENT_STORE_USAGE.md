@@ -83,7 +83,7 @@ docs = [
 ]
 
 # Bulk insert
-doc_ids = await store.add_documents(docs)
+doc_ids = await store.insert_nodes(docs)
 print(f"Stored {len(doc_ids)} documents")
 ```
 
@@ -91,7 +91,7 @@ print(f"Stored {len(doc_ids)} documents")
 
 ```python
 # Get single document
-doc = await store.get_document(doc_id)
+doc = await store.get_node(doc_id)
 print(f"Retrieved: {doc.text[:50]}...")
 
 # Get multiple documents
@@ -176,7 +176,7 @@ chunk_nodes = nodes[1:]
 await doc_store.add_document(doc_node)
 
 # 4. Store all nodes (including chunks) in vector store for search
-await index.add_documents(nodes)
+await index.add_nodes(nodes)
 
 # 5. Search using vectors
 results = await index.search_by_text("What is the main topic?", k=5)
@@ -274,14 +274,14 @@ assert all(chunk.doc_id == doc.id for chunk in chunks)
 # Search vectors, retrieve full document
 results = await vector_index.search_by_text("query")
 for chunk, score in results:
-    full_doc = await doc_store.get_document(chunk.doc_id)
+    full_doc = await doc_store.get_node(chunk.doc_id)
 ```
 
 ### 3. Batch Operations for Performance
 
 ```python
 # Good: Batch insert
-await store.add_documents(docs)
+await store.insert_nodes(docs)
 
 # Bad: Individual inserts
 for doc in docs:
@@ -304,7 +304,7 @@ await store.collection.create_index([("metadata.custom_field", 1)])
 
 ```python
 try:
-    doc = await store.get_document(doc_id)
+    doc = await store.get_node(doc_id)
     if doc is None:
         print("Document not found")
 except Exception as e:
@@ -325,23 +325,24 @@ except Exception as e:
 import pytest
 from mongomock_motor import AsyncMongoMockClient
 
+
 @pytest.mark.asyncio
 async def test_document_store():
     # Use mock client for testing
     client = AsyncMongoMockClient()
-    
+
     store = MongoDBDocumentStore(
         database_name="test_db",
         collection_name="test_collection",
         client=client
     )
-    
+
     doc = DocumentNode.from_text("Test")
     await store.add_document(doc)
-    
-    retrieved = await store.get_document(doc.id)
+
+    retrieved = await store.get_node(doc.id)
     assert retrieved.text == "Test"
-    
+
     await store.close()
 ```
 

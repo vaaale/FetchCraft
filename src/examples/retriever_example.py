@@ -72,7 +72,7 @@ async def basic_retriever_example():
     )
     
     # Embeddings are auto-generated when adding documents!
-    await index.add_documents(nodes)
+    await index.add_nodes(nodes)
     print(f"✓ Indexed {len(nodes)} documents (auto-embedded)\n")
     
     # Step 3: Create retriever from index (no embeddings param needed!)
@@ -136,7 +136,7 @@ async def retriever_configuration_example():
     index = VectorIndex(
         vector_store=vector_store
     )
-    await index.add_documents(nodes)
+    await index.add_nodes(nodes)
     
     print("✓ Setup complete\n")
     
@@ -214,8 +214,8 @@ async def retriever_with_symnode_example():
     )
     
     # Index parent first, then SymNodes (embeddings auto-generated!)
-    await index.add_documents([parent_chunk])
-    await index.add_documents(sym_nodes)
+    await index.add_nodes([parent_chunk])
+    await index.add_nodes(sym_nodes)
     
     print(f"✓ Indexed 1 parent chunk and {len(sym_nodes)} SymNodes (auto-embedded)\n")
     
@@ -282,7 +282,7 @@ async def direct_retriever_creation():
     index = VectorIndex(
         vector_store=vector_store
     )
-    await index.add_documents(nodes)
+    await index.add_nodes(nodes)
     
     # Create retriever directly (not using as_retriever)
     retriever = VectorIndexRetriever(

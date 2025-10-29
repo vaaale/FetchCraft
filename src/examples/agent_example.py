@@ -87,7 +87,7 @@ async def basic_agent_example():
         vector_store=vector_store
     )
     
-    await index.add_documents(nodes)
+    await index.add_nodes(nodes)
     print(f"✓ Indexed {len(nodes)} documents (embeddings auto-generated!)\n")
     
     # Step 4: Create retriever from index
@@ -163,7 +163,7 @@ async def custom_system_prompt_example():
     )
     
     index = VectorIndex(vector_store=vector_store)
-    await index.add_documents(nodes)
+    await index.add_nodes(nodes)
     
     retriever = index.as_retriever(top_k=2)
     retriever_tool = RetrieverTool.from_retriever(retriever)
@@ -240,7 +240,7 @@ async def multi_step_reasoning_example():
     )
     
     index = VectorIndex(vector_store=vector_store)
-    await index.add_documents(nodes)
+    await index.add_nodes(nodes)
     
     retriever = index.as_retriever(top_k=2)
     retriever_tool = RetrieverTool.from_retriever(retriever)

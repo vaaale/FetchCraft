@@ -96,7 +96,7 @@ async def example_simple_parser():
         )
         
         index = VectorIndex(vector_store=vector_store)
-        await index.add_documents(nodes)
+        await index.add_nodes(nodes)
         print(f"   ✓ Indexed {len(nodes)} chunks")
         
         # Step 4: Search
@@ -211,7 +211,7 @@ async def example_hierarchical_parser():
         )
         
         index = VectorIndex(vector_store=vector_store)
-        await index.add_documents(child_nodes)
+        await index.add_nodes(child_nodes)
         print(f"   ✓ Indexed {len(child_nodes)} child SymNodes")
         
         # Step 4: Search (returns children, resolve to parents)

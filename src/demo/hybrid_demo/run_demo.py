@@ -113,7 +113,7 @@ async def load_and_index_documents(
     print(f"   Loading documents...")
     source = FilesystemDocumentSource.from_directory(
         directory=documents_path,
-        pattern="*.txt",
+        pattern="*",
         recursive=True
     )
     
@@ -163,7 +163,7 @@ async def load_and_index_documents(
     print(f"     🔍 Sparse vector (keyword matching)")
     
     # Index all chunks (embeddings will be generated automatically)
-    await vector_index.add_documents(all_chunks, show_progress=True)
+    await vector_index.add_nodes(all_chunks, show_progress=True)
     
     print(f"✅ Successfully indexed {len(all_chunks)} chunks with hybrid search!")
     return len(all_chunks)

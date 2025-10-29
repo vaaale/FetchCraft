@@ -1,14 +1,16 @@
 """
 ReAct agent implementation using pydantic-ai.
 """
+import nest_asyncio
+
+nest_asyncio.apply()
 from datetime import datetime
 from typing import Optional, Any, List, Union, Dict, AsyncIterable
 
-from pydantic_ai import AgentRunResultEvent, AgentStreamEvent, PartStartEvent, PartDeltaEvent, TextPartDelta, \
+from pydantic_ai import AgentStreamEvent, PartStartEvent, PartDeltaEvent, TextPartDelta, \
     ThinkingPartDelta, ToolCallPartDelta, FunctionToolCallEvent, FunctionToolResultEvent, FinalResultEvent
 
 from .memory import Memory
-from .utils import to_chat_message
 from ..logging import configure_logging
 
 try:
@@ -23,7 +25,6 @@ except ImportError:
     Model = None
 
 from pydantic import ConfigDict, PrivateAttr
-import re
 from .base import BaseAgent, AgentResponse, CitationContainer, ChatMessage
 
 configure_logging("root")
@@ -55,7 +56,7 @@ Lets think Step-By-Step:
 When writing your answer:
 1. Base your answer on the retrieved documents ONLY! Never use prior knowledge!
 2. If the provided documents do not contain the information refine your query and try again.
-3. When reciting facts, always include a citation to the source of the information. Always add citations to your answer using a Markdown link. Example: 'See [<document_title>](<document_number>)'
+3. When reciting facts, always include a citation to the source of the information. ALWAYS add citations to your answer using a Markdown link. Example: 'See [<document_title>](<document_number>)'
 (The document_number must always be an integer and is the number following 'Document ' in the citations)
 """
 

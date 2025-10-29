@@ -26,6 +26,7 @@ index = VectorIndex(
 The index now automatically generates embeddings when adding documents.
 
 **Before:**
+
 ```python
 # Manual embedding generation required
 embeddings_model = OpenAIEmbeddings(...)
@@ -37,10 +38,11 @@ nodes = [
 ]
 
 index = VectorIndex(vector_store=vector_store)
-await index.add_documents(nodes)
+await index.insert_nodes(nodes)
 ```
 
 **After:**
+
 ```python
 # Embeddings handled automatically!
 embeddings_model = OpenAIEmbeddings(...)
@@ -54,7 +56,7 @@ index = VectorIndex(
     vector_store=vector_store,
     embeddings=embeddings_model
 )
-await index.add_documents(nodes)  # Embeddings auto-generated!
+await index.insert_nodes(nodes)  # Embeddings auto-generated!
 ```
 
 ### 3. New `search_by_text()` Method
@@ -110,25 +112,26 @@ from rag_framework import (
     Node
 )
 
+
 async def main():
     # Initialize embeddings
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
     dimension = await embeddings.aget_dimension()
-    
+
     # Create documents
     texts = [
         "Python is a programming language.",
         "Machine learning uses algorithms."
     ]
-    
+
     # MANUAL EMBEDDING GENERATION
     doc_embeddings = await embeddings.embed_documents(texts)
-    
+
     nodes = [
         Node(text=text, embedding=emb)
         for text, emb in zip(texts, doc_embeddings)
     ]
-    
+
     # Setup index
     client = QdrantClient(":memory:")
     vector_store = QdrantVectorStore(
@@ -136,20 +139,21 @@ async def main():
         collection_name="docs",
         vector_size=dimension
     )
-    
+
     index = VectorIndex(vector_store=vector_store)
-    await index.add_documents(nodes)
-    
+    await index.insert_nodes(nodes)
+
     # Search
     query_emb = await embeddings.embed_query("What is Python?")
     results = await index.search(query_emb, k=2)
-    
+
     # Create retriever
     retriever = index.as_retriever(
         embeddings=embeddings,
         top_k=2
     )
     results = await retriever.retrieve("What is Python?")
+
 
 asyncio.run(main())
 ```
@@ -166,23 +170,24 @@ from rag_framework import (
     Node
 )
 
+
 async def main():
     # Initialize embeddings
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
     dimension = await embeddings.aget_dimension()
-    
+
     # Create documents
     texts = [
         "Python is a programming language.",
         "Machine learning uses algorithms."
     ]
-    
+
     # NO MANUAL EMBEDDING GENERATION!
     nodes = [
         Node(text=text)  # No embedding field!
         for text in texts
     ]
-    
+
     # Setup index WITH embeddings
     client = QdrantClient(":memory:")
     vector_store = QdrantVectorStore(
@@ -190,21 +195,22 @@ async def main():
         collection_name="docs",
         vector_size=dimension
     )
-    
+
     index = VectorIndex(
         vector_store=vector_store,
         embeddings=embeddings  # Embeddings part of index!
     )
-    
+
     # Auto-generates embeddings!
-    await index.add_documents(nodes)
-    
+    await index.insert_nodes(nodes)
+
     # Search with text directly
     results = await index.search_by_text("What is Python?", k=2)
-    
+
     # Create retriever (no embeddings param!)
     retriever = index.as_retriever(top_k=2)
     results = await retriever.retrieve("What is Python?")
+
 
 asyncio.run(main())
 ```
@@ -385,7 +391,7 @@ You can mix documents with and without pre-computed embeddings:
 node1 = Node(text="Text 1")  # Will be auto-embedded
 node2 = Node(text="Text 2", embedding=[0.1] * 1536)  # Pre-computed
 
-await index.add_documents([node1, node2])
+await index.insert_nodes([node1, node2])
 # Only node1 gets auto-embedded!
 ```
 
@@ -393,7 +399,7 @@ await index.add_documents([node1, node2])
 
 ```python
 # All documents must have embeddings
-await index.add_documents(nodes, auto_embed=False)
+await index.insert_nodes(nodes, auto_embed=False)
 ```
 
 ### Access the Embeddings Model

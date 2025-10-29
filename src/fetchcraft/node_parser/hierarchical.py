@@ -61,6 +61,7 @@ class HierarchicalNodeParser(NodeParser):
         
         for document in documents:
             text = document.text
+            metadata.update(document.metadata)
             
             # Step 1: Create parent chunks
             parent_chunks = self._create_parent_chunks(document, text, metadata)

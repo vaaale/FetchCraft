@@ -35,42 +35,43 @@ from rag_framework import (
     Chunk, SymNode, QdrantVectorStore, VectorIndex, OpenAIEmbeddings
 )
 
+
 async def main():
     # 1. Create a parent chunk with full context
     long_text = """
     Machine learning is a subset of artificial intelligence that enables 
     computers to learn from data without being explicitly programmed.
     """
-    
+
     parent_chunk = Chunk.from_text(
         text=long_text.strip(),
         chunk_index=0,
         metadata={"topic": "ml", "source": "textbook"}
     )
-    
+
     # 2. Create smaller SymNodes that reference the parent
     small_chunk1 = long_text[0:60]
     small_chunk2 = long_text[60:]
-    
+
     sym_node1 = SymNode.create(
         text=small_chunk1,
         parent_id=parent_chunk.id,
         metadata=parent_chunk.metadata.copy()
     )
-    
+
     sym_node2 = SymNode.create(
         text=small_chunk2,
         parent_id=parent_chunk.id,
         metadata=parent_chunk.metadata.copy()
     )
-    
+
     # 3. Generate embeddings
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-    
+
     parent_chunk.embedding = await embeddings.embed_query(parent_chunk.text)
     sym_node1.embedding = await embeddings.embed_query(sym_node1.text)
     sym_node2.embedding = await embeddings.embed_query(sym_node2.text)
-    
+
     # 4. Setup vector store
     client = QdrantClient(":memory:")
     vector_store = QdrantVectorStore(
@@ -79,20 +80,21 @@ async def main():
         vector_size=1536
     )
     index = VectorIndex(vector_store=vector_store)
-    
+
     # 5. Index documents (parent first, then SymNodes)
-    await index.add_documents([parent_chunk])
-    await index.add_documents([sym_node1, sym_node2])
-    
+    await index.insert_nodes([parent_chunk])
+    await index.insert_nodes([sym_node1, sym_node2])
+
     # 6. Search with automatic parent resolution
     query_embedding = await embeddings.embed_query("What is machine learning?")
     results = await index.search(query_embedding, k=2)
-    
+
     # Results will contain the parent Chunk, not the SymNodes!
     for doc, score in results:
         print(f"Type: {doc.__class__.__name__}")  # Chunk
         print(f"Text: {doc.text}")  # Full parent text
         print(f"Score: {score}")
+
 
 asyncio.run(main())
 ```
@@ -197,12 +199,12 @@ The parent node **must** be added to the index before the SymNodes:
 
 ```python
 # ✓ Correct order
-await index.add_documents([parent_chunk])
-await index.add_documents([sym_node1, sym_node2])
+await index.insert_nodes([parent_chunk])
+await index.insert_nodes([sym_node1, sym_node2])
 
 # ✗ Wrong - parent won't be found during resolution
-await index.add_documents([sym_node1, sym_node2])
-await index.add_documents([parent_chunk])
+await index.insert_nodes([sym_node1, sym_node2])
+await index.insert_nodes([parent_chunk])
 ```
 
 ### 2. Deduplication

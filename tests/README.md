@@ -115,11 +115,12 @@ src/tests/
 ```python
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_my_feature(vector_index, mock_embeddings, sample_nodes):
     """Test description."""
     # Use fixtures directly
-    await vector_index.add_documents(sample_nodes)
+    await vector_index.insert_nodes(sample_nodes)
     # ... test logic
 ```
 

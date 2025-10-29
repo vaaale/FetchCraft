@@ -117,7 +117,7 @@ async def rag_pipeline_example():
     )
     
     # Step 5: Add documents to index (embeddings auto-generated!)
-    doc_ids = await index.add_documents(nodes)
+    doc_ids = await index.add_nodes(nodes)
     print(f"✓ Indexed {len(doc_ids)} documents (embeddings auto-generated!)\n")
     
     # Step 6: Perform semantic search
@@ -196,7 +196,7 @@ async def document_parsing_with_embeddings():
     )
     
     # Index the chunks (embeddings auto-generated!)
-    chunk_ids = await index.add_documents(chunks)
+    chunk_ids = await index.add_nodes(chunks)
     print(f"✓ Indexed {len(chunk_ids)} chunks (embeddings auto-generated!)\n")
     
     # Search within chunks using text query

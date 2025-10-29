@@ -60,6 +60,7 @@ from rag_framework import (
     Node
 )
 
+
 async def main():
     # 1. Initialize embeddings
     embeddings = OpenAIEmbeddings(
@@ -67,21 +68,21 @@ async def main():
         api_key="your-api-key"
     )
     dimension = await embeddings.aget_dimension()
-    
+
     # 2. Create sample documents
     documents_text = [
         "RAG combines retrieval and generation.",
         "Vector databases store embeddings.",
         "Semantic search finds meaning, not keywords."
     ]
-    
+
     # 3. Generate embeddings and create nodes
     doc_embeddings = await embeddings.embed_documents(documents_text)
     nodes = [
         Node(text=text, embedding=emb)
         for text, emb in zip(documents_text, doc_embeddings)
     ]
-    
+
     # 4. Setup vector store and index
     client = QdrantClient(":memory:")
     vector_store = QdrantVectorStore(
@@ -90,19 +91,20 @@ async def main():
         vector_size=dimension
     )
     index = VectorIndex(vector_store=vector_store)
-    await index.add_documents(nodes)
-    
+    await index.insert_nodes(nodes)
+
     # 5. Create retriever
     retriever = index.as_retriever(
         embeddings=embeddings,
         top_k=2
     )
-    
+
     # 6. Retrieve!
     results = await retriever.retrieve("What is RAG?")
-    
+
     for doc, score in results:
         print(f"[Score: {score:.3f}] {doc.text}")
+
 
 asyncio.run(main())
 ```
@@ -228,8 +230,8 @@ for sym in sym_nodes:
     sym.embedding = await embeddings.embed_query(sym.text)
 
 # Index parent first, then SymNodes
-await index.add_documents([parent])
-await index.add_documents(sym_nodes)
+await index.insert_nodes([parent])
+await index.insert_nodes(sym_nodes)
 
 # Create retriever with parent resolution (default)
 retriever = index.as_retriever(

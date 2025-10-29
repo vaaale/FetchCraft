@@ -20,7 +20,7 @@ vector_store = QdrantVectorStore(
 
 # 3. Use normally
 index = VectorIndex(vector_store=vector_store)
-await index.add_documents([Node(text="Your docs")])
+await index.add_nodes([Node(text="Your docs")])
 results = await index.search_by_text("query", k=5)
 ```
 

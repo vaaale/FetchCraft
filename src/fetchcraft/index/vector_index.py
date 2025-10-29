@@ -62,21 +62,21 @@ class VectorIndex(BaseIndex[D]):
         """
         return cls(vector_store=vector_store, index_id=index_id)
     
-    async def add_documents(self, documents: List[D], show_progress: bool = False) -> List[str]:
+    async def add_nodes(self, nodes: List[D], show_progress: bool = False) -> List[str]:
         """
         Add documents to the index.
         
         The vector store automatically generates embeddings for documents that don't have them.
         
         Args:
-            documents: List of document objects to add
+            nodes: List of document objects to add
             show_progress: If True, show a progress bar
             
         Returns:
             List of document IDs that were added
         """
         # Delegate to vector store which handles embedding generation
-        return await self.vector_store.add_documents(documents, index_id=self.index_id, show_progress=show_progress)
+        return await self.vector_store.insert_nodes(nodes, index_id=self.index_id, show_progress=show_progress)
 
 
     async def search(
@@ -158,7 +158,7 @@ class VectorIndex(BaseIndex[D]):
         Returns:
             The document if found, None otherwise
         """
-        return await self.vector_store.get_document(document_id, index_id=self.index_id)
+        return await self.vector_store.get_node(document_id, index_id=self.index_id)
     
     async def delete_documents(self, document_ids: List[str]) -> bool:
         """

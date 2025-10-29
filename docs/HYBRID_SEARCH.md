@@ -47,7 +47,7 @@ index = VectorIndex(vector_store=vector_store)
 
 # Index documents (automatically generates both dense and sparse vectors)
 nodes = [Node(text="Your document text here")]
-await index.add_documents(nodes)
+await index.add_nodes(nodes)
 
 # Search (automatically uses hybrid search)
 results = await index.search_by_text("your query", k=5)
@@ -116,7 +116,7 @@ Available sparse models from fastembed:
 When you add documents with hybrid search enabled:
 
 ```python
-await index.add_documents([Node(text="Python is a programming language")])
+await index.insert_nodes([Node(text="Python is a programming language")])
 ```
 
 The system automatically:
@@ -243,7 +243,7 @@ vector_store = QdrantVectorStore(
 )
 
 # Re-index documents
-await index.add_documents(documents)
+await index.insert_nodes(documents)
 ```
 
 ## Configuration via QdrantConfig

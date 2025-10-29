@@ -116,7 +116,7 @@ from rag_framework import VectorIndex
 index = VectorIndex(vector_store=vector_store)
 
 # Add your chunks (with embeddings)
-document_ids = await index.add_documents(chunks)
+document_ids = await index.insert_nodes(chunks)
 print(f"Indexed {len(document_ids)} chunks")
 ```
 
@@ -368,13 +368,13 @@ from rag_framework import VectorIndex
 index = VectorIndex(vector_store=vector_store)
 
 # Add documents
-ids = await index.add_documents(chunks)
+ids = await index.insert_nodes(chunks)
 
 # Search
 results = await index.search(query_embedding, k=5)
 
 # Get specific document
-doc = await index.get_document(document_id="123")
+doc = await index.get_node(node_id="123")
 
 # Delete documents
 success = await index.delete_documents(["id1", "id2"])
@@ -452,16 +452,16 @@ support_index = VectorIndex(
 )
 
 # Each index operates independently
-await tech_docs_index.add_documents(tech_chunks)
-await marketing_index.add_documents(marketing_chunks)
+await tech_docs_index.insert_nodes(tech_chunks)
+await marketing_index.insert_nodes(marketing_chunks)
 
 # Searches are automatically isolated to each index
 tech_results = await tech_docs_index.search(query_embedding, k=5)
 marketing_results = await marketing_index.search(query_embedding, k=5)
 
 # Documents from one index are not accessible from another
-doc = await tech_docs_index.get_document(doc_id)  # ✓ Found
-doc = await marketing_index.get_document(doc_id)  # ✗ Returns None (isolated)
+doc = await tech_docs_index.get_node(doc_id)  # ✓ Found
+doc = await marketing_index.get_node(doc_id)  # ✗ Returns None (isolated)
 ```
 
 **Use Cases for Multiple Indices:**
@@ -486,6 +486,7 @@ from rag_framework import (
     Chunk
 )
 
+
 async def build_rag_index():
     # Step 1: Parse documents
     chunks = TextFileDocumentParser.from_file(
@@ -493,12 +494,12 @@ async def build_rag_index():
         chunk_size=500,
         overlap=50
     )
-    
+
     # Step 2: Generate embeddings (using your embedding model)
     for chunk in chunks:
         # Replace with your actual embedding generation
         chunk.embedding = generate_embedding(chunk.text)
-    
+
     # Step 3: Create vector store
     client = QdrantClient(url="http://localhost:6333")
     vector_store = QdrantVectorStore(
@@ -507,21 +508,22 @@ async def build_rag_index():
         document_class=Chunk,
         vector_size=384
     )
-    
+
     # Step 4: Build index
     index = VectorIndex(vector_store=vector_store)
-    document_ids = await index.add_documents(chunks)
-    
+    document_ids = await index.insert_nodes(chunks)
+
     print(f"✓ Indexed {len(document_ids)} chunks")
     return index
+
 
 async def search_knowledge_base(index, query: str):
     # Generate query embedding
     query_embedding = generate_embedding(query)
-    
+
     # Search
     results = await index.search(query_embedding, k=5)
-    
+
     # Display results
     for i, (chunk, score) in enumerate(results, 1):
         print(f"\n{i}. Score: {score:.3f}")
@@ -529,10 +531,12 @@ async def search_knowledge_base(index, query: str):
         if chunk.has_parent():
             print(f"   Source: {chunk.metadata.get('source', 'N/A')}")
 
+
 # Run the pipeline
 async def main():
     index = await build_rag_index()
     await search_knowledge_base(index, "What is machine learning?")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

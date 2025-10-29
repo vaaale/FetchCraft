@@ -16,7 +16,7 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
     index_id: str = Field(default_factory=lambda: str(uuid4()), description="Unique index identifier")
 
     @abstractmethod
-    def add_documents(self, documents, show_progress):
+    def add_nodes(self, documents, show_progress):
         """
         Add documents to the index.
 
@@ -92,7 +92,7 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
 
                 # Fetch the parent node
                 # Note: parent might be in a different index, so we don't pass index_id
-                parent_node = await self.vector_store.get_document(parent_id, index_id=None)
+                parent_node = await self.vector_store.get_node(parent_id, index_id=None)
 
                 if parent_node:
                     resolved_results.append((parent_node, score))  # type: ignore
