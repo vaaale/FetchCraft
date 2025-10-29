@@ -13,8 +13,11 @@ class Node(BaseModel):
     in a sequence using next/previous pointers.
     
     Relationships:
-    - parent/children: Hierarchical relationships (any node can have both)
-    - next/previous: Sequential relationships (sibling ordering)
+    - parent_id/children_ids: Hierarchical relationships (any node can have both)
+    - next_id/previous_id: Sequential relationships (sibling ordering)
+    
+    All relationship methods work with node IDs rather than Node objects.
+    This allows for efficient serialization and avoids circular references.
     """
     
     id: str = Field(default_factory=lambda: str(uuid4()))
@@ -33,11 +36,7 @@ class Node(BaseModel):
     next_id: Optional[str] = None
     previous_id: Optional[str] = None
     
-    # Cached references (not persisted)
-    _parent: Optional['Node'] = PrivateAttr(default=None)
-    _children: List['Node'] = PrivateAttr(default_factory=list)
-    _next: Optional['Node'] = PrivateAttr(default=None)
-    _previous: Optional['Node'] = PrivateAttr(default=None)
+    # Cached hash (not persisted)
     _hash: Optional[str] = PrivateAttr(default=None)
     
     model_config = {
@@ -45,77 +44,65 @@ class Node(BaseModel):
     }
     
     @property
-    def parent(self) -> Optional['Node']:
-        """Get the parent node."""
-        return self._parent
+    def parent(self) -> Optional[str]:
+        """Get the parent node ID."""
+        return self.parent_id
     
     @parent.setter
-    def parent(self, node: Optional['Node']) -> None:
-        """Set the parent node and update parent's children."""
-        self._parent = node
-        self.parent_id = node.id if node else None
-        if node and self.id not in node.children_ids:
-            node.children_ids.append(self.id)
-            if self not in node._children:
-                node._children.append(self)
+    def parent(self, node_id: Optional[str]) -> None:
+        """Set the parent node ID."""
+        self.parent_id = node_id
     
     @property
-    def children(self) -> List['Node']:
-        """Get the child nodes."""
-        return self._children
+    def children(self) -> List[str]:
+        """Get the child node IDs."""
+        return self.children_ids
     
     @children.setter
-    def children(self, nodes: List['Node']) -> None:
-        """Set the child nodes."""
-        self._children = nodes
-        self.children_ids = [node.id for node in nodes]
-        # Update each child's parent reference
-        for node in nodes:
-            node._parent = self
-            node.parent_id = self.id
+    def children(self, node_ids: List[str]) -> None:
+        """Set the child node IDs."""
+        self.children_ids = node_ids
     
     @property
-    def next(self) -> Optional['Node']:
-        """Get the next node in the sequence."""
-        return self._next
+    def next(self) -> Optional[str]:
+        """Get the next node ID in the sequence."""
+        return self.next_id
     
     @next.setter
-    def next(self, node: Optional['Node']) -> None:
-        """Set the next node in the sequence."""
-        self._next = node
-        self.next_id = node.id if node else None
+    def next(self, node_id: Optional[str]) -> None:
+        """Set the next node ID in the sequence."""
+        self.next_id = node_id
     
     @property
-    def previous(self) -> Optional['Node']:
-        """Get the previous node in the sequence."""
-        return self._previous
+    def previous(self) -> Optional[str]:
+        """Get the previous node ID in the sequence."""
+        return self.previous_id
     
     @previous.setter
-    def previous(self, node: Optional['Node']) -> None:
-        """Set the previous node in the sequence."""
-        self._previous = node
-        self.previous_id = node.id if node else None
+    def previous(self, node_id: Optional[str]) -> None:
+        """Set the previous node ID in the sequence."""
+        self.previous_id = node_id
     
     def set_relationships(
         self,
-        parent: Optional['Node'] = None,
-        next_node: Optional['Node'] = None,
-        previous_node: Optional['Node'] = None
+        parent_id: Optional[str] = None,
+        next_id: Optional[str] = None,
+        previous_id: Optional[str] = None
     ) -> None:
         """
         Set multiple relationships at once.
         
         Args:
-            parent: The parent node
-            next_node: The next node in sequence
-            previous_node: The previous node in sequence
+            parent_id: The parent node ID
+            next_id: The next node ID in sequence
+            previous_id: The previous node ID in sequence
         """
-        if parent is not None:
-            self.parent = parent
-        if next_node is not None:
-            self.next = next_node
-        if previous_node is not None:
-            self.previous = previous_node
+        if parent_id is not None:
+            self.parent_id = parent_id
+        if next_id is not None:
+            self.next_id = next_id
+        if previous_id is not None:
+            self.previous_id = previous_id
     
     def has_parent(self) -> bool:
         """Check if this node has a parent."""
@@ -133,33 +120,25 @@ class Node(BaseModel):
         """Check if this node has children."""
         return len(self.children_ids) > 0
     
-    def add_child(self, node: 'Node') -> None:
+    def add_child(self, node_id: str) -> None:
         """
-        Add a child node to this node.
+        Add a child node ID to this node.
         
         Args:
-            node: The child node to add
+            node_id: The child node ID to add
         """
-        if node.id not in self.children_ids:
-            self.children_ids.append(node.id)
-            self._children.append(node)
-        node._parent = self
-        node.parent_id = self.id
+        if node_id not in self.children_ids:
+            self.children_ids.append(node_id)
     
-    def remove_child(self, node: 'Node') -> None:
+    def remove_child(self, node_id: str) -> None:
         """
-        Remove a child node from this node.
+        Remove a child node ID from this node.
         
         Args:
-            node: The child node to remove
+            node_id: The child node ID to remove
         """
-        if node.id in self.children_ids:
-            self.children_ids.remove(node.id)
-        if node in self._children:
-            self._children.remove(node)
-        if node.parent_id == self.id:
-            node._parent = None
-            node.parent_id = None
+        if node_id in self.children_ids:
+            self.children_ids.remove(node_id)
     
     @property
     def hash(self) -> str:
@@ -181,16 +160,15 @@ class Node(BaseModel):
     
     def get_text_with_context(self, include_parent: bool = True) -> str:
         """
-        Get the text with optional context from parent.
+        Get the text. Note: context from parent cannot be included as this method
+        no longer has access to Node objects, only IDs.
         
         Args:
-            include_parent: Whether to include parent text as context
+            include_parent: Deprecated - no longer used
             
         Returns:
-            The text, optionally with parent context
+            The node's text
         """
-        if include_parent and self._parent:
-            return f"Context: {self._parent.text}\n\n{self.text}"
         return self.text
 
 
@@ -313,15 +291,16 @@ class Chunk(Node):
             **kwargs
         )
     
-    def link_to_previous(self, previous_chunk: 'Chunk') -> None:
+    def link_to_previous(self, previous_chunk_id: str) -> None:
         """
-        Create a bidirectional link to the previous chunk.
+        Create a link to the previous chunk ID.
+        Note: This method now only sets the previous_id on this chunk.
+        You need to manually set the next_id on the previous chunk.
         
         Args:
-            previous_chunk: The previous chunk in the sequence
+            previous_chunk_id: The previous chunk ID in the sequence
         """
-        self.previous = previous_chunk
-        previous_chunk.next = self
+        self.previous_id = previous_chunk_id
     
     def get_surrounding_context(
         self,
@@ -329,40 +308,18 @@ class Chunk(Node):
         num_chunks_after: int = 1
     ) -> str:
         """
-        Get text with surrounding chunks as context.
+        Get text. Note: surrounding chunks context cannot be included as this method
+        no longer has access to Node objects, only IDs. To get surrounding context,
+        you need to retrieve the nodes by their IDs from a document store.
         
         Args:
-            num_chunks_before: Number of previous chunks to include
-            num_chunks_after: Number of next chunks to include
+            num_chunks_before: Deprecated - no longer used
+            num_chunks_after: Deprecated - no longer used
             
         Returns:
-            Combined text with context
+            The chunk's text only
         """
-        context_parts = []
-        
-        # Get previous chunks
-        current = self._previous
-        prev_chunks = []
-        for _ in range(num_chunks_before):
-            if current is None or not isinstance(current, Chunk):
-                break
-            prev_chunks.insert(0, current.text)
-            current = current._previous
-        
-        context_parts.extend(prev_chunks)
-        
-        # Add current chunk
-        context_parts.append(self.text)
-        
-        # Get next chunks
-        current = self._next
-        for _ in range(num_chunks_after):
-            if current is None or not isinstance(current, Chunk):
-                break
-            context_parts.append(current.text)
-            current = current._next
-        
-        return "\n\n".join(context_parts)
+        return self.text
     
     def create_symbolic_nodes(
         self,

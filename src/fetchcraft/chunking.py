@@ -107,7 +107,9 @@ class CharacterChunkingStrategy(ChunkingStrategy):
             
             # Link to previous chunk (sibling relationship)
             if chunk_nodes:
-                chunk.link_to_previous(chunk_nodes[-1])
+                prev_chunk = chunk_nodes[-1]
+                chunk.previous_id = prev_chunk.id
+                prev_chunk.next_id = chunk.id
             
             chunk_nodes.append(chunk)
         
@@ -312,7 +314,9 @@ class HierarchicalChunkingStrategy(ChunkingStrategy):
             
             # Link to previous chunk (sibling relationship)
             if chunk_nodes:
-                chunk.link_to_previous(chunk_nodes[-1])
+                prev_chunk = chunk_nodes[-1]
+                chunk.previous_id = prev_chunk.id
+                prev_chunk.next_id = chunk.id
             
             chunk_nodes.append(chunk)
         
@@ -361,7 +365,7 @@ class HierarchicalChunkingStrategy(ChunkingStrategy):
             # Set doc_id from parent chunk
             sym_node.doc_id = parent_chunk.doc_id
             # Add child to parent's children list (SymNodes are children of chunks, not first-level)
-            parent_chunk.add_child(sym_node)
+            parent_chunk.add_child(sym_node.id)
             child_nodes.append(sym_node)
         
         return child_nodes
