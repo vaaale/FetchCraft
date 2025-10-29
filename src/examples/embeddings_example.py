@@ -8,12 +8,13 @@ from qdrant_client import QdrantClient
 
 from fetchcraft import (
     OpenAIEmbeddings,
-    TextFileDocumentParser,
     QdrantVectorStore,
     VectorIndex,
     Node,
-    Chunk, CharacterChunkingStrategy
+    Chunk
 )
+from fetchcraft.source import FilesystemDocumentSource
+from fetchcraft.node_parser import SimpleNodeParser
 
 
 async def basic_embeddings_example():
@@ -159,12 +160,13 @@ async def document_parsing_with_embeddings():
     sample_file.write_text(sample_text)
     
     # Parse the document into chunks
-    parser = TextFileDocumentParser(
-        chunker=CharacterChunkingStrategy(chunk_size=100,overlap=20)
-    )
-    chunks = parser.from_file(
-        file_path=sample_file
-    )
+    # Load document
+    source = FilesystemDocumentSource.from_file(sample_file)
+    documents = [doc async for doc in source.get_documents()]
+    
+    # Parse into chunks
+    parser = SimpleNodeParser(chunk_size=100, overlap=20)
+    chunks = parser.get_nodes(documents)
     
     print(f"✓ Parsed document into {len(chunks)} chunks\n")
     

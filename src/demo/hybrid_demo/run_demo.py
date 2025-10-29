@@ -30,13 +30,13 @@ from fetchcraft import (
     OpenAIEmbeddings,
     QdrantVectorStore,
     VectorIndex,
-    TextFileDocumentParser,
-    HierarchicalChunkingStrategy,
-    CharacterChunkingStrategy,
     Chunk,
+    SymNode,
     ReActAgent,
     RetrieverTool
 )
+from fetchcraft.source import FilesystemDocumentSource
+from fetchcraft.node_parser import HierarchicalNodeParser, SimpleNodeParser
 
 
 # Configuration
@@ -109,43 +109,53 @@ async def load_and_index_documents(
     if not documents_path.exists():
         raise FileNotFoundError(f"Documents path does not exist: {documents_path}")
     
-    # Create chunking strategy
+    # Step 1: Load documents from filesystem
+    print(f"   Loading documents...")
+    source = FilesystemDocumentSource.from_directory(
+        directory=documents_path,
+        pattern="*.txt",
+        recursive=True
+    )
+    
+    documents = []
+    async for doc in source.get_documents():
+        documents.append(doc)
+    
+    if not documents:
+        print("⚠️  No text files found in the specified directory!")
+        return 0
+    
+    print(f"  ✓ Loaded {len(documents)} documents")
+    
+    # Step 2: Parse documents into nodes
     if use_hierarchical:
-        print(f"   Using HierarchicalChunkingStrategy")
+        print(f"   Using HierarchicalNodeParser")
         print(f"     - Parent chunks: {chunk_size} chars")
         print(f"     - Child chunks: {child_sizes}")
         print(f"     - Recursive splitting: paragraph → line → sentence → word")
-        chunker = HierarchicalChunkingStrategy(
+        parser = HierarchicalNodeParser(
             chunk_size=chunk_size,
             overlap=overlap,
-            child_chunks=child_sizes,
+            child_sizes=child_sizes,
             child_overlap=50
         )
     else:
-        print(f"   Using CharacterChunkingStrategy ({chunk_size} chars)")
-        chunker = CharacterChunkingStrategy(
+        print(f"   Using SimpleNodeParser ({chunk_size} chars)")
+        parser = SimpleNodeParser(
             chunk_size=chunk_size,
             overlap=overlap
         )
     
-    # Create parser with the chunking strategy
-    parser = TextFileDocumentParser(chunker=chunker)
+    all_nodes = parser.get_nodes(documents)
     
-    results = await parser.parse_directory(
-        directory_path=documents_path,
-        pattern="*",
-        recursive=True
-    )
-    
-    if not results:
-        print("⚠️  No text files found in the specified directory!")
-        return 0
-    
-    # Flatten all chunks from all files
-    all_chunks: List[Chunk] = []
-    for file_path, chunks in results.items():
-        print(f"  ✓ Loaded {len(chunks)} chunks from {Path(file_path).name}")
-        all_chunks.extend(chunks)
+    # For hierarchical, index only the SymNodes (children)
+    # For simple, index all chunks
+    if use_hierarchical:
+        all_chunks = [n for n in all_nodes if isinstance(n, SymNode)]
+        print(f"  ✓ Created {len(all_nodes)} total nodes ({len(all_chunks)} SymNodes for indexing)")
+    else:
+        all_chunks = all_nodes
+        print(f"  ✓ Created {len(all_chunks)} chunks")
     
     print(f"\n🔄 Indexing {len(all_chunks)} chunks with HYBRID SEARCH...")
     print(f"   Each chunk will have:")

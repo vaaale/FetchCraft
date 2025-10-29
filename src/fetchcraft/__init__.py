@@ -13,8 +13,6 @@ from .vector_store.chroma_store import ChromaVectorStore, ChromaConfig
 from .document_store.base import DocumentStore
 from .document_store.mongodb_store import MongoDBDocumentStore, MongoDBConfig
 from .node import Node, DocumentNode, Chunk, SymNode, NodeWithScore
-from .parser import DocumentParser, TextFileDocumentParser
-from .chunking import ChunkingStrategy, CharacterChunkingStrategy, HierarchicalChunkingStrategy
 from .embeddings import Embeddings, OpenAIEmbeddings
 from .retriever import Retriever, VectorIndexRetriever
 from .agents import BaseAgent, ReActAgent, RetrieverTool, FileSearchTool, FileSearchResult
@@ -35,11 +33,6 @@ __all__ = [
     'Chunk',
     'SymNode',
     'NodeWithScore',
-    'DocumentParser',
-    'TextFileDocumentParser',
-    'ChunkingStrategy',
-    'CharacterChunkingStrategy',
-    'HierarchicalChunkingStrategy',
     'Embeddings',
     'OpenAIEmbeddings',
     'Retriever',

@@ -37,13 +37,13 @@ from fetchcraft import (
     OpenAIEmbeddings,
     QdrantVectorStore,
     VectorIndex,
-    TextFileDocumentParser,
-    HierarchicalChunkingStrategy,
-    CharacterChunkingStrategy,
     Chunk,
+    SymNode,
     ReActAgent,
     RetrieverTool
 )
+from fetchcraft.source import FilesystemDocumentSource
+from fetchcraft.node_parser import HierarchicalNodeParser, SimpleNodeParser
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -102,38 +102,50 @@ async def load_and_index_documents(
     if not documents_path.exists():
         raise FileNotFoundError(f"Documents path does not exist: {documents_path}")
     
-    # Create chunking strategy
+    # Step 1: Load documents from filesystem
+    logger.info("Loading documents...")
+    source = FilesystemDocumentSource.from_directory(
+        directory=documents_path,
+        pattern="*.txt",
+        recursive=True
+    )
+    
+    documents = []
+    async for doc in source.get_documents():
+        documents.append(doc)
+    
+    if not documents:
+        logger.warning("No text files found in the specified directory!")
+        return 0
+    
+    logger.info(f"Loaded {len(documents)} documents")
+    
+    # Step 2: Parse documents into nodes
     if use_hierarchical:
-        chunker = HierarchicalChunkingStrategy(
+        logger.info(f"Using HierarchicalNodeParser (parent={chunk_size}, children={child_sizes})")
+        parser = HierarchicalNodeParser(
             chunk_size=chunk_size,
             overlap=overlap,
-            child_chunks=child_sizes,
+            child_sizes=child_sizes,
             child_overlap=50
         )
     else:
-        chunker = CharacterChunkingStrategy(
+        logger.info(f"Using SimpleNodeParser (chunk_size={chunk_size})")
+        parser = SimpleNodeParser(
             chunk_size=chunk_size,
             overlap=overlap
         )
     
-    # Create parser
-    parser = TextFileDocumentParser(chunker=chunker)
+    all_nodes = parser.get_nodes(documents)
     
-    results = await parser.parse_directory(
-        directory_path=documents_path,
-        pattern="*",
-        recursive=True
-    )
-    
-    if not results:
-        logger.warning("No text files found in the specified directory!")
-        return 0
-    
-    # Flatten all chunks
-    all_chunks: List[Chunk] = []
-    for file_path, chunks in results.items():
-        logger.info(f"Loaded {len(chunks)} chunks from {Path(file_path).name}")
-        all_chunks.extend(chunks)
+    # For hierarchical, index only the SymNodes (children)
+    # For simple, index all chunks
+    if use_hierarchical:
+        all_chunks = [n for n in all_nodes if isinstance(n, SymNode)]
+        logger.info(f"Created {len(all_nodes)} total nodes ({len(all_chunks)} SymNodes for indexing)")
+    else:
+        all_chunks = all_nodes
+        logger.info(f"Created {len(all_chunks)} chunks")
     
     logger.info(f"Indexing {len(all_chunks)} chunks with hybrid search...")
     await vector_index.add_documents(all_chunks, show_progress=True)

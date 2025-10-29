@@ -181,19 +181,14 @@ class MongoDBDocumentStore(DocumentStore[D]):
             doc_dicts.append(doc_dict)
         
         # Bulk insert (replace if exists)
-        from pymongo import ReplaceOne
-        
-        operations = [
-            ReplaceOne(
+        # Use individual update_one operations for mongomock compatibility
+        # bulk_write with UpdateOne/ReplaceOne has issues with mongomock and newer pymongo
+        for doc_dict in doc_dicts:
+            await self.collection.update_one(
                 {'id': doc_dict['id']},
-                doc_dict,
+                {'$set': doc_dict},
                 upsert=True
             )
-            for doc_dict in doc_dicts
-        ]
-        
-        if operations:
-            await self.collection.bulk_write(operations)
         
         return [doc.id for doc in documents]
     

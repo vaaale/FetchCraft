@@ -25,10 +25,12 @@ from fetchcraft import (
     ChromaConfig,
     VectorIndex,
     OpenAIEmbeddings,
-    TextFileDocumentParser,
-    CharacterChunkingStrategy,
-    HierarchicalChunkingStrategy,
+    DocumentNode,
+    Chunk,
+    SymNode
 )
+from fetchcraft.source import FilesystemDocumentSource
+from fetchcraft.node_parser import SimpleNodeParser, HierarchicalNodeParser
 
 
 async def example_basic_usage():
@@ -105,15 +107,16 @@ in valuable ways.
     }
     
     # Parse and chunk documents
-    chunker = CharacterChunkingStrategy(chunk_size=200, overlap=20)
-    parser = TextFileDocumentParser(chunker=chunker)
+    parser = SimpleNodeParser(chunk_size=200, overlap=20)
     
     all_chunks = []
     for filename, content in sample_documents.items():
-        chunks = parser.parse(
+        # Create document node
+        doc = DocumentNode.from_text(
             text=content.strip(),
             metadata={"filename": filename, "source": "demo"}
         )
+        chunks = parser.get_nodes([doc])
         all_chunks.extend(chunks)
         print(f"   ✓ {filename}: {len(chunks)} chunks")
     
@@ -245,14 +248,12 @@ async def example_hierarchical_chunking():
     # Use hierarchical chunking
     print("\n2. Creating hierarchical chunks...")
     
-    chunker = HierarchicalChunkingStrategy(
+    parser = HierarchicalNodeParser(
         chunk_size=500,
         overlap=50,
-        child_chunks=[150, 75],
+        child_sizes=[150, 75],
         child_overlap=15
     )
-    
-    parser = TextFileDocumentParser(chunker=chunker)
     
     sample_text = """
 Artificial intelligence (AI) is transforming the world. Machine learning, 
@@ -270,7 +271,9 @@ development and deployment are becoming increasingly important as these systems
 become more powerful and widespread.
 """
     
-    nodes = parser.parse(sample_text.strip(), metadata={"source": "ai_overview"})
+    # Create document node
+    doc = DocumentNode.from_text(text=sample_text.strip(), metadata={"source": "ai_overview"})
+    nodes = parser.get_nodes([doc])
     
     parents = [n for n in nodes if not hasattr(n, 'is_symbolic') or not n.is_symbolic]
     children = [n for n in nodes if hasattr(n, 'is_symbolic') and n.is_symbolic]
@@ -326,10 +329,9 @@ async def example_comparison():
         base_url=os.getenv("OPENAI_BASE_URL", None)
     )
     
-    parser = TextFileDocumentParser(
-        chunker=CharacterChunkingStrategy(chunk_size=100)
-    )
-    chunks = parser.parse(sample_text, metadata={"test": "distance_comparison"})
+    parser = SimpleNodeParser(chunk_size=100)
+    doc = DocumentNode.from_text(text=sample_text, metadata={"test": "distance_comparison"})
+    chunks = parser.get_nodes([doc])
     
     # Test different distance metrics
     distance_metrics = ["cosine", "l2", "ip"]

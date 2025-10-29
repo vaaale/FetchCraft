@@ -20,6 +20,7 @@ dependencies = [
     "fsspec>=2025.9.0",
     "gradio>=5.49.1",
     "motor>=3.7.1",
+    "mongomock-motor>=0.0.36",
 ]
 
 [project.optional-dependencies]

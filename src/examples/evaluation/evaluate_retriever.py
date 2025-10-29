@@ -40,11 +40,11 @@ from fetchcraft import (
     DatasetGenerator,
     RetrieverEvaluator,
     EvaluationDataset,
-    TextFileDocumentParser,
-    HierarchicalChunkingStrategy,
-    CharacterChunkingStrategy,
     Chunk,
+    SymNode
 )
+from fetchcraft.source import FilesystemDocumentSource
+from fetchcraft.node_parser import HierarchicalNodeParser, SimpleNodeParser
 
 
 # Configuration
@@ -104,71 +104,53 @@ async def load_and_index_documents(
     if not documents_path.exists():
         raise FileNotFoundError(f"Documents path does not exist: {documents_path}")
     
-    # Create chunking strategy
-    if use_hierarchical:
-        chunker = HierarchicalChunkingStrategy(
-            chunk_size=chunk_size,
-            overlap=overlap,
-            child_chunks=child_sizes,
-            child_overlap=50
-        )
-        print(f"   Using hierarchical chunking: {chunk_size} -> {child_sizes}")
-    else:
-        chunker = CharacterChunkingStrategy(
-            chunk_size=chunk_size,
-            overlap=overlap
-        )
-        print(f"   Using character chunking: {chunk_size}")
-    
-    # Create parser
-    parser = TextFileDocumentParser(chunker=chunker)
-    
-    # Parse documents
-    results = await parser.parse_directory(
-        directory_path=documents_path,
-        pattern="*",
+    # Step 1: Load documents from filesystem
+    print(f"   Loading documents...")
+    source = FilesystemDocumentSource.from_directory(
+        directory=documents_path,
+        pattern="*.txt",
         recursive=True
     )
     
-    if not results:
+    documents = []
+    async for doc in source.get_documents():
+        documents.append(doc)
+    
+    if not documents:
         print("   ⚠️  No text files found in the specified directory!")
         return 0
     
-    # Separate document nodes from chunks
-    # The parser returns [DocumentNode, chunk1, chunk2, ...]
-    all_chunks: list[Chunk] = []
-    document_nodes = []
+    print(f"   ✓ Loaded {len(documents)} documents")
     
-    for file_path, nodes in results.items():
-        if not nodes:
-            continue
-        
-        # First element is the DocumentNode
-        doc_node = nodes[0]
-        chunks = nodes[1:]  # Rest are chunks
-        
-        print(f"   Loaded {len(chunks)} chunks from {Path(file_path).name}")
-        
-        # Update document node with children IDs
-        # For hierarchical chunking, find top-level chunks (those not referenced as parents by others)
-        # Collect all chunk IDs and all parent IDs
-        chunk_ids = {c.id for c in chunks}
-        parent_ids_in_chunks = {c.parent_id for c in chunks if c.parent_id and c.parent_id != doc_node.id}
-        
-        # Top-level chunks are those whose IDs are NOT in parent_ids_in_chunks
-        # These are the largest chunks that have children but are not children themselves
-        top_level_chunks = [c for c in chunks if c.id not in parent_ids_in_chunks]
-        
-        # Set their parent_id to doc_node and update doc_node's children_ids
-        for chunk in top_level_chunks:
-            chunk.parent_id = doc_node.id
-        
-        doc_node.children_ids = [c.id for c in top_level_chunks]
-        print(f"   ✓ Document has {len(doc_node.children_ids)} top-level children")
-        
-        # Add to collections
-        document_nodes.append(doc_node)
-        all_chunks.extend(chunks)
+    # Step 2: Parse documents into nodes
+    if use_hierarchical:
+        print(f"   Using hierarchical chunking: {chunk_size} -> {child_sizes}")
+        parser = HierarchicalNodeParser(
+            chunk_size=chunk_size,
+            overlap=overlap,
+            child_sizes=child_sizes,
+            child_overlap=50
+        )
+    else:
+        print(f"   Using simple chunking: {chunk_size}")
+        parser = SimpleNodeParser(
+            chunk_size=chunk_size,
+            overlap=overlap
+        )
+    
+    all_nodes = parser.get_nodes(documents)
+    
+    # For hierarchical, index only the SymNodes (children)
+    # For simple, index all chunks
+    if use_hierarchical:
+        all_chunks = [n for n in all_nodes if isinstance(n, SymNode)]
+        print(f"   ✓ Created {len(all_nodes)} total nodes ({len(all_chunks)} SymNodes for indexing)")
+    else:
+        all_chunks = all_nodes
+        print(f"   ✓ Created {len(all_chunks)} chunks")
+    
+    # Keep reference to original documents
+    document_nodes = documents
     
     # Store document nodes first (they are parent nodes with children_ids populated)
     print(f"   Storing {len(document_nodes)} documents to document store...")

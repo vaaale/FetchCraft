@@ -91,9 +91,39 @@ class TestDatasetGenerator:
     @pytest.fixture
     def mock_client(self):
         """Mock OpenAI client."""
+        from openai.types.chat import ChatCompletion, ChatCompletionMessage
+        from openai.types.chat.chat_completion import Choice
+        from openai.types.chat.chat_completion_message_tool_call import ChatCompletionMessageToolCall, Function
+        from openai.types.completion_usage import CompletionUsage
+        
         client = AsyncMock()
-        response = MagicMock()
-        response.choices[0].message.content = "Question 1?\nQuestion 2?\nQuestion 3?"
+        # Create a proper ChatCompletion response with tool calls
+        tool_call = ChatCompletionMessageToolCall(
+            id="call_123",
+            type="function",
+            function=Function(
+                name="final_result",
+                arguments='{"questions": ["Question 1?", "Question 2?", "Question 3?"]}'
+            )
+        )
+        message = ChatCompletionMessage(
+            role="assistant",
+            content=None,
+            tool_calls=[tool_call]
+        )
+        choice = Choice(
+            index=0,
+            message=message,
+            finish_reason="tool_calls"
+        )
+        response = ChatCompletion(
+            id="chatcmpl-123",
+            model="gpt-4",
+            object="chat.completion",
+            created=1234567890,
+            choices=[choice],
+            usage=CompletionUsage(prompt_tokens=10, completion_tokens=20, total_tokens=30)
+        )
         client.chat.completions.create.return_value = response
         return client
     
@@ -144,12 +174,14 @@ class TestDatasetGenerator:
         mock_doc_store,
         mock_vector_store
     ):
-        generator = DatasetGenerator(
-            client=mock_client,
-            document_store=mock_doc_store,
-            vector_store=mock_vector_store,
-            model="gpt-4"
+        # Create model with mock client
+        model = OpenAIChatModel(
+            "gpt-4",
+            provider=OpenAIProvider(
+                openai_client=mock_client
+            )
         )
+        generator = DatasetGenerator(model=model)
         
         node = Chunk(id="test", text="Test text" * 10)
         questions = await generator._generate_questions_for_node(node, 3)
@@ -187,14 +219,18 @@ class TestDatasetGenerator:
         mock_doc_store,
         mock_vector_store
     ):
-        generator = DatasetGenerator(
-            client=mock_client,
-            document_store=mock_doc_store,
-            vector_store=mock_vector_store
+        # Create model with mock client
+        model = OpenAIChatModel(
+            "gpt-4",
+            provider=OpenAIProvider(
+                openai_client=mock_client
+            )
         )
+        generator = DatasetGenerator(model=model)
         
         dataset = await generator.generate_from_specific_nodes(
             node_ids=["node-1"],
+            vector_store=mock_vector_store,
             questions_per_node=2,
             show_progress=False
         )

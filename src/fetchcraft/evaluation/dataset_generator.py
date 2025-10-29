@@ -310,7 +310,9 @@ class DatasetGenerator(BaseModel):
     async def generate_from_specific_nodes(
             self,
             node_ids: List[str],
+            vector_store: VectorStore,
             questions_per_node: int = 3,
+            index_id: Optional[str] = None,
             show_progress: bool = True
     ) -> EvaluationDataset:
         """
@@ -318,7 +320,9 @@ class DatasetGenerator(BaseModel):
         
         Args:
             node_ids: List of node IDs to generate questions for
+            vector_store: VectorStore to retrieve nodes from
             questions_per_node: Number of questions per node
+            index_id: Optional index identifier
             show_progress: Whether to show progress
             
         Returns:
@@ -331,7 +335,7 @@ class DatasetGenerator(BaseModel):
 
         for node_id in node_iterator:
             # Get node from vector store
-            node = await self.vector_store.get_document(node_id, index_id=self.index_id)
+            node = await vector_store.get_document(node_id, index_id=index_id)
             if not node:
                 logger.warning(f"Node {node_id} not found")
                 continue
