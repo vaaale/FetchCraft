@@ -56,7 +56,7 @@ DOCUMENTS_PATH = Path(os.getenv("DOCUMENTS_PATH", "Documents"))
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "bge-m3")
 EMBEDDING_API_KEY = os.getenv("OPENAI_API_KEY", "sk-321")
 EMBEDDING_BASE_URL = os.getenv("OPENAI_BASE_URL", None)
-INDEX_ID = "chatbot-index-001"
+INDEX_ID = "docs-index"
 
 # LLM configuration
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4-turbo")
@@ -227,7 +227,7 @@ async def setup_rag_system():
 
 async def chat_async(
     message: str,
-    history: List[List[str]],
+    history: List[Dict[str, str]],
     session_id: str
 ) -> Tuple[str, List[Dict[str, Any]]]:
     """
@@ -235,7 +235,7 @@ async def chat_async(
     
     Args:
         message: User's message
-        history: Chat history
+        history: Chat history (messages format with role/content)
         session_id: Session identifier
         
     Returns:
@@ -309,13 +309,13 @@ def format_citations_inline(citations: List[Dict[str, Any]]) -> str:
     return result
 
 
-def chat_wrapper(message: str, history: List[List[str]], session_id: str):
+def chat_wrapper(message: str, history: List[Dict[str, str]], session_id: str):
     """
     Synchronous wrapper for async chat function.
     
     Args:
         message: User's message
-        history: Chat history
+        history: Chat history (messages format with role/content)
         session_id: Session identifier
         
     Returns:
@@ -328,8 +328,9 @@ def chat_wrapper(message: str, history: List[List[str]], session_id: str):
     citations_inline = format_citations_inline(citations)
     response_with_citations = response_text + citations_inline
     
-    # Update history with response including citations
-    history.append([message, response_with_citations])
+    # Update history with response in messages format
+    history.append({"role": "user", "content": message})
+    history.append({"role": "assistant", "content": response_with_citations})
     
     # Also format citations for side panel (keep for compatibility)
     citations_html = format_citations_html(citations)
@@ -455,7 +456,8 @@ def create_gradio_interface():
                     elem_id="chatbot",
                     height=600,
                     show_copy_button=True,
-                    sanitize_html=False  # Allow HTML rendering in messages
+                    sanitize_html=False,  # Allow HTML rendering in messages
+                    type='messages'  # Use new messages format (openai-style)
                 )
                 
                 with gr.Row():

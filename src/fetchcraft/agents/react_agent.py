@@ -1,9 +1,6 @@
 """
 ReAct agent implementation using pydantic-ai.
 """
-import nest_asyncio
-
-nest_asyncio.apply()
 from datetime import datetime
 from typing import Optional, Any, List, Union, Dict, AsyncIterable
 
