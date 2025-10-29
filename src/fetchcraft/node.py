@@ -1,8 +1,16 @@
+from enum import Enum
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, PrivateAttr, computed_field
 from uuid import uuid4
 import hashlib
 import json
+
+# Node type enum
+class NodeType(Enum):
+    DOCUMENT = "DocumentNode"
+    NODE = "Node"
+    CHUNK = "Chunk"
+    SYMNODE = "SymNode"
 
 
 class Node(BaseModel):
