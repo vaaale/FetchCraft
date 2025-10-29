@@ -12,6 +12,11 @@ import asyncio
 import os
 from pathlib import Path
 
+from fetchcraft.embeddings import OpenAIEmbeddings
+from fetchcraft.index.vector_index import VectorIndex
+from fetchcraft.node import DocumentNode
+from fetchcraft.vector_store import ChromaVectorStore, ChromaConfig
+
 # Import chromadb (will guide user if not installed)
 try:
     import chromadb
@@ -19,16 +24,6 @@ try:
 except ImportError:
     CHROMADB_AVAILABLE = False
     print("⚠️  ChromaDB is not installed. Install with: pip install chromadb")
-
-from fetchcraft import (
-    ChromaVectorStore,
-    ChromaConfig,
-    VectorIndex,
-    OpenAIEmbeddings,
-    DocumentNode,
-    Chunk,
-    SymNode
-)
 from fetchcraft.source import FilesystemDocumentSource
 from fetchcraft.node_parser import SimpleNodeParser, HierarchicalNodeParser
 

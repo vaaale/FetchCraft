@@ -5,8 +5,8 @@ Tests for FileSearchTool.
 import pytest
 import tempfile
 from pathlib import Path
-from fetchcraft import FileSearchTool, FileSearchResult
 
+from fetchcraft.agents import FileSearchTool, FileSearchResult
 
 # Check if fsspec is available
 try:

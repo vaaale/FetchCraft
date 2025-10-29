@@ -11,13 +11,11 @@ This example shows how to:
 import asyncio
 from qdrant_client import QdrantClient
 
-from fetchcraft import (
-    OpenAIEmbeddings,
-    QdrantVectorStore,
-    VectorIndex,
-    Node,
-    VectorIndexRetriever
-)
+from fetchcraft.embeddings import OpenAIEmbeddings
+from fetchcraft.index.vector_index import VectorIndex
+from fetchcraft.node import Node, Chunk
+from fetchcraft.retriever import VectorIndexRetriever
+from fetchcraft.vector_store import QdrantVectorStore
 
 
 async def basic_retriever_example():
@@ -168,8 +166,6 @@ async def retriever_with_symnode_example():
     print("\n" + "="*60)
     print("Retriever with SymNode Example")
     print("="*60 + "\n")
-    
-    from fetchcraft import Chunk, SymNode
     
     # Setup embeddings
     embeddings = OpenAIEmbeddings(

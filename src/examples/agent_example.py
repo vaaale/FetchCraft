@@ -18,15 +18,13 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from qdrant_client import QdrantClient
 
-from fetchcraft import (
-    OpenAIEmbeddings,
-    QdrantVectorStore,
-    VectorIndex,
-    Node,
-    ReActAgent,
-    RetrieverTool
-)
 import logging
+
+from fetchcraft.agents import RetrieverTool, ReActAgent
+from fetchcraft.embeddings import OpenAIEmbeddings
+from fetchcraft.index.vector_index import VectorIndex
+from fetchcraft.node import Node
+from fetchcraft.vector_store import QdrantVectorStore
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

@@ -12,12 +12,10 @@ import asyncio
 import os
 from qdrant_client import QdrantClient
 
-from fetchcraft import (
-    QdrantVectorStore,
-    VectorIndex,
-    OpenAIEmbeddings,
-    Node
-)
+from fetchcraft.embeddings import OpenAIEmbeddings
+from fetchcraft.index.vector_index import VectorIndex
+from fetchcraft.node import Node
+from fetchcraft.vector_store import QdrantVectorStore
 
 
 async def basic_hybrid_search_example():

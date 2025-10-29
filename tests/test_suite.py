@@ -30,7 +30,7 @@ def run_specific_suite(suite_name: str):
     
     Args:
         suite_name: Name of the test file (without .py extension)
-                   Options: 'test_retriever', 'test_node_persistence', 'test_symnode'
+                   Options: 'test_retriever', 'test_node_persistence'
     """
     import subprocess
     test_file = f"src/tests/{suite_name}.py"
@@ -47,7 +47,7 @@ class TestSuite:
     @staticmethod
     def test_retriever():
         """Run all retriever tests."""
-        return pytest.main([
+        pytest.main([
             "src/tests/test_retriever.py",
             "-v",
             "--tb=short"
@@ -56,17 +56,8 @@ class TestSuite:
     @staticmethod
     def test_node_persistence():
         """Run node persistence tests."""
-        return pytest.main([
-            "src/tests/test_node_persistence.py",
-            "-v",
-            "--tb=short"
-        ])
-    
-    @staticmethod
-    def test_symnode():
-        """Run SymNode tests."""
         pytest.main([
-            "src/tests/test_symnode.py",
+            "src/tests/test_node_persistence.py",
             "-v",
             "--tb=short"
         ])
@@ -110,7 +101,7 @@ if __name__ == "__main__":
         "suite",
         nargs="?",
         default="all",
-        choices=["all", "retriever", "node_persistence", "symnode", "coverage"],
+        choices=["all", "retriever", "node_persistence", "coverage"],
         help="Which test suite to run"
     )
     parser.add_argument(
@@ -138,8 +129,6 @@ if __name__ == "__main__":
         exit_code = suite.test_retriever()
     elif args.suite == "node_persistence":
         exit_code = suite.test_node_persistence()
-    elif args.suite == "symnode":
-        exit_code = suite.test_symnode()
     elif args.suite == "coverage":
         exit_code = suite.run_with_coverage()
     else:

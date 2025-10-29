@@ -12,14 +12,10 @@ import asyncio
 from typing import List
 from qdrant_client import QdrantClient
 
-from fetchcraft import (
-    OpenAIEmbeddings,
-    QdrantVectorStore,
-    VectorIndex,
-    Chunk,
-    SymNode,
-    Node
-)
+from fetchcraft.embeddings import OpenAIEmbeddings
+from fetchcraft.index.vector_index import VectorIndex
+from fetchcraft.node import Chunk, SymNode, Node
+from fetchcraft.vector_store import QdrantVectorStore
 
 
 async def basic_symnode_example():

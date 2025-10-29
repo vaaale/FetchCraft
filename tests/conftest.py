@@ -5,12 +5,10 @@ Pytest configuration and shared fixtures for RAG Framework tests.
 import pytest
 import asyncio
 from qdrant_client import QdrantClient
-from fetchcraft import (
-    Node,
-    Chunk,
-    QdrantVectorStore,
-    VectorIndex
-)
+
+from fetchcraft.index.vector_index import VectorIndex
+from fetchcraft.node import Node, Chunk
+from fetchcraft.vector_store import QdrantVectorStore
 
 
 class MockEmbeddings:

@@ -8,7 +8,10 @@ from typing import List, Any
 from pydantic import PrivateAttr
 from qdrant_client import QdrantClient
 
-from fetchcraft import VectorIndex, QdrantVectorStore, Node, Chunk, Embeddings
+from fetchcraft.embeddings import Embeddings
+from fetchcraft.index.vector_index import VectorIndex
+from fetchcraft.node import Node
+from fetchcraft.vector_store import QdrantVectorStore
 
 
 class MockEmbeddings(Embeddings):

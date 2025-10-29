@@ -26,18 +26,13 @@ from typing import List, Any
 from qdrant_client import QdrantClient
 from pydantic_ai import Tool
 
-from fetchcraft import (
-    OpenAIEmbeddings,
-    QdrantVectorStore,
-    VectorIndex,
-    Chunk,
-    SymNode,
-    ReActAgent,
-    RetrieverTool
-)
+from fetchcraft.agents import RetrieverTool, ReActAgent
+from fetchcraft.embeddings import OpenAIEmbeddings
+from fetchcraft.index.vector_index import VectorIndex
+from fetchcraft.node import SymNode
 from fetchcraft.source import FilesystemDocumentSource
 from fetchcraft.node_parser import HierarchicalNodeParser, SimpleNodeParser
-
+from fetchcraft.vector_store import QdrantVectorStore
 
 # Configuration
 QDRANT_HOST = "localhost"

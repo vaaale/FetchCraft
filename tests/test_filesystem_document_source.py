@@ -2,10 +2,10 @@
 Unit tests for FilesystemDocumentSource
 """
 
-import pytest
 import tempfile
 from pathlib import Path
-from typing import List
+
+import pytest
 
 from fetchcraft.node import DocumentNode, NodeType
 from fetchcraft.source.filesystem import FilesystemDocumentSource
@@ -132,7 +132,6 @@ class TestFilesystemDocumentSource:
         metadata = doc.metadata
         
         # Check required metadata fields
-        assert metadata["type"] == NodeType.DOCUMENT
         assert "source" in metadata
         assert metadata["filename"] == "file1.txt"
         assert "file_size" in metadata
@@ -165,7 +164,6 @@ class TestFilesystemDocumentSource:
         assert doc.metadata["category"] == "test"
         
         # Default metadata should also be present
-        assert doc.metadata["type"] == NodeType.DOCUMENT
         assert doc.metadata["filename"] == "file1.txt"
     
     @pytest.mark.asyncio

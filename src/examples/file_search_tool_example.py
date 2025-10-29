@@ -7,7 +7,8 @@ controlled filesystem access for searching files.
 
 import asyncio
 from pathlib import Path
-from fetchcraft import FileSearchTool
+
+from fetchcraft.agents import FileSearchTool
 
 try:
     from pydantic_ai import Agent

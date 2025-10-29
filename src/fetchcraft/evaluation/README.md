@@ -14,14 +14,24 @@ This module provides:
 
 ```python
 from openai import AsyncOpenAI
-from fetchcraft import (
+from fetchcraft.evaluation import (
     DatasetGenerator,
     RetrieverEvaluator,
     EvaluationDataset
 )
+from fetchcraft.document_store import MongoDBDocumentStore
+from fetchcraft.vector_store import QdrantVectorStore
 
 # 1. Generate dataset
 client = AsyncOpenAI(api_key="...")
+doc_store = MongoDBDocumentStore(
+    client=client,
+    database="fetchcraft"
+)
+vector_store = QdrantVectorStore(
+    client=client,
+    collection_name="fetchcraft"
+)
 generator = DatasetGenerator(
     client=client,
     document_store=doc_store,

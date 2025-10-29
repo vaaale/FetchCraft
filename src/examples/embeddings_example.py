@@ -6,15 +6,12 @@ import asyncio
 from pathlib import Path
 from qdrant_client import QdrantClient
 
-from fetchcraft import (
-    OpenAIEmbeddings,
-    QdrantVectorStore,
-    VectorIndex,
-    Node,
-    Chunk
-)
+from fetchcraft.embeddings import OpenAIEmbeddings
+from fetchcraft.index.vector_index import VectorIndex
+from fetchcraft.node import Node, Chunk
 from fetchcraft.source import FilesystemDocumentSource
 from fetchcraft.node_parser import SimpleNodeParser
+from fetchcraft.vector_store import QdrantVectorStore
 
 
 async def basic_embeddings_example():

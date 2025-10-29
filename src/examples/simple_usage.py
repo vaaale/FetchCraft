@@ -7,12 +7,10 @@ This example shows how easy it is to build a RAG system with the new API.
 import asyncio
 from qdrant_client import QdrantClient
 
-from fetchcraft import (
-    OpenAIEmbeddings,
-    QdrantVectorStore,
-    VectorIndex,
-    Node
-)
+from fetchcraft.embeddings import OpenAIEmbeddings
+from fetchcraft.index.vector_index import VectorIndex
+from fetchcraft.node import Node
+from fetchcraft.vector_store import QdrantVectorStore
 
 
 async def main():

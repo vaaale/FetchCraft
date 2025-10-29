@@ -12,15 +12,12 @@ from pathlib import Path
 import tempfile
 from qdrant_client import QdrantClient
 
-from fetchcraft import (
-    OpenAIEmbeddings,
-    QdrantVectorStore,
-    VectorIndex,
-    Chunk,
-    SymNode
-)
+from fetchcraft.embeddings import OpenAIEmbeddings
+from fetchcraft.index.vector_index import VectorIndex
+from fetchcraft.node import Chunk, SymNode
 from fetchcraft.source import FilesystemDocumentSource
 from fetchcraft.node_parser import SimpleNodeParser, HierarchicalNodeParser
+from fetchcraft.vector_store import QdrantVectorStore
 
 
 async def example_simple_parser():

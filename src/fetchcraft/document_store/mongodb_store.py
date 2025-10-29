@@ -37,7 +37,8 @@ class MongoDBDocumentStore(DocumentStore[Node]):
     
     Example:
         ```python
-        from fetchcraft import MongoDBDocumentStore, DocumentNode
+        from fetchcraft.document_store import MongoDBDocumentStore
+        from fetchcraft.node import DocumentNode
         
         # Create store
         store = MongoDBDocumentStore(
