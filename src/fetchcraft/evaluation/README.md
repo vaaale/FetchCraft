@@ -13,7 +13,10 @@ This module provides:
 ## Quick Example
 
 ```python
-from openai import AsyncOpenAI
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
+from qdrant_client import QdrantClient
+
 from fetchcraft.evaluation import (
     DatasetGenerator,
     RetrieverEvaluator,
@@ -21,19 +24,33 @@ from fetchcraft.evaluation import (
 )
 from fetchcraft.document_store import MongoDBDocumentStore
 from fetchcraft.vector_store import QdrantVectorStore
+from fetchcraft.embeddings import OpenAIEmbeddings
+from fetchcraft.index.vector_index import VectorIndex
 
-# 1. Generate dataset
-client = AsyncOpenAI(api_key="...")
-doc_store = MongoDBDocumentStore(
-    client=client,
-    database="fetchcraft"
-)
+# 1. Setup stores and index
+embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+qdrant_client = QdrantClient(host="localhost", port=6333)
+
 vector_store = QdrantVectorStore(
-    client=client,
-    collection_name="fetchcraft"
+    client=qdrant_client,
+    collection_name="my_collection",
+    embeddings=embeddings
 )
+
+doc_store = MongoDBDocumentStore(
+    connection_string="mongodb://localhost:27017",
+    database_name="fetchcraft",
+    collection_name="documents"
+)
+
+# 2. Generate dataset
+model = OpenAIChatModel(
+    model_name="gpt-4-turbo",
+    provider=OpenAIProvider(api_key="...")
+)
+
 generator = DatasetGenerator(
-    client=client,
+    model=model,
     document_store=doc_store,
     vector_store=vector_store
 )
@@ -44,8 +61,11 @@ dataset = await generator.generate_dataset(
 )
 dataset.save("eval_dataset.json")
 
-# 2. Evaluate retriever
-evaluator = RetrieverEvaluator(retriever=my_retriever)
+# 3. Evaluate retriever
+vector_index = VectorIndex(vector_store=vector_store)
+retriever = vector_index.as_retriever(top_k=5)
+
+evaluator = RetrieverEvaluator(retriever=retriever)
 metrics = await evaluator.evaluate(dataset)
 print(metrics)
 ```
@@ -62,11 +82,10 @@ Generates question-answer pairs from indexed documents.
 - `_generate_questions_for_node()`: LLM-based question generation
 
 **Parameters:**
-- `client`: OpenAI AsyncClient for question generation
-- `document_store`: Source of documents
-- `vector_store`: Source of nodes/chunks
-- `model`: LLM model (default: "gpt-4")
-- `index_id`: Optional index identifier
+- `model`: Pydantic AI model (OpenAIChatModel) for question generation
+- `document_store`: MongoDBDocumentStore for accessing full documents
+- `vector_store`: QdrantVectorStore or ChromaVectorStore for accessing nodes/chunks
+- `index_id`: Optional index identifier for filtering nodes
 
 ### RetrieverEvaluator
 
@@ -98,9 +117,11 @@ Container for question-answer pairs with persistence.
 
 **Structure:**
 ```python
+from fetchcraft.evaluation import EvaluationDataset, QuestionContextPair
+
 dataset = EvaluationDataset(
     qa_pairs=[
-        QuestionAnswerPair(
+        QuestionContextPair(
             question="What is X?",
             node_id="node-123",
             context="X is...",
@@ -111,7 +132,7 @@ dataset = EvaluationDataset(
     metadata={
         "num_documents": 10,
         "total_pairs": 30,
-        "model": "gpt-4"
+        "model": "gpt-4-turbo"
     }
 )
 ```
@@ -145,6 +166,23 @@ Proportion of retrieved documents that are relevant.
 Generate once, use multiple times for different retriever configurations:
 
 ```python
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
+from fetchcraft.evaluation import DatasetGenerator
+
+# Initialize model for question generation
+model = OpenAIChatModel(
+    model_name="gpt-4-turbo",
+    provider=OpenAIProvider(api_key="your-api-key")
+)
+
+# Create generator
+generator = DatasetGenerator(
+    model=model,
+    document_store=doc_store,
+    vector_store=vector_store
+)
+
 # Generate comprehensive dataset
 dataset = await generator.generate_dataset(
     num_documents=50,
@@ -162,9 +200,18 @@ dataset.save("my_eval_dataset.json")
 Establish baseline performance:
 
 ```python
+from fetchcraft.evaluation import RetrieverEvaluator
+from fetchcraft.index.vector_index import VectorIndex
+
+# Create baseline retriever
+baseline_index = VectorIndex(vector_store=vector_store)
+baseline_retriever = baseline_index.as_retriever(top_k=5)
+
+# Evaluate
 evaluator = RetrieverEvaluator(retriever=baseline_retriever)
-baseline_metrics = await evaluator.evaluate(dataset)
+baseline_metrics = await evaluator.evaluate(dataset, show_progress=True)
 print(f"Baseline Hit Rate: {baseline_metrics.hit_rate:.2%}")
+print(f"Baseline MRR: {baseline_metrics.mrr:.4f}")
 ```
 
 ### 3. Iterative Improvement
@@ -172,14 +219,28 @@ print(f"Baseline Hit Rate: {baseline_metrics.hit_rate:.2%}")
 Test improvements against baseline:
 
 ```python
-# Test with hybrid search
-improved_retriever.enable_hybrid = True
+from fetchcraft.vector_store import QdrantVectorStore
+
+# Test with hybrid search enabled
+improved_vector_store = QdrantVectorStore(
+    client=qdrant_client,
+    collection_name="improved_collection",
+    embeddings=embeddings,
+    enable_hybrid=True,  # Enable hybrid search
+    fusion_method="rrf"
+)
+
+improved_index = VectorIndex(vector_store=improved_vector_store)
+improved_retriever = improved_index.as_retriever(top_k=5)
+
+# Evaluate improved version
 evaluator = RetrieverEvaluator(retriever=improved_retriever)
-improved_metrics = await evaluator.evaluate(dataset)
+improved_metrics = await evaluator.evaluate(dataset, show_progress=True)
 
 # Compare
 delta = improved_metrics.hit_rate - baseline_metrics.hit_rate
 print(f"Improvement: {delta:+.2%}")
+print(f"Hit Rate: {baseline_metrics.hit_rate:.2%} → {improved_metrics.hit_rate:.2%}")
 ```
 
 ### 4. Analysis
@@ -215,7 +276,13 @@ See:
 ## Dependencies
 
 Required:
-- `openai` - For question generation
-- `tqdm` - Progress bars (optional)
+- `pydantic-ai` - For question generation using LLM agents
+- `openai` - OpenAI API client (or compatible)
+- `tqdm` - Progress bars (optional but recommended)
 
-The module works with any DocumentStore and VectorStore implementation.
+Recommended:
+- `motor` - For MongoDBDocumentStore
+- `qdrant-client` - For QdrantVectorStore
+- `chromadb` - For ChromaVectorStore
+
+The module works with any DocumentStore and VectorStore implementation that follows the base interfaces.
