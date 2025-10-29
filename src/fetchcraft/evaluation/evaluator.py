@@ -10,7 +10,7 @@ import logging
 
 from ..retriever.base import Retriever
 from ..node import NodeWithScore
-from .dataset_generator import EvaluationDataset, QuestionAnswerPair
+from .dataset_generator import EvaluationDataset, QuestionContextPair
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,7 @@ class RetrieverEvaluator:
     
     async def _evaluate_single_query(
         self,
-        qa_pair: QuestionAnswerPair
+        qa_pair: QuestionContextPair
     ) -> QueryResult:
         """
         Evaluate a single query.

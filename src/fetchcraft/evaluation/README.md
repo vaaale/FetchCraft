@@ -198,7 +198,7 @@ for result in failed[:10]:
 ## Examples
 
 See:
-- [evaluate_retriever.py](../../examples/evaluate_retriever.py) - Complete workflow
+- [evaluate_retriever.py](../../examples/evaluation/evaluate_retriever.py) - Complete workflow
 - [test_evaluation.py](../../tests/test_evaluation.py) - Unit tests
 - [EVALUATION.md](../../../docs/EVALUATION.md) - Detailed guide
 

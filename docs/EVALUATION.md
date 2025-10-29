@@ -299,4 +299,4 @@ Average Rank: 3.8
 
 - [Retriever Usage Guide](RETRIEVER_USAGE.md)
 - [Chunking Strategies](CHUNKING_STRATEGIES.md)
-- [Example: evaluate_retriever.py](../src/examples/evaluate_retriever.py)
+- [Example: evaluate_retriever.py](../src/examples/evaluation/evaluate_retriever.py)

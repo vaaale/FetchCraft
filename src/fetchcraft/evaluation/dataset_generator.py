@@ -5,7 +5,9 @@ Dataset generator for creating evaluation datasets from documents.
 import random
 import asyncio
 from typing import List, Dict, Any, Optional, Tuple
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+from pydantic_ai import Agent
+from pydantic_ai.models import Model
 from tqdm import tqdm
 import logging
 
@@ -15,8 +17,59 @@ from ..node import Node, DocumentNode, Chunk
 
 logger = logging.getLogger(__name__)
 
+# USER_PROMPT = (
+#     "Given the following text, generate {num_questions} diverse questions that can be answered using ONLY the information in this text.\n"
+#     "\n"
+#     "The questions should:\n"
+#     "1. Be natural and varied in style\n"
+#     "2. Range from simple factual to more complex analytical questions\n"
+#     "3. Be answerable using only the provided text\n"
+#     "4. Cover different aspects of the text\n"
+#     "5. Be clear and unambiguous\n"
+#     "\n"
+#     "Text:\n"
+#     "{text}\n"
+#     "\n"
+#     "Generate exactly {num_questions} questions, one per line, without numbering or bullet points."
+# )
 
-class QuestionAnswerPair(BaseModel):
+SYSTEM_PROMPT = "You are a helpful assistant that generates high-quality questions for evaluation datasets."
+
+USER_PROMPT = """You are helping evaluate a retrieval system.
+Given a source passage and a desired count N, write N user-style questions that a person might ask without knowing the passage exists, yet which are answerable using only the passage.
+
+## Requirements
+
+1) Standalone & generic
+   - Questions must make sense out of context and must not imply the existence of a specific document.
+   - Avoid: “According to the passage…”, “In this document…”, “the article”, “the text”, “the author”, “this report”.
+   - Do: include necessary entities/timeframes (e.g., “on 9/11”, “in the Mars 2020 mission”), so the question is unambiguous.
+
+2) Answerable from the passage
+   - Every question must have a specific, factual answer supported by the passage (dates, names, causes, definitions, comparisons, counts, processes, caveats).
+   - Do not ask for opinions or information not present.
+
+3) Sufficient specificity
+   - Include key entities, qualifiers, and constraints needed to retrieve the right chunk (event name, location, time period, actor, metric).
+
+4) Natural user phrasing
+   - Write like a real user query (concise, varied).
+   - Avoid copying full sentences; prefer paraphrases and natural wording.
+
+5) Diversity
+   - Mix question types: what/when/where/who/why/how, comparisons, enumerations, cause/effect, definitions, numeric specifics.
+   - Vary difficulty and length (short to medium).
+
+6) No ambiguity or pronouns without antecedents
+   - Replace “it/they/this” with the concrete entity.
+   
+SOURCE PASSAGE:
+{text}
+
+Generate {num_questions} questions.
+"""
+
+class QuestionContextPair(BaseModel):
     """A question-answer pair for evaluation."""
     question: str = Field(description="The generated question")
     node_id: str = Field(description="ID of the node that should answer this question")
@@ -24,20 +77,25 @@ class QuestionAnswerPair(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
 
+class Questions(BaseModel):
+    """Questions that can be answered using ONLY the information in this text."""
+    questions: List[str] = Field(description="List of questions")
+
+
 class EvaluationDataset(BaseModel):
     """A dataset for evaluating retriever performance."""
-    qa_pairs: List[QuestionAnswerPair] = Field(description="List of question-answer pairs")
+    qa_pairs: List[QuestionContextPair] = Field(description="List of question-answer pairs")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Dataset metadata")
-    
+
     def __len__(self) -> int:
         return len(self.qa_pairs)
-    
+
     def save(self, filepath: str) -> None:
         """Save dataset to a JSON file."""
         import json
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(self.model_dump(), f, indent=2, ensure_ascii=False)
-    
+
     @classmethod
     def load(cls, filepath: str) -> 'EvaluationDataset':
         """Load dataset from a JSON file."""
@@ -47,7 +105,7 @@ class EvaluationDataset(BaseModel):
         return cls(**data)
 
 
-class DatasetGenerator:
+class DatasetGenerator(BaseModel):
     """
     Generates evaluation datasets for testing retriever performance.
     
@@ -59,9 +117,9 @@ class DatasetGenerator:
         from openai import AsyncOpenAI
         from fetchcraft.evaluation import DatasetGenerator
         
-        client = AsyncOpenAI(api_key="your-key")
+        model = "openai:gpt-5"
         generator = DatasetGenerator(
-            client=client,
+            model=model,
             document_store=doc_store,
             vector_store=vector_store
         )
@@ -73,14 +131,12 @@ class DatasetGenerator:
         dataset.save("eval_dataset.json")
         ```
     """
-    
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model: str | Model
+
     def __init__(
-        self,
-        client: Any,
-        document_store: DocumentStore,
-        vector_store: VectorStore,
-        model: str = "gpt-4",
-        index_id: Optional[str] = None
+            self,
+            model: str | Model,
     ):
         """
         Initialize the dataset generator.
@@ -92,16 +148,14 @@ class DatasetGenerator:
             model: OpenAI model to use for question generation
             index_id: Optional index identifier to filter documents
         """
-        self.client = client
-        self.document_store = document_store
-        self.vector_store = vector_store
-        self.model = model
-        self.index_id = index_id
-    
+        super().__init__(
+            model=model,
+        )
+
     async def _generate_questions_for_node(
-        self,
-        node: Node,
-        num_questions: int
+            self,
+            node: Node,
+            num_questions: int
     ) -> List[str]:
         """
         Generate questions that can be answered by the given node.
@@ -113,59 +167,29 @@ class DatasetGenerator:
         Returns:
             List of generated questions
         """
-        prompt = f"""Given the following text, generate {num_questions} diverse questions that can be answered using ONLY the information in this text.
+        agent = Agent(
+            model=self.model,
+            system_prompt=SYSTEM_PROMPT,
+            output_type=Questions,
+            retries=3
+        )
 
-The questions should:
-1. Be natural and varied in style
-2. Range from simple factual to more complex analytical questions
-3. Be answerable using only the provided text
-4. Cover different aspects of the text
-5. Be clear and unambiguous
-
-Text:
-{node.text}
-
-Generate exactly {num_questions} questions, one per line, without numbering or bullet points."""
-
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant that generates high-quality questions for evaluation datasets."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                max_tokens=500
+        response = await agent.run(
+            user_prompt=USER_PROMPT.format(
+                num_questions=num_questions,
+                text=node.text
             )
-            
-            questions_text = response.choices[0].message.content
-            if questions_text is None:
-                logger.warning(f"No questions generated for node {node.id[:8]}")
-                return []
-            
-            # Parse questions (one per line)
-            questions = [
-                q.strip() 
-                for q in questions_text.strip().split('\n') 
-                if q.strip() and not q.strip().startswith('#')
-            ]
-            
-            # Filter out empty questions and numbering
-            questions = [
-                q.lstrip('0123456789.-) ').strip() 
-                for q in questions 
-                if len(q.strip()) > 10
-            ]
-            
-            return questions[:num_questions]
-            
-        except Exception as e:
-            logger.error(f"Error generating questions for node {node.id[:8]}: {e}")
-            return []
-    
+        )
+
+        questions = response.output.questions
+        return questions
+
     async def _get_top_level_nodes_for_document(
         self,
-        doc_id: str
+        doc_id: str,
+        document_store: DocumentStore,
+        vector_store: VectorStore,
+        index_id: Optional[str] = None
     ) -> List[Node]:
         """
         Get all top-level nodes (direct children) for a document.
@@ -177,31 +201,34 @@ Generate exactly {num_questions} questions, one per line, without numbering or b
             List of top-level nodes
         """
         # Get the document
-        document = await self.document_store.get_document(doc_id)
+        document = await document_store.get_document(doc_id)
         if not document:
             logger.warning(f"Document {doc_id} not found in document store")
             return []
-        
+
         # Get all children IDs
-        if not hasattr(document, 'children_ids') or not document.children_ids:
+        if not document.children_ids:
             logger.warning(f"Document {doc_id} has no children")
             return []
-        
+
         # Fetch all child nodes from vector store
         nodes = []
         for child_id in document.children_ids:
-            node = await self.vector_store.get_document(child_id, index_id=self.index_id)
+            node = await vector_store.get_document(child_id, index_id=index_id)
             if node:
                 nodes.append(node)
-        
+
         return nodes
-    
+
     async def generate_dataset(
-        self,
-        num_documents: int,
-        questions_per_node: int = 3,
-        max_nodes_per_document: Optional[int] = None,
-        show_progress: bool = True
+            self,
+            num_documents: int,
+            document_store: DocumentStore,
+            vector_store: VectorStore,
+            index_id: Optional[str] = None,
+            questions_per_node: int = 3,
+            max_nodes_per_document: int = 5,
+            show_progress: bool = True,
     ) -> EvaluationDataset:
         """
         Generate an evaluation dataset.
@@ -216,48 +243,48 @@ Generate exactly {num_questions} questions, one per line, without numbering or b
             EvaluationDataset containing question-answer pairs
         """
         logger.info(f"Generating evaluation dataset from {num_documents} documents")
-        
+
         # Sample documents from document store
-        all_documents = await self.document_store.list_documents(
+        all_documents = await document_store.list_documents(
             limit=1000,  # Get a large pool to sample from
             # filters={'document': True} if hasattr(self.document_store, 'list_documents') else None
         )
-        
+
         if len(all_documents) < num_documents:
             logger.warning(
                 f"Only {len(all_documents)} documents available, "
                 f"requested {num_documents}"
             )
             num_documents = len(all_documents)
-        
+
         # Randomly sample documents
         sampled_documents = random.sample(all_documents, num_documents)
-        
-        qa_pairs: List[QuestionAnswerPair] = []
-        
+
+        qa_pairs: List[QuestionContextPair] = []
+
         # Process each document
         doc_iterator = tqdm(sampled_documents, desc="Processing documents") if show_progress else sampled_documents
-        
+
         for document in doc_iterator:
             # Get top-level nodes for this document
-            nodes = await self._get_top_level_nodes_for_document(document.id)
-            
+            nodes = await self._get_top_level_nodes_for_document(document.id, document_store, vector_store, index_id)
+
             if not nodes:
                 logger.warning(f"No nodes found for document {document.id[:8]}")
                 continue
-            
+
             # Limit nodes if specified
             if max_nodes_per_document and len(nodes) > max_nodes_per_document:
                 nodes = random.sample(nodes, max_nodes_per_document)
-            
+
             # Generate questions for each node
             node_iterator = tqdm(nodes, desc=f"  Nodes", leave=False) if show_progress else nodes
-            
+
             for node in node_iterator:
                 questions = await self._generate_questions_for_node(node, questions_per_node)
-                
+
                 for question in questions:
-                    qa_pair = QuestionAnswerPair(
+                    qa_pair = QuestionContextPair(
                         question=question,
                         node_id=node.id,
                         context=node.text[:500] + "..." if len(node.text) > 500 else node.text,
@@ -267,9 +294,9 @@ Generate exactly {num_questions} questions, one per line, without numbering or b
                         }
                     )
                     qa_pairs.append(qa_pair)
-        
+
         logger.info(f"Generated {len(qa_pairs)} question-answer pairs")
-        
+
         return EvaluationDataset(
             qa_pairs=qa_pairs,
             metadata={
@@ -279,12 +306,12 @@ Generate exactly {num_questions} questions, one per line, without numbering or b
                 'model': self.model
             }
         )
-    
+
     async def generate_from_specific_nodes(
-        self,
-        node_ids: List[str],
-        questions_per_node: int = 3,
-        show_progress: bool = True
+            self,
+            node_ids: List[str],
+            questions_per_node: int = 3,
+            show_progress: bool = True
     ) -> EvaluationDataset:
         """
         Generate dataset from specific node IDs.
@@ -298,31 +325,31 @@ Generate exactly {num_questions} questions, one per line, without numbering or b
             EvaluationDataset containing question-answer pairs
         """
         logger.info(f"Generating questions for {len(node_ids)} specific nodes")
-        
-        qa_pairs: List[QuestionAnswerPair] = []
+
+        qa_pairs: List[QuestionContextPair] = []
         node_iterator = tqdm(node_ids, desc="Processing nodes") if show_progress else node_ids
-        
+
         for node_id in node_iterator:
             # Get node from vector store
             node = await self.vector_store.get_document(node_id, index_id=self.index_id)
             if not node:
                 logger.warning(f"Node {node_id} not found")
                 continue
-            
+
             # Generate questions
             questions = await self._generate_questions_for_node(node, questions_per_node)
-            
+
             for question in questions:
-                qa_pair = QuestionAnswerPair(
+                qa_pair = QuestionContextPair(
                     question=question,
                     node_id=node.id,
                     context=node.text[:500] + "..." if len(node.text) > 500 else node.text,
                     metadata=node.metadata.copy()
                 )
                 qa_pairs.append(qa_pair)
-        
+
         logger.info(f"Generated {len(qa_pairs)} question-answer pairs")
-        
+
         return EvaluationDataset(
             qa_pairs=qa_pairs,
             metadata={

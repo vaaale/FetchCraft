@@ -95,7 +95,7 @@ async def event_stream_handler(
 class ReActAgent(BaseAgent):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     _tools: List[Tool] = PrivateAttr(default=None)
-    model: Union[str, Any] = "openai:gpt-4"
+    model: Union[str, Model] = "openai:gpt-4-turbo"
     agent_kwargs: Dict = {}
     _memory: Memory = PrivateAttr(default=None)
 
@@ -108,7 +108,7 @@ class ReActAgent(BaseAgent):
 
     def __init__(
             self,
-            model: Union[str, Any] = "openai:gpt-4",
+            model: Union[str, Model] = "openai:gpt-4",
             tools: List[Tool] = None,
             **agent_kwargs
     ):

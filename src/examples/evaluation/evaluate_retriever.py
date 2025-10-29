@@ -28,6 +28,8 @@ import asyncio
 import os
 from pathlib import Path
 from openai import AsyncOpenAI
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
 from qdrant_client import QdrantClient
 
 from fetchcraft import (
@@ -285,19 +287,23 @@ async def main():
             api_key=OPENAI_API_KEY,
             base_url=OPENAI_BASE_URL
         )
-        
+        model = OpenAIChatModel(
+            os.environ.get("OPENAI_MODEL", "gpt-4-turbo"),
+            provider=OpenAIProvider(
+                openai_client=openai_client
+            )
+        )
         # Create dataset generator
         generator = DatasetGenerator(
-            client=openai_client,
-            document_store=document_store,
-            vector_store=vector_store,
-            model=LLM_MODEL,
-            index_id=INDEX_ID
+            model=model,
         )
         
         # Generate dataset
         dataset = await generator.generate_dataset(
             num_documents=10,  # Sample 10 documents
+            document_store=document_store,
+            vector_store=vector_store,
+            index_id=INDEX_ID,
             questions_per_node=3,  # Generate 3 questions per node
             max_nodes_per_document=5,  # Use up to 5 nodes per document
             show_progress=True
