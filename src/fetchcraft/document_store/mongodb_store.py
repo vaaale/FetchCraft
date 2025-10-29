@@ -5,7 +5,7 @@ MongoDB document store implementation.
 from typing import List, Optional, Dict, Any, Type
 from pydantic import BaseModel, Field, ConfigDict
 
-from .base import DocumentStore, D
+from .base import DocumentStore
 from ..node import Node, DocumentNode, Chunk, SymNode
 
 
@@ -28,7 +28,7 @@ class MongoDBConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
-class MongoDBDocumentStore(DocumentStore[D]):
+class MongoDBDocumentStore(DocumentStore[Node]):
     """
     MongoDB implementation of the DocumentStore interface.
     
@@ -60,7 +60,7 @@ class MongoDBDocumentStore(DocumentStore[D]):
         connection_string: str = "mongodb://localhost:27017",
         database_name: str = "fetchcraft",
         collection_name: str = "documents",
-        document_class: Type[D] = DocumentNode,
+        document_class: Type[Node] = DocumentNode,
         client: Optional[Any] = None
     ):
         """
@@ -112,7 +112,7 @@ class MongoDBDocumentStore(DocumentStore[D]):
         
         self._indexes_created = True
     
-    def _get_doc_class(self, class_name: Optional[str]) -> Type[D]:
+    def _get_doc_class(self, class_name: Optional[str]) -> Type[Node]:
         """
         Get the document class based on the stored class name.
         
@@ -133,7 +133,7 @@ class MongoDBDocumentStore(DocumentStore[D]):
         else:
             return self.document_class
     
-    async def add_document(self, document: D) -> str:
+    async def add_document(self, document: Node) -> str:
         """
         Add a single document to MongoDB.
         
@@ -158,7 +158,7 @@ class MongoDBDocumentStore(DocumentStore[D]):
         
         return document.id
     
-    async def add_documents(self, documents: List[D]) -> List[str]:
+    async def add_documents(self, documents: List[Node]) -> List[str]:
         """
         Add multiple documents to MongoDB.
         
@@ -192,7 +192,7 @@ class MongoDBDocumentStore(DocumentStore[D]):
         
         return [doc.id for doc in documents]
     
-    async def get_document(self, document_id: str) -> Optional[D]:
+    async def get_document(self, document_id: str) -> Optional[Node]:
         """
         Retrieve a document by its ID from MongoDB.
         
@@ -218,7 +218,7 @@ class MongoDBDocumentStore(DocumentStore[D]):
         # Reconstruct document
         return doc_class(**doc_dict)
     
-    async def get_documents(self, document_ids: List[str]) -> List[D]:
+    async def get_documents(self, document_ids: List[str]) -> List[Node]:
         """
         Retrieve multiple documents by their IDs from MongoDB.
         
@@ -248,7 +248,7 @@ class MongoDBDocumentStore(DocumentStore[D]):
         
         return documents
     
-    async def update_document(self, document: D) -> bool:
+    async def update_document(self, document: Node) -> bool:
         """
         Update an existing document in MongoDB.
         
@@ -317,7 +317,7 @@ class MongoDBDocumentStore(DocumentStore[D]):
         limit: int = 100,
         offset: int = 0,
         filters: Optional[Dict[str, Any]] = None
-    ) -> List[D]:
+    ) -> List[Node]:
         """
         List documents with pagination and optional filtering.
         
@@ -361,7 +361,7 @@ class MongoDBDocumentStore(DocumentStore[D]):
         query = filters or {}
         return await self.collection.count_documents(query)
     
-    async def get_documents_by_doc_id(self, doc_id: str) -> List[D]:
+    async def get_documents_by_doc_id(self, doc_id: str) -> List[Node]:
         """
         Get all nodes belonging to a document (by doc_id).
         

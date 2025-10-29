@@ -4,8 +4,9 @@ from uuid import uuid4
 from pydantic import Field, SkipValidation
 from tqdm import tqdm
 
+from fetchcraft.document_store import DocumentStore
 from fetchcraft.index.base import BaseIndex
-from fetchcraft.node import Node
+from fetchcraft.node import Node, Chunk
 from fetchcraft.vector_store.base import VectorStore
 
 D = TypeVar('D', bound=Node)
@@ -27,6 +28,7 @@ class VectorIndex(BaseIndex[D]):
     def __init__(
         self, 
         vector_store: VectorStore[D],
+        doc_store: Optional[DocumentStore] = None,
         index_id: Optional[str] = None,
         **kwargs
     ):
@@ -40,6 +42,7 @@ class VectorIndex(BaseIndex[D]):
         """
         super().__init__(
             vector_store=vector_store,
+            doc_store=doc_store,
             index_id=index_id or str(uuid4()),
             **kwargs
         )
@@ -48,6 +51,7 @@ class VectorIndex(BaseIndex[D]):
     def from_vector_store(
         cls,
         vector_store: VectorStore[D],
+        doc_store: Optional[DocumentStore] = None,
         index_id: Optional[str] = None,
     ) -> 'VectorIndex[D]':
         """
@@ -60,7 +64,7 @@ class VectorIndex(BaseIndex[D]):
         Returns:
             A new VectorIndex instance
         """
-        return cls(vector_store=vector_store, index_id=index_id)
+        return cls(vector_store=vector_store, doc_store=doc_store, index_id=index_id)
     
     async def add_nodes(self, nodes: List[D], show_progress: bool = False) -> List[str]:
         """
@@ -76,7 +80,21 @@ class VectorIndex(BaseIndex[D]):
             List of document IDs that were added
         """
         # Delegate to vector store which handles embedding generation
-        return await self.vector_store.insert_nodes(nodes, index_id=self.index_id, show_progress=show_progress)
+        if self._doc_store:
+            if show_progress:
+                nodes = tqdm(nodes)
+
+            ids = []
+            for node in nodes:
+                existing_doc = await self._doc_store.get_document(node.doc_id)
+                if existing_doc and node.id not in existing_doc.children_ids and not node.parent:
+                    tmp = not isinstance(node, Chunk)
+                    existing_doc.children_ids.append(node.id)
+                    await self._doc_store.update_document(existing_doc)
+                ids.extend(await self.vector_store.insert_nodes([node], index_id=self.index_id, show_progress=False))
+            return ids
+        else:
+            return await self.vector_store.insert_nodes(nodes, index_id=self.index_id, show_progress=show_progress)
 
 
     async def search(

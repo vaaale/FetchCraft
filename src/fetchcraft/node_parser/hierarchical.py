@@ -134,11 +134,8 @@ class HierarchicalNodeParser(NodeParser):
                 parent_id=parent_chunk.id,
                 metadata={
                     **metadata,
-                    "chunk_type": "child",
-                    "child_size": child_size,
+                    "chunk_size": child_size,
                     "child_index": idx,
-                    "total_children": len(child_tuples),
-                    "parent_chunk_index": parent_chunk.chunk_index
                 }
             )
             

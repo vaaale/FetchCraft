@@ -169,45 +169,36 @@ class QdrantVectorStore(VectorStore[Node]):
         # Single loop: check hash, generate embeddings if needed, upsert if changed
         ids = []
         if show_progress:
-            items = tqdm(nodes, desc="Processing documents")
-        else:
-            items = nodes
+            nodes = tqdm(nodes, desc="Processing documents")
 
-        for doc in items:
-            # Check if document already exists (hash is computed automatically via property)
-            existing_doc = await self.get_node(doc.id, index_id=index_id)
-            if existing_doc and existing_doc.hash == doc.hash:  # type: ignore
-                # Document hasn't changed, skip
-                ids.append(doc.id)
-                continue
-
+        for node in nodes:
             # Generate dense embedding if needed
-            if not hasattr(doc, 'embedding') or not doc.embedding:  # type: ignore
+            if not node.embedding:  # type: ignore
                 if self._embeddings is None:
                     raise ValueError("Document missing embedding and no embeddings model configured")
                 # Embed this single document
-                embedding = await self._embeddings.embed_documents([doc.text])  # type: ignore
-                doc.embedding = embedding[0]  # type: ignore
+                embedding = await self._embeddings.embed_documents([node.text])  # type: ignore
+                node.embedding = embedding[0]  # type: ignore
             
             # Generate sparse embedding if hybrid mode
             sparse_vector = None
             if self.enable_hybrid:
                 # Generate sparse embedding for this document
-                sparse_emb = next(self._sparse_embedder.embed([doc.text]))  # type: ignore
+                sparse_emb = next(self._sparse_embedder.embed([node.text]))  # type: ignore
                 sparse_vector = models.SparseVector(
                     indices=sparse_emb.indices.tolist(),
                     values=sparse_emb.values.tolist()
                 )
             
             # Extract vector and payload
-            payload = doc.model_dump()
+            payload = node.model_dump()
             dense_vector = payload.pop('embedding')
             
             # Store the document ID in the payload
-            payload['id'] = doc.id
+            payload['id'] = node.id
             
             # Store the document class type for proper reconstruction
-            payload['_doc_class'] = doc.__class__.__name__
+            payload['_doc_class'] = node.__class__.__name__
             
             # Add index_id to payload if provided
             if index_id is not None:
@@ -224,7 +215,7 @@ class QdrantVectorStore(VectorStore[Node]):
             
             # Create point and upsert (insert or update)
             point = models.PointStruct(
-                id=doc.id,
+                id=node.id,
                 vector=vector,
                 payload=payload
             )
@@ -234,7 +225,7 @@ class QdrantVectorStore(VectorStore[Node]):
                 collection_name=self.collection_name,
                 points=[point]
             )
-            ids.append(doc.id)
+            ids.append(node.id)
         
         return ids
     

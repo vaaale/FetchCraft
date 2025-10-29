@@ -54,7 +54,7 @@ async def example_basic_usage():
         base_url=os.getenv("OPENAI_BASE_URL", None)
     )
     
-    print(f"   ✓ Embeddings model: {embeddings.model}")
+    print(f"   ✓ Embeddings model: {embeddings._model}")
     print(f"   ✓ Dimension: {embeddings.dimension}")
     
     # Step 2: Create ChromaDB client and vector store

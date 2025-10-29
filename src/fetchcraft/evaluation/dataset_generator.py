@@ -5,7 +5,7 @@ Dataset generator for creating evaluation datasets from documents.
 import random
 import asyncio
 from typing import List, Dict, Any, Optional, Tuple
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, PrivateAttr
 from pydantic_ai import Agent
 from pydantic_ai.models import Model
 from tqdm import tqdm
@@ -132,7 +132,7 @@ class DatasetGenerator(BaseModel):
         ```
     """
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    model: str | Model
+    _model: str | Model = PrivateAttr()
 
     def __init__(
             self,
@@ -148,9 +148,8 @@ class DatasetGenerator(BaseModel):
             model: OpenAI model to use for question generation
             index_id: Optional index identifier to filter documents
         """
-        super().__init__(
-            model=model,
-        )
+        super().__init__()
+        self._model = model
 
     async def _generate_questions_for_node(
             self,
@@ -168,7 +167,7 @@ class DatasetGenerator(BaseModel):
             List of generated questions
         """
         agent = Agent(
-            model=self.model,
+            model=self._model,
             system_prompt=SYSTEM_PROMPT,
             output_type=Questions,
             retries=3
@@ -303,7 +302,6 @@ class DatasetGenerator(BaseModel):
                 'num_documents': num_documents,
                 'questions_per_node': questions_per_node,
                 'total_pairs': len(qa_pairs),
-                'model': self.model
             }
         )
 
@@ -360,6 +358,6 @@ class DatasetGenerator(BaseModel):
                 'num_nodes': len(node_ids),
                 'questions_per_node': questions_per_node,
                 'total_pairs': len(qa_pairs),
-                'model': self.model
+                'model': self._model
             }
         )

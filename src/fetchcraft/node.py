@@ -6,11 +6,12 @@ import hashlib
 import json
 
 # Node type enum
-class NodeType(Enum):
+class NodeType(str, Enum):
     DOCUMENT = "DocumentNode"
     NODE = "Node"
     CHUNK = "Chunk"
     SYMNODE = "SymNode"
+    OBJECT = "ObjectNode"
 
 
 class Node(BaseModel):
@@ -29,6 +30,7 @@ class Node(BaseModel):
     """
     
     id: str = Field(default_factory=lambda: str(uuid4()))
+    node_type: NodeType = NodeType.NODE
     text: str
     metadata: Dict[str, Any] = Field(default_factory=dict)
     embedding: Optional[List[float]] = None
@@ -45,7 +47,7 @@ class Node(BaseModel):
     previous_id: Optional[str] = None
     
     # Cached hash (not persisted)
-    _hash: Optional[str] = PrivateAttr(default=None)
+    _doc_hash: Optional[str] = PrivateAttr(default=None)
     
     model_config = {
         "arbitrary_types_allowed": True,
@@ -149,7 +151,7 @@ class Node(BaseModel):
             self.children_ids.remove(node_id)
     
     @property
-    def hash(self) -> str:
+    def doc_hash(self) -> str:
         """
         Compute MD5 hash of text + metadata for change detection.
         
@@ -158,14 +160,20 @@ class Node(BaseModel):
         Returns:
             MD5 hash as hex string
         """
-        if self._hash is None:
-            # Create a deterministic string from text and metadata
-            # Sort metadata keys for consistent hashing
-            metadata_str = json.dumps(self.metadata, sort_keys=True)
-            content = f"{self.text}|{metadata_str}"
-            self._hash = hashlib.md5(content.encode('utf-8')).hexdigest()
-        return self._hash
-    
+        if self._doc_hash is None:
+            doc_hash = self.get_hash()
+            self._doc_hash = doc_hash
+        return self._doc_hash
+
+    def get_hash(self) -> str:
+        # Create a deterministic string from text and metadata
+        # Sort metadata keys for consistent hashing
+        metadata_str = json.dumps(self.metadata, sort_keys=True)
+        content = f"{self.text}|{metadata_str}"
+
+        doc_hash = hashlib.md5(content.encode('utf-8')).hexdigest()
+        return doc_hash
+
     def get_text_with_context(self, include_parent: bool = True) -> str:
         """
         Get the text. Note: context from parent cannot be included as this method
@@ -190,7 +198,8 @@ class DocumentNode(Node):
     DocumentNodes typically don't have next/previous relationships (siblings),
     as managing relationships between all documents would be memory-intensive.
     """
-    
+    node_type: NodeType = NodeType.DOCUMENT
+
     def __init__(self, **data):
         """
         Initialize a DocumentNode.
@@ -249,7 +258,7 @@ class Chunk(Node):
     through a chunking strategy. They maintain relationships to
     their parent document and to sibling chunks.
     """
-    
+    node_type: NodeType = NodeType.CHUNK
     chunk_index: Optional[int] = None
     start_char_idx: Optional[int] = None
     end_char_idx: Optional[int] = None
@@ -371,6 +380,7 @@ class SymNode(Node):
     
     # Flag to indicate this is a symbolic node
     is_symbolic: bool = True
+    node_type: NodeType = NodeType.SYMNODE
     
     def __init__(self, **data):
         """
@@ -439,7 +449,11 @@ class NodeWithScore(BaseModel):
     model_config = {
         "arbitrary_types_allowed": True,
     }
-    
+
+    # def __init__(self, node: Node, score: int):
+    #     super().__init__(score=score, **node.model_dump())
+
+
     def __repr__(self) -> str:
         return f"NodeWithScore(score={self.score:.3f}, node_id={self.node.id[:8]}, {self.node.text[:100]}...)"
     
@@ -463,6 +477,7 @@ class ObjectNode(Node):
     """
     A node that represents an object.
     """
+    node_type: NodeType = NodeType.OBJECT
     object_id: Any = Field(description="The object_id", default_factory=lambda: str(uuid4()))
     object_type: Any = Field(description="The object_type", default=None)
     _object: Any | None = PrivateAttr()

@@ -5,8 +5,6 @@ RetrieverTool for integrating retrievers with agents.
 from typing import Optional, Callable, Any, List
 import logging
 
-from .. import Node
-
 try:
     from pydantic_ai import RunContext
     PYDANTIC_AI_AVAILABLE = True

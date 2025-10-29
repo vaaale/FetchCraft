@@ -3,7 +3,7 @@ from typing import *
 
 from pydantic import BaseModel
 
-from fetchcraft import DocumentNode
+from fetchcraft.node import DocumentNode
 
 
 class DocumentSource(BaseModel, ABC):

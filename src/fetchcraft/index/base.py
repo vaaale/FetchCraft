@@ -1,12 +1,14 @@
 from abc import ABCMeta, abstractmethod
-from typing import List, Set, Generic, TypeVar
+from typing import List, Set, Generic, TypeVar, Optional
 from uuid import uuid4
 
-from pydantic import Field, ConfigDict, BaseModel
+from pydantic import Field, ConfigDict, BaseModel, PrivateAttr
 
+from fetchcraft.document_store import DocumentStore
 from fetchcraft.node import SymNode, Chunk, Node
 
 D = TypeVar('D', bound=Node)
+
 
 class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
     model_config = ConfigDict(
@@ -14,6 +16,12 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
         validate_assignment=True,
     )
     index_id: str = Field(default_factory=lambda: str(uuid4()), description="Unique index identifier")
+    _doc_store: Optional[DocumentStore[Node]] = PrivateAttr()
+
+    def __init__(self, doc_store: Optional[DocumentStore] = None, **kwargs):
+        super().__init__(**kwargs)
+        self._doc_store = doc_store
+
 
     @abstractmethod
     def add_nodes(self, documents, show_progress):

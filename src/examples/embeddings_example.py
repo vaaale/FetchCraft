@@ -232,7 +232,7 @@ async def custom_endpoint_example():
 
         print(f"Initialized custom endpoint: {embeddings}")
         print(f"Base URL: {embeddings.base_url}")
-        print(f"Model: {embeddings.model}")
+        print(f"Model: {embeddings._model}")
         
         # Determine dimension asynchronously
         dimension = embeddings.dimension

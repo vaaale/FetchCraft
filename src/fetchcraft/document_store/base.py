@@ -4,9 +4,8 @@ Base class for document stores.
 
 from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Any, TypeVar, Generic
-from pydantic import BaseModel
 
-from ..node import Node, DocumentNode
+from ..node import Node
 
 D = TypeVar('D', bound=Node)
 
@@ -25,7 +24,7 @@ class DocumentStore(ABC, Generic[D]):
     """
     
     @abstractmethod
-    async def add_document(self, document: D) -> str:
+    async def add_document(self, document: Node) -> str:
         """
         Add a single document to the store.
         
@@ -38,7 +37,7 @@ class DocumentStore(ABC, Generic[D]):
         pass
     
     @abstractmethod
-    async def add_documents(self, documents: List[D]) -> List[str]:
+    async def add_documents(self, documents: List[Node]) -> List[str]:
         """
         Add multiple documents to the store.
         
@@ -51,7 +50,7 @@ class DocumentStore(ABC, Generic[D]):
         pass
     
     @abstractmethod
-    async def get_document(self, document_id: str) -> Optional[D]:
+    async def get_document(self, document_id: str) -> Optional[Node]:
         """
         Retrieve a document by its ID.
         
@@ -64,7 +63,7 @@ class DocumentStore(ABC, Generic[D]):
         pass
     
     @abstractmethod
-    async def get_documents(self, document_ids: List[str]) -> List[D]:
+    async def get_documents(self, document_ids: List[str]) -> List[Node]:
         """
         Retrieve multiple documents by their IDs.
         
@@ -77,7 +76,7 @@ class DocumentStore(ABC, Generic[D]):
         pass
     
     @abstractmethod
-    async def update_document(self, document: D) -> bool:
+    async def update_document(self, document: Node) -> bool:
         """
         Update an existing document.
         

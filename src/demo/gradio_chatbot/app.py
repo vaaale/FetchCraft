@@ -22,6 +22,12 @@ from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
 import logging
 
+from fetchcraft.agents import ReActAgent, RetrieverTool
+from fetchcraft.embeddings import OpenAIEmbeddings
+from fetchcraft.index.vector_index import VectorIndex
+from fetchcraft.node import SymNode
+from fetchcraft.vector_store import QdrantVectorStore
+
 # Load .env file if python-dotenv is available
 try:
     from dotenv import load_dotenv
@@ -33,15 +39,6 @@ import gradio as gr
 from qdrant_client import QdrantClient
 from pydantic_ai import Tool
 
-from fetchcraft import (
-    OpenAIEmbeddings,
-    QdrantVectorStore,
-    VectorIndex,
-    Chunk,
-    SymNode,
-    ReActAgent,
-    RetrieverTool
-)
 from fetchcraft.source import FilesystemDocumentSource
 from fetchcraft.node_parser import HierarchicalNodeParser, SimpleNodeParser
 

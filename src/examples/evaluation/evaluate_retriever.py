@@ -32,25 +32,19 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from qdrant_client import QdrantClient
 
-from fetchcraft import (
-    OpenAIEmbeddings,
-    QdrantVectorStore,
-    VectorIndex,
-    MongoDBDocumentStore,
-    DatasetGenerator,
-    RetrieverEvaluator,
-    EvaluationDataset,
-    Chunk,
-    SymNode
-)
+from fetchcraft.document_store import MongoDBDocumentStore
+from fetchcraft.embeddings import OpenAIEmbeddings
+from fetchcraft.evaluation import EvaluationDataset, RetrieverEvaluator, DatasetGenerator
+from fetchcraft.index.vector_index import VectorIndex
+from fetchcraft.node import SymNode
 from fetchcraft.source import FilesystemDocumentSource
 from fetchcraft.node_parser import HierarchicalNodeParser, SimpleNodeParser
-
+from fetchcraft.vector_store import QdrantVectorStore
 
 # Configuration
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
-COLLECTION_NAME = "fetchcraft_docs"
+COLLECTION_NAME = "fetchcraft_chatbot"
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", None)
@@ -66,6 +60,9 @@ CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "8192"))
 CHILD_SIZES = [4096, 1024]
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
 USE_HIERARCHICAL_CHUNKING = os.getenv("USE_HIERARCHICAL_CHUNKING", "true").lower() == "true"
+
+dataset_path = Path("eval_dataset/evaluation_dataset.json")
+dataset_path.parent.mkdir(parents=True, exist_ok=True)
 
 
 def collection_exists(client: QdrantClient, collection_name: str) -> bool:
@@ -108,7 +105,7 @@ async def load_and_index_documents(
     print(f"   Loading documents...")
     source = FilesystemDocumentSource.from_directory(
         directory=documents_path,
-        pattern="*.txt",
+        pattern="*",
         recursive=True
     )
     
@@ -138,40 +135,18 @@ async def load_and_index_documents(
             overlap=overlap
         )
     
-    all_nodes = parser.get_nodes(documents)
-    
-    # For hierarchical, index only the SymNodes (children)
-    # For simple, index all chunks
-    if use_hierarchical:
-        all_chunks = [n for n in all_nodes if isinstance(n, SymNode)]
-        print(f"   ✓ Created {len(all_nodes)} total nodes ({len(all_chunks)} SymNodes for indexing)")
-    else:
-        all_chunks = all_nodes
-        print(f"   ✓ Created {len(all_chunks)} chunks")
-    
-    # Keep reference to original documents
-    document_nodes = documents
-    
+    all_chunks = parser.get_nodes(documents)
+
     # Store document nodes first (they are parent nodes with children_ids populated)
-    print(f"   Storing {len(document_nodes)} documents to document store...")
-    if document_nodes:
-        await document_store.add_documents(document_nodes)
+    print(f"   Storing {len(documents)} documents to document store...")
+    if documents:
+        await document_store.add_documents(documents)
         
-        # Verify: Check that documents were stored with children
-        print(f"   Verifying stored documents...")
-        sample_doc = await document_store.get_document(document_nodes[0].id)
-        if sample_doc:
-            print(f"   ✓ Sample document retrieved with {len(sample_doc.children_ids)} children_ids")
-            if not sample_doc.children_ids:
-                print(f"   ⚠️  WARNING: Document has no children_ids after storage!")
-        else:
-            print(f"   ⚠️  WARNING: Could not retrieve sample document after storage!")
-    
     # Then index chunks to vector store
     print(f"   Indexing {len(all_chunks)} chunks to vector store...")
     await vector_index.add_nodes(all_chunks, show_progress=True)
     
-    print(f"   ✓ Successfully indexed {len(all_chunks)} chunks from {len(document_nodes)} documents!")
+    print(f"   ✓ Successfully indexed {len(all_chunks)} chunks from {len(documents)} documents!")
     return len(all_chunks)
 
 
@@ -196,6 +171,7 @@ async def main():
     
     # Check if we need to index documents
     needs_indexing = not collection_exists(qdrant_client, COLLECTION_NAME)
+    # needs_indexing = True
 
     # Create vector store
     vector_store = QdrantVectorStore(
@@ -219,6 +195,7 @@ async def main():
     print("4. Creating vector index...")
     vector_index = VectorIndex(
         vector_store=vector_store,
+        doc_store=document_store,
         index_id=INDEX_ID
     )
     
@@ -254,8 +231,6 @@ async def main():
     # ========================================================================
     # STEP 1: Generate Evaluation Dataset
     # ========================================================================
-    
-    dataset_path = Path("evaluation_dataset.json")
     
     if dataset_path.exists():
         print(f"\n5. Loading existing dataset from {dataset_path}...")

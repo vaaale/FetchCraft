@@ -28,13 +28,13 @@ async def test_node_hash_computation():
     """Test that nodes can compute their hash correctly."""
     node1 = Node(text="Hello world", metadata={"source": "test"})
     
-    assert node1.hash is not None
-    assert len(node1.hash) == 32  # MD5 hash is 32 hex chars
+    assert node1.doc_hash is not None
+    assert len(node1.doc_hash) == 32  # MD5 hash is 32 hex chars
     
     # Same content should produce same hash
     node2 = Node(text="Hello world", metadata={"source": "test"})
     
-    assert node1.hash == node2.hash
+    assert node1.doc_hash == node2.doc_hash
 
 
 @pytest.mark.asyncio
@@ -44,7 +44,7 @@ async def test_node_hash_differs_with_different_content():
     
     node2 = Node(text="Different text", metadata={"source": "test"})
     
-    assert node1.hash != node2.hash
+    assert node1.doc_hash != node2.doc_hash
 
 
 @pytest.mark.asyncio
@@ -54,7 +54,7 @@ async def test_node_hash_differs_with_different_metadata():
     
     node2 = Node(text="Hello world", metadata={"source": "test2"})
     
-    assert node1.hash != node2.hash
+    assert node1.doc_hash != node2.doc_hash
 
 
 @pytest.mark.asyncio
@@ -79,13 +79,13 @@ async def test_vector_store_skips_unchanged_documents(mock_embeddings):
     result = await vector_store.get_node(doc_id, index_id="test")
     assert result is not None
     assert result.text == "Hello world"
-    original_hash = result.hash
+    original_hash = result.doc_hash
     
     # Try to add the same document again (unchanged)
     node2 = Node(id=doc_id, text="Hello world", metadata={"source": "test"})
     
     # Hash should be the same
-    assert node2.hash == original_hash
+    assert node2.doc_hash == original_hash
     
     # Add it again - should be skipped
     await index.add_nodes([node2])
@@ -93,7 +93,7 @@ async def test_vector_store_skips_unchanged_documents(mock_embeddings):
     # Retrieve it - should still be the same
     result2 = await vector_store.get_node(doc_id, index_id="test")
     assert result2 is not None
-    assert result2.hash == original_hash
+    assert result2.doc_hash == original_hash
 
 
 @pytest.mark.asyncio
@@ -118,13 +118,13 @@ async def test_vector_store_updates_changed_documents(mock_embeddings):
     result = await vector_store.get_node(doc_id, index_id="test")
     assert result is not None
     assert result.text == "Hello world"
-    original_hash = result.hash
+    original_hash = result.doc_hash
     
     # Update the document (change text)
     node2 = Node(id=doc_id, text="Hello world updated!", metadata={"source": "test"})
     
     # Hash should be different
-    assert node2.hash != original_hash
+    assert node2.doc_hash != original_hash
     
     # Add it again - should update
     await index.add_nodes([node2])
@@ -133,8 +133,8 @@ async def test_vector_store_updates_changed_documents(mock_embeddings):
     result2 = await vector_store.get_node(doc_id, index_id="test")
     assert result2 is not None
     assert result2.text == "Hello world updated!"
-    assert result2.hash == node2.hash
-    assert result2.hash != original_hash
+    assert result2.doc_hash == node2.doc_hash
+    assert result2.doc_hash != original_hash
 
 
 @pytest.mark.asyncio
@@ -158,13 +158,13 @@ async def test_vector_store_updates_on_metadata_change(mock_embeddings):
     # Retrieve it
     result = await vector_store.get_node(doc_id, index_id="test")
     assert result is not None
-    original_hash = result.hash
+    original_hash = result.doc_hash
     
     # Update metadata only
     node2 = Node(id=doc_id, text="Hello world", metadata={"version": 2})
     
     # Hash should be different
-    assert node2.hash != original_hash
+    assert node2.doc_hash != original_hash
     
     # Add it again - should update
     await index.add_nodes([node2])
@@ -173,8 +173,8 @@ async def test_vector_store_updates_on_metadata_change(mock_embeddings):
     result2 = await vector_store.get_node(doc_id, index_id="test")
     assert result2 is not None
     assert result2.metadata["version"] == 2
-    assert result2.hash == node2.hash
-    assert result2.hash != original_hash
+    assert result2.doc_hash == node2.doc_hash
+    assert result2.doc_hash != original_hash
 
 
 @pytest.mark.asyncio
@@ -200,5 +200,5 @@ async def test_hash_automatically_computed_if_missing(mock_embeddings):
     # Retrieve it - should have hash
     result = await vector_store.get_node(doc_id, index_id="test")
     assert result is not None
-    assert result.hash is not None
-    assert len(result.hash) == 32
+    assert result.doc_hash is not None
+    assert len(result.doc_hash) == 32

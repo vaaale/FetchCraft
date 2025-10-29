@@ -9,7 +9,7 @@ from typing import Dict, List, Literal, TypedDict, Optional
 
 from pydantic import BaseModel, Field
 
-from fetchcraft import Node
+from fetchcraft.node import Node
 
 
 class ChatMessage(BaseModel):

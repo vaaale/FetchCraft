@@ -3,8 +3,7 @@ from typing import *
 
 import fsspec
 
-from fetchcraft import DocumentNode
-from fetchcraft.node import NodeType
+from fetchcraft.node import DocumentNode
 from fetchcraft.source.base import DocumentSource
 
 
@@ -79,7 +78,6 @@ class FilesystemDocumentSource(DocumentSource):
         
         metadata = {
             **metadata,
-            "type": NodeType.DOCUMENT,
             "source": str(file_path),
             "filename": file_path.name,
             "file_size": file_size,
