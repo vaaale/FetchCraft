@@ -436,13 +436,13 @@ for result in results:
 SymNodes are symbolic references to parent chunks for efficient hierarchical retrieval:
 
 ```python
-from fetchcraft.node import SymNode
+from fetchcraft.node import SymNode, NodeType
 
 # SymNodes are created automatically by HierarchicalNodeParser
 # They point to larger parent chunks while being small and searchable
 
 # Check if a node is a SymNode
-if isinstance(node, SymNode) and node.is_symbolic:
+if node.node_type == NodeType.SYMNODE:
     print(f"This is a symbolic node pointing to parent: {node.parent_id}")
 ```
 
@@ -654,8 +654,9 @@ class CustomDocumentSource(DocumentSource):
 - `doc_id`: Reference to parent document
 
 **SymNode** (inherits from Chunk)
-- `is_symbolic`: Always True for symbolic nodes
+- `node_type`: Always `NodeType.SYMNODE` for symbolic nodes
 - Used in hierarchical chunking for parent references
+- Requires `parent_id` to be set
 
 **DocumentNode** (inherits from Node)
 - Represents a full document with children

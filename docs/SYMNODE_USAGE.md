@@ -120,7 +120,7 @@ sym_nodes = parent.create_symbolic_nodes(sub_texts)
 # All SymNodes automatically have:
 # - parent_id set to parent.id
 # - metadata copied from parent
-# - is_symbolic flag set to True
+# - node_type set to NodeType.SYMNODE
 ```
 
 ## API Reference
@@ -131,7 +131,7 @@ sym_nodes = parent.create_symbolic_nodes(sub_texts)
 class SymNode(Node):
     """A symbolic node that references a parent node."""
     
-    is_symbolic: bool = True
+    node_type: NodeType = NodeType.SYMNODE
     
     @classmethod
     def create(
@@ -142,9 +142,6 @@ class SymNode(Node):
         **kwargs
     ) -> 'SymNode':
         """Create a SymNode with a parent reference."""
-        
-    def requires_parent_resolution(self) -> bool:
-        """Check if parent should be resolved during retrieval."""
 ```
 
 ### VectorIndex.search()

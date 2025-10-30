@@ -6,7 +6,7 @@ import pytest
 from qdrant_client import QdrantClient
 
 from fetchcraft.index.vector_index import VectorIndex
-from fetchcraft.node import Chunk, SymNode, Node
+from fetchcraft.node import Chunk, SymNode, Node, NodeType
 from fetchcraft.vector_store import QdrantVectorStore
 
 
@@ -45,8 +45,7 @@ def test_symnode_creation():
     )
 
     assert sym_node.parent_id == parent_chunk.id
-    assert sym_node.is_symbolic is True
-    assert sym_node.requires_parent_resolution() is True
+    assert sym_node.node_type == NodeType.SYMNODE
     assert sym_node.metadata["symbolic"] is True
 
 

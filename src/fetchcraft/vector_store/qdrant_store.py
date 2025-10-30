@@ -1,14 +1,13 @@
-from typing import List, Dict, Any, Optional, Type, TypeVar, Generic, Union, Literal
-from uuid import uuid4
+from typing import List, Dict, Any, Optional, Type, Union, Literal
 
+from pydantic import BaseModel, Field, ConfigDict
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
-from pydantic import BaseModel, Field, ConfigDict
 from tqdm import tqdm
 
 from .base import VectorStore, D
 from ..embeddings import Embeddings
-from ..node import Node, DocumentNode, Chunk, SymNode
+from ..node import Node, DocumentNode, Chunk, SymNode, ObjectNode
 
 try:
     from fastembed import SparseTextEmbedding
@@ -144,6 +143,8 @@ class QdrantVectorStore(VectorStore[Node]):
             return DocumentNode  # type: ignore
         elif class_name == 'Node':
             return Node  # type: ignore
+        elif class_name == 'ObjectNode':
+            return ObjectNode  # type: ignore
         else:
             # Fall back to the default document class
             return self.document_class

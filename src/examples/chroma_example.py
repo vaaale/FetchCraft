@@ -14,7 +14,7 @@ from pathlib import Path
 
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
-from fetchcraft.node import DocumentNode
+from fetchcraft.node import DocumentNode, NodeType
 from fetchcraft.vector_store import ChromaVectorStore, ChromaConfig
 
 # Import chromadb (will guide user if not installed)
@@ -270,8 +270,8 @@ become more powerful and widespread.
     doc = DocumentNode.from_text(text=sample_text.strip(), metadata={"source": "ai_overview"})
     nodes = parser.get_nodes([doc])
     
-    parents = [n for n in nodes if not hasattr(n, 'is_symbolic') or not n.is_symbolic]
-    children = [n for n in nodes if hasattr(n, 'is_symbolic') and n.is_symbolic]
+    parents = [n for n in nodes if n.node_type != NodeType.SYMNODE]
+    children = [n for n in nodes if n.node_type == NodeType.SYMNODE]
     
     print(f"   ✓ Created {len(parents)} parent chunks")
     print(f"   ✓ Created {len(children)} child nodes")
@@ -292,7 +292,7 @@ become more powerful and widespread.
     
     print(f"\n   Retrieved {len(results)} results:")
     for i, result in enumerate(results, 1):
-        is_parent = not (hasattr(result.node, 'is_symbolic') and result.node.is_symbolic)
+        is_parent = result.node.node_type != NodeType.SYMNODE
         node_type = "Parent" if is_parent else "Child"
         size = len(result.node.text)
         print(f"     {i}. Type: {node_type} | Size: {size} chars | Score: {result.score:.4f}")

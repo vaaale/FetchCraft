@@ -148,13 +148,14 @@ SymNode(
     text="Smaller searchable text...",
     parent_id="uuid-1",
     doc_id="doc-uuid",
-    is_symbolic=True,
+    node_type=NodeType.SYMNODE,
     metadata={
         "chunk_type": "child",
         "child_size": 1024,
         "child_index": 0,
         "total_children": 4,
-        "parent_chunk_index": 0
+        "parent_chunk_index": 0,
+        "symbolic": True
     }
 )
 ```

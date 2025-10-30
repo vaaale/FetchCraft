@@ -9,7 +9,7 @@ This example demonstrates:
 """
 
 from fetchcraft.node_parser import HierarchicalNodeParser, SimpleNodeParser
-from fetchcraft.node import DocumentNode, Chunk, SymNode
+from fetchcraft.node import DocumentNode, Chunk, SymNode, NodeType
 
 
 def main():
@@ -100,9 +100,9 @@ def main():
         
         # Show a few children
         for i, child in enumerate(parent_children[:3]):
-            print(f"\n  Child #{i} (size={child.metadata['child_size']}):")
+            print(f"\n  Child #{i} (size={child.metadata['chunk_size']}):")
             print(f"    - Text: {child.text[:60]}...")
-            print(f"    - Requires resolution: {child.requires_parent_resolution()}")
+            print(f"    - Is SymNode: {child.node_type == NodeType.SYMNODE}")
     
     # Example 3: Sequential Linking
     print("\n" + "="*80)
@@ -176,7 +176,7 @@ def main():
     # Count by size
     by_size = {}
     for child in multi_children:
-        size = child.metadata.get("child_size")
+        size = child.metadata.get("chunk_size")
         by_size[size] = by_size.get(size, 0) + 1
     
     print(f"\n  Distribution by size:")

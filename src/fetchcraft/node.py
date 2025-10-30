@@ -1,9 +1,14 @@
-from enum import Enum
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field, PrivateAttr, computed_field
-from uuid import uuid4
 import hashlib
 import json
+from abc import abstractmethod, ABC
+from enum import Enum
+from typing import Optional, List, Dict, Any
+from uuid import uuid4
+
+from pydantic import BaseModel, Field, PrivateAttr
+
+from fetchcraft.mixins import ObjectNodeMixin
+
 
 # Node type enum
 class NodeType(str, Enum):
@@ -12,6 +17,7 @@ class NodeType(str, Enum):
     CHUNK = "Chunk"
     SYMNODE = "SymNode"
     OBJECT = "ObjectNode"
+    NODE_WITH_SCORE = "NodeWithScore"
 
 
 class Node(BaseModel):
@@ -28,71 +34,71 @@ class Node(BaseModel):
     All relationship methods work with node IDs rather than Node objects.
     This allows for efficient serialization and avoids circular references.
     """
-    
+
     id: str = Field(default_factory=lambda: str(uuid4()))
     node_type: NodeType = NodeType.NODE
     text: str
     metadata: Dict[str, Any] = Field(default_factory=dict)
     embedding: Optional[List[float]] = None
-    
+
     # Document reference
     doc_id: Optional[str] = None  # All nodes from same document share this ID
-    
+
     # Hierarchical relationships
     parent_id: Optional[str] = None
     children_ids: List[str] = Field(default_factory=list)
-    
+
     # Sequential relationships (sibling ordering)
     next_id: Optional[str] = None
     previous_id: Optional[str] = None
-    
+
     # Cached hash (not persisted)
     _doc_hash: Optional[str] = PrivateAttr(default=None)
-    
+
     model_config = {
         "arbitrary_types_allowed": True,
     }
-    
+
     @property
     def parent(self) -> Optional[str]:
         """Get the parent node ID."""
         return self.parent_id
-    
+
     @parent.setter
     def parent(self, node_id: Optional[str]) -> None:
         """Set the parent node ID."""
         self.parent_id = node_id
-    
+
     @property
     def children(self) -> List[str]:
         """Get the child node IDs."""
         return self.children_ids
-    
+
     @children.setter
     def children(self, node_ids: List[str]) -> None:
         """Set the child node IDs."""
         self.children_ids = node_ids
-    
+
     @property
     def next(self) -> Optional[str]:
         """Get the next node ID in the sequence."""
         return self.next_id
-    
+
     @next.setter
     def next(self, node_id: Optional[str]) -> None:
         """Set the next node ID in the sequence."""
         self.next_id = node_id
-    
+
     @property
     def previous(self) -> Optional[str]:
         """Get the previous node ID in the sequence."""
         return self.previous_id
-    
+
     @previous.setter
     def previous(self, node_id: Optional[str]) -> None:
         """Set the previous node ID in the sequence."""
         self.previous_id = node_id
-    
+
     def set_relationships(
         self,
         parent_id: Optional[str] = None,
@@ -113,23 +119,23 @@ class Node(BaseModel):
             self.next_id = next_id
         if previous_id is not None:
             self.previous_id = previous_id
-    
+
     def has_parent(self) -> bool:
         """Check if this node has a parent."""
         return self.parent_id is not None
-    
+
     def has_next(self) -> bool:
         """Check if this node has a next node."""
         return self.next_id is not None
-    
+
     def has_previous(self) -> bool:
         """Check if this node has a previous node."""
         return self.previous_id is not None
-    
+
     def has_children(self) -> bool:
         """Check if this node has children."""
         return len(self.children_ids) > 0
-    
+
     def add_child(self, node_id: str) -> None:
         """
         Add a child node ID to this node.
@@ -139,7 +145,7 @@ class Node(BaseModel):
         """
         if node_id not in self.children_ids:
             self.children_ids.append(node_id)
-    
+
     def remove_child(self, node_id: str) -> None:
         """
         Remove a child node ID from this node.
@@ -149,7 +155,7 @@ class Node(BaseModel):
         """
         if node_id in self.children_ids:
             self.children_ids.remove(node_id)
-    
+
     @property
     def doc_hash(self) -> str:
         """
@@ -208,15 +214,15 @@ class DocumentNode(Node):
             **data: Keyword arguments for initialization
         """
         super().__init__(**data)
-        
+
         # Set doc_id to self.id (document references itself)
         if self.doc_id is None:
             self.doc_id = self.id
-        
+
         # Mark as document in metadata
         if 'document' not in self.metadata:
             self.metadata['document'] = True
-        
+
         # Validate that DocumentNode typically has no parent
         if self.parent_id is not None:
             import warnings
@@ -224,7 +230,7 @@ class DocumentNode(Node):
                 "DocumentNode typically should not have a parent. "
                 "If this is intentional, you can ignore this warning."
             )
-    
+
     @classmethod
     def from_text(
         cls,
@@ -262,7 +268,7 @@ class Chunk(Node):
     chunk_index: Optional[int] = None
     start_char_idx: Optional[int] = None
     end_char_idx: Optional[int] = None
-    
+
     def __init__(self, **data):
         """
         Initialize a Chunk.
@@ -274,7 +280,7 @@ class Chunk(Node):
         # Ensure metadata has chunk-specific fields
         if 'chunk' not in self.metadata:
             self.metadata['chunk'] = True
-    
+
     @classmethod
     def from_text(
         cls,
@@ -307,7 +313,7 @@ class Chunk(Node):
             metadata=metadata or {},
             **kwargs
         )
-    
+
     def link_to_previous(self, previous_chunk_id: str) -> None:
         """
         Create a link to the previous chunk ID.
@@ -318,7 +324,7 @@ class Chunk(Node):
             previous_chunk_id: The previous chunk ID in the sequence
         """
         self.previous_id = previous_chunk_id
-    
+
     def get_surrounding_context(
         self,
         num_chunks_before: int = 1,
@@ -337,7 +343,7 @@ class Chunk(Node):
             The chunk's text only
         """
         return self.text
-    
+
     def create_symbolic_nodes(
         self,
         sub_texts: List[str],
@@ -364,7 +370,7 @@ class Chunk(Node):
                 metadata=metadata
             )
             sym_nodes.append(sym_node)
-        
+
         return sym_nodes
 
 
@@ -377,11 +383,9 @@ class SymNode(Node):
     When a SymNode is retrieved from a vector index, the parent node is automatically
     resolved and returned instead.
     """
-    
-    # Flag to indicate this is a symbolic node
-    is_symbolic: bool = True
+
     node_type: NodeType = NodeType.SYMNODE
-    
+
     def __init__(self, **data):
         """
         Initialize a SymNode.
@@ -393,11 +397,11 @@ class SymNode(Node):
         # Ensure metadata has symbolic flag
         if 'symbolic' not in self.metadata:
             self.metadata['symbolic'] = True
-        
+
         # Validate that parent_id is set
         if not self.parent_id:
             raise ValueError("SymNode must have a parent_id set")
-    
+
     @classmethod
     def create(
         cls,
@@ -424,15 +428,6 @@ class SymNode(Node):
             metadata=metadata or {},
             **kwargs
         )
-    
-    def requires_parent_resolution(self) -> bool:
-        """
-        Check if this node requires parent resolution during retrieval.
-        
-        Returns:
-            True if parent should be resolved
-        """
-        return self.is_symbolic and self.parent_id is not None
 
 
 class NodeWithScore(BaseModel):
@@ -442,10 +437,10 @@ class NodeWithScore(BaseModel):
     This is typically used in retrieval results where documents
     are returned with their similarity scores.
     """
-    
+    node_type: NodeType = NodeType.NODE_WITH_SCORE
     node: Node = Field(description="The document node")
     score: float = Field(description="Relevance score (typically 0.0 to 1.0)")
-    
+
     model_config = {
         "arbitrary_types_allowed": True,
     }
@@ -453,20 +448,19 @@ class NodeWithScore(BaseModel):
     # def __init__(self, node: Node, score: int):
     #     super().__init__(score=score, **node.model_dump())
 
-
     def __repr__(self) -> str:
         return f"NodeWithScore(score={self.score:.3f}, node_id={self.node.id[:8]}, {self.node.text[:100]}...)"
-    
+
     @property
     def text(self) -> str:
         """Convenience property to access the node's text."""
         return self.node.text
-    
+
     @property
     def metadata(self) -> Dict[str, Any]:
         """Convenience property to access the node's metadata."""
         return self.node.metadata
-    
+
     @property
     def id(self) -> str:
         """Convenience property to access the node's id."""
@@ -478,7 +472,47 @@ class ObjectNode(Node):
     A node that represents an object.
     """
     node_type: NodeType = NodeType.OBJECT
-    object_id: Any = Field(description="The object_id", default_factory=lambda: str(uuid4()))
     object_type: Any = Field(description="The object_type", default=None)
-    _object: Any | None = PrivateAttr()
+    data: Any | None = None
+
+    @classmethod
+    def from_retriever(cls, text: str, retriever: ObjectNodeMixin):
+        return cls(
+            text=text,
+            object_type=ObjectType.VECTOR_INDEX_RETRIEVER,
+            data=retriever.to_json(),
+        )
+
+
+class ObjectType(str, Enum):
+    VECTOR_INDEX_RETRIEVER = "vector_index_retriever"
+    AGENT = "agent"
+    CUSTOM = "custom"
+
+
+class ObjectMapper(BaseModel, ABC):
+
+    @abstractmethod
+    async def resolve_object_node(self, node: ObjectNode, query: str, top_k: Optional[int] = None, **kwargs) -> List[Node]:
+        pass
+
+
+class DefaultObjectMapper(ObjectMapper):
+    object_map: Dict[str, Any] = {}
+    factories: Dict[str, Any] = {}
+
+    def __init__(self, factories: Optional[Dict[str, Any]] = None):
+        super().__init__()
+        self.factories = factories or {}
+
+
+    async def resolve_object_node(self, node: ObjectNode, query: str, top_k: Optional[int] = None, **kwargs) -> List[Node]:
+
+        if not node.id in self.object_map and not node.object_type in self.factories:
+            raise ValueError(f"Unsupported object type: {node.object_type}\nMake sure to provide an ObjectMapper to the retriever.")
+        elif not node.id in self.object_map:
+            self.object_map[node.id] = self.factories[node.object_type](node.data)
+            return await self.object_map[node.id].aretrieve(query, top_k, **kwargs)
+        else:
+            return await self.object_map[node.id].aretrieve(query, top_k, **kwargs)
 

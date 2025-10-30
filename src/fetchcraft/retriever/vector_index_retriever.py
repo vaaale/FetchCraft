@@ -6,7 +6,7 @@ from typing import List, TypeVar, Optional, Any, Dict, Annotated
 from pydantic import Field, ConfigDict, SkipValidation
 
 from .base import Retriever
-from ..node import Node, NodeWithScore
+from ..node import Node, NodeWithScore, ObjectMapper
 
 D = TypeVar('D', bound=Node)
 
@@ -32,6 +32,7 @@ class VectorIndexRetriever(Retriever[D]):
         vector_index: Any,  # VectorIndex[D] - using Any to avoid circular import
         top_k: int = 4,
         resolve_parents: bool = True,
+        object_mapper: Optional[ObjectMapper] = None,
         **search_kwargs
     ):
         """
@@ -47,10 +48,20 @@ class VectorIndexRetriever(Retriever[D]):
             vector_index=vector_index,
             top_k=top_k,
             resolve_parents=resolve_parents,
+            object_mapper=object_mapper,
             search_kwargs=search_kwargs
         )
 
-    async def aretrieve(
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "index_id": self.vector_index.index_id,
+            "top_k": self.top_k,
+            "resolve_parents": self.resolve_parents,
+            "search_kwargs": self.search_kwargs
+        }
+
+
+    async def _retrieve(
         self, 
         query: str,
         top_k: Optional[int] = None,

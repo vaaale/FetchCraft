@@ -5,7 +5,7 @@ from uuid import uuid4
 from pydantic import Field, ConfigDict, BaseModel, PrivateAttr
 
 from fetchcraft.document_store import DocumentStore
-from fetchcraft.node import SymNode, Chunk, Node
+from fetchcraft.node import Chunk, Node, NodeType, ObjectMapper
 
 D = TypeVar('D', bound=Node)
 
@@ -16,12 +16,12 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
         validate_assignment=True,
     )
     index_id: str = Field(default_factory=lambda: str(uuid4()), description="Unique index identifier")
+    _object_mapper: Optional[ObjectMapper] = PrivateAttr()
     _doc_store: Optional[DocumentStore[Node]] = PrivateAttr()
 
     def __init__(self, doc_store: Optional[DocumentStore] = None, **kwargs):
         super().__init__(**kwargs)
         self._doc_store = doc_store
-
 
     @abstractmethod
     def add_nodes(self, documents, show_progress):
@@ -73,43 +73,79 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
         """
         pass
 
+    async def _resolve_to_top_parent(
+        self,
+        node: D,
+        max_depth: int = 10
+    ) -> Optional[D]:
+        """
+        Recursively resolve a node to its top-level parent.
+
+        Args:
+            node: The node to resolve
+            max_depth: Maximum recursion depth to prevent infinite loops
+
+        Returns:
+            The top-level parent node, or None if not found
+        """
+        current_node = node
+        depth = 0
+
+        while depth < max_depth:
+            # If current node is a SymNode with a parent, get its parent
+            if current_node.node_type == NodeType.SYMNODE and current_node.parent_id:
+                parent_id = current_node.parent_id
+
+                # Fetch the parent node
+                parent_node = await self.vector_store.get_node(parent_id, index_id=None)
+
+                if not parent_node:
+                    # Parent not found, return current node
+                    return current_node
+
+                # Continue with the parent
+                current_node = parent_node  # type: ignore
+                depth += 1
+            else:
+                # Reached a non-SymNode
+                return current_node
+
+        # Max depth reached, return current node
+        return current_node
+
     async def _resolve_parent_nodes(
         self,
         results: List[tuple[D, float]]
     ) -> List[tuple[D, float]]:
         """
         Resolve parent nodes for SymNode instances in search results.
+        Recursively resolves to the top-level parent if the parent is also a SymNode.
 
         Args:
             results: List of (document, score) tuples from search
 
         Returns:
-            List of (document, score) tuples with parent nodes resolved
+            List of (document, score) tuples with parent nodes resolved to top level
         """
         resolved_results = []
         seen_parent_ids: Set[str] = set()
 
         for doc, score in results:
-            # Check if this is a SymNode that requires parent resolution
-            if isinstance(doc, SymNode) and doc.requires_parent_resolution():
-                parent_id = doc.parent_id
+            # Check if this is a SymNode that needs parent resolution
+            if doc.node_type == NodeType.SYMNODE and doc.parent_id:
+                # Recursively resolve to top-level parent
+                top_parent = await self._resolve_to_top_parent(doc)
 
-                # Skip if we've already resolved this parent
-                if parent_id in seen_parent_ids:
-                    continue
-
-                # Fetch the parent node
-                # Note: parent might be in a different index, so we don't pass index_id
-                parent_node = await self.vector_store.get_node(parent_id, index_id=None)
-
-                if parent_node:
-                    resolved_results.append((parent_node, score))  # type: ignore
-                    seen_parent_ids.add(parent_id)
-                else:
-                    # If parent not found, fall back to the SymNode itself
-                    resolved_results.append((doc, score))
+                if top_parent and top_parent.id not in seen_parent_ids:
+                    resolved_results.append((top_parent, score))
+                    seen_parent_ids.add(top_parent.id)
+                elif not top_parent:
+                    # Resolution failed, fall back to original node
+                    if doc.id not in seen_parent_ids:
+                        resolved_results.append((doc, score))
+                        seen_parent_ids.add(doc.id)
             else:
-                # Not a SymNode or doesn't require resolution
+                # Not a SymNode
                 # Check if this document is already a parent we've seen
                 if doc.id not in seen_parent_ids:
                     resolved_results.append((doc, score))
@@ -148,7 +184,7 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def as_retriever(self, top_k, resolve_parents, search_kwargs):
+    def as_retriever(self, top_k, resolve_parents, object_mapper: Optional[ObjectMapper] = None, **search_kwargs):
         """
         Create a retriever from this index.
 
@@ -161,5 +197,8 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
 
         Returns:
             A VectorIndexRetriever instance
+            :param top_k: Number of results to return (default: 4)
+            :param resolve_parents: Whether to resolve parent nodes for SymNodes (default: True)
+            :param object_mapper: ObjectMapper to use for object resolution
         """
         pass

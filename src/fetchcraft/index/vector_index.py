@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 from fetchcraft.document_store import DocumentStore
 from fetchcraft.index.base import BaseIndex
-from fetchcraft.node import Node, Chunk
+from fetchcraft.node import Node, Chunk, ObjectMapper
 from fetchcraft.vector_store.base import VectorStore
 
 D = TypeVar('D', bound=Node)
@@ -195,6 +195,7 @@ class VectorIndex(BaseIndex[D]):
         self,
         top_k: int = 4,
         resolve_parents: bool = True,
+        object_mapper: Optional[ObjectMapper] = None,
         **search_kwargs
     ) -> 'VectorIndexRetriever[D]':
         """
@@ -209,6 +210,9 @@ class VectorIndex(BaseIndex[D]):
             
         Returns:
             A VectorIndexRetriever instance
+            :param top_k:
+            :param resolve_parents:
+            :param object_mapper:
         """
         from ..retriever import VectorIndexRetriever
         
@@ -216,5 +220,6 @@ class VectorIndex(BaseIndex[D]):
             vector_index=self,
             top_k=top_k,
             resolve_parents=resolve_parents,
+            object_mapper=object_mapper,
             **search_kwargs
         )
