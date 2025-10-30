@@ -22,6 +22,26 @@ from fetchcraft.node import DocumentNode
 from fetchcraft.source.base import DocumentSource
 from collections import defaultdict
 
+
+# Supported file formats by Docling
+DOCLING_SUPPORTED_EXTENSIONS = {
+    '.pdf',      # PDF documents
+    '.docx',     # Microsoft Word
+    '.pptx',     # Microsoft PowerPoint
+    '.html',     # HTML documents
+    '.htm',      # HTML documents
+    '.xlsx',     # Microsoft Excel
+    '.png',      # Images (with OCR)
+    '.jpg',      # Images (with OCR)
+    '.jpeg',     # Images (with OCR)
+    '.tiff',     # Images (with OCR)
+    '.bmp',      # Images (with OCR)
+    '.asciidoc', # AsciiDoc
+    '.adoc',     # AsciiDoc
+    '.md',       # Markdown
+}
+
+
 class DoclingDocumentSource(DocumentSource):
     """
     Document source for parsing documents using Docling.
@@ -29,18 +49,35 @@ class DoclingDocumentSource(DocumentSource):
     Docling provides advanced document understanding with:
     - Superior table extraction and formatting
     - Layout analysis and structure preservation
-    - Support for multiple formats (PDF, DOCX, PPTX, etc.)
-    - OCR capabilities for scanned documents
+    - Support for multiple formats (PDF, DOCX, PPTX, HTML, XLSX, Images, AsciiDoc, Markdown)
+    - OCR capabilities for scanned documents and images
     - Metadata extraction (titles, authors, etc.)
+    
+    Supported file formats:
+    - PDF (.pdf)
+    - Microsoft Word (.docx)
+    - Microsoft PowerPoint (.pptx)
+    - Microsoft Excel (.xlsx)
+    - HTML (.html, .htm)
+    - Images (.png, .jpg, .jpeg, .tiff, .bmp) - with OCR
+    - AsciiDoc (.asciidoc, .adoc)
+    - Markdown (.md)
     
     Example:
         ```python
         # Load single PDF file
         source = DoclingDocumentSource.from_file(Path("document.pdf"))
         
-        # Load all PDFs from directory
+        # Load all supported documents from directory
         source = DoclingDocumentSource.from_directory(
             Path("./docs"), 
+            pattern="*",  # Will auto-filter to supported formats
+            recursive=True
+        )
+        
+        # Load only specific format
+        source = DoclingDocumentSource.from_directory(
+            Path("./docs"),
             pattern="*.pdf",
             recursive=True
         )
@@ -64,6 +101,7 @@ class DoclingDocumentSource(DocumentSource):
     page_chunks: bool = True  # If True, return each page as separate document
     do_ocr: bool = True  # Enable OCR for scanned documents
     do_table_structure: bool = True  # Extract table structure
+    filter_supported_only: bool = True  # If True, only process supported file formats
     
     model_config = {
         "arbitrary_types_allowed": True,
@@ -100,10 +138,23 @@ class DoclingDocumentSource(DocumentSource):
             files = self.directory.glob(self.pattern)
         
         for file_path in files:
-            if file_path.is_file():
-                # Yield one or more documents from this file
+            if not file_path.is_file():
+                continue
+            
+            # Filter by supported extensions if enabled
+            if self.filter_supported_only:
+                file_ext = file_path.suffix.lower()
+                if file_ext not in DOCLING_SUPPORTED_EXTENSIONS:
+                    continue
+            
+            # Yield one or more documents from this file
+            try:
                 async for doc in self._read_document(file_path, metadata, **kwargs):
                     yield doc
+            except Exception as e:
+                # Log error but continue processing other files
+                print(f"Warning: Failed to process {file_path}: {str(e)}")
+                continue
     
     async def _read_document(
         self, 
@@ -213,10 +264,13 @@ class DoclingDocumentSource(DocumentSource):
         """
         Create a DoclingDocumentSource for a single document file.
         
+        Supports all Docling-compatible formats:
+        PDF, DOCX, PPTX, XLSX, HTML, Images (PNG, JPG, etc.), AsciiDoc, Markdown
+        
         Args:
             file_path: Path to the document file
             page_chunks: If True, split into separate documents per page
-            do_ocr: Enable OCR for scanned documents
+            do_ocr: Enable OCR for scanned documents and images
             do_table_structure: Extract table structure
             
         Returns:
@@ -228,7 +282,8 @@ class DoclingDocumentSource(DocumentSource):
             recursive=False,
             page_chunks=page_chunks,
             do_ocr=do_ocr,
-            do_table_structure=do_table_structure
+            do_table_structure=do_table_structure,
+            filter_supported_only=False  # Single file, no filtering needed
         )
     
     @classmethod
@@ -239,18 +294,28 @@ class DoclingDocumentSource(DocumentSource):
         recursive: bool = True,
         page_chunks: bool = True,
         do_ocr: bool = True,
-        do_table_structure: bool = True
+        do_table_structure: bool = True,
+        filter_supported_only: bool = True
     ) -> "DoclingDocumentSource":
         """
         Create a DoclingDocumentSource for a directory of documents.
+        
+        Automatically processes all Docling-supported file formats:
+        - PDF (.pdf)
+        - Microsoft Office (.docx, .pptx, .xlsx)
+        - HTML (.html, .htm)
+        - Images (.png, .jpg, .jpeg, .tiff, .bmp)
+        - AsciiDoc (.asciidoc, .adoc)
+        - Markdown (.md)
         
         Args:
             directory: Directory containing document files
             pattern: Glob pattern for matching files (default: "*" for all files)
             recursive: If True, search subdirectories
             page_chunks: If True, split documents into separate documents per page
-            do_ocr: Enable OCR for scanned documents
+            do_ocr: Enable OCR for scanned documents and images
             do_table_structure: Extract table structure
+            filter_supported_only: If True, only process Docling-supported formats (default: True)
             
         Returns:
             DoclingDocumentSource instance
@@ -261,5 +326,6 @@ class DoclingDocumentSource(DocumentSource):
             recursive=recursive,
             page_chunks=page_chunks,
             do_ocr=do_ocr,
-            do_table_structure=do_table_structure
+            do_table_structure=do_table_structure,
+            filter_supported_only=filter_supported_only
         )
