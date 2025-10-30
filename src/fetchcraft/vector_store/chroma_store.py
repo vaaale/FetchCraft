@@ -7,7 +7,9 @@ from uuid import uuid4
 from pydantic import BaseModel, Field, ConfigDict
 
 from .base import VectorStore, D
+from .chroma_filter_translator import ChromaFilterTranslator
 from ..node import Node, DocumentNode, Chunk, SymNode
+from ..filters import MetadataFilter
 
 
 try:
@@ -189,7 +191,11 @@ class ChromaVectorStore(VectorStore[D]):
             if index_id is not None:
                 doc_dict['_index_id'] = index_id
             
-            # Convert all metadata values to strings (Chroma requirement)
+            # Flatten user metadata to top level for ChromaDB (it doesn't support nested queries)
+            # Extract user metadata first
+            user_metadata = doc_dict.pop('metadata', {})
+            
+            # Convert all metadata values to ChromaDB format
             metadata = {}
             for key, value in doc_dict.items():
                 if value is not None:
@@ -199,6 +205,17 @@ class ChromaVectorStore(VectorStore[D]):
                         # Convert complex types to JSON strings
                         import json
                         metadata[key] = json.dumps(value)
+            
+            # Add flattened user metadata with 'metadata.' prefix to avoid conflicts
+            # This allows querying as metadata.field_name
+            for key, value in user_metadata.items():
+                if value is not None:
+                    metadata_key = f"metadata.{key}"
+                    if isinstance(value, (str, int, float, bool)):
+                        metadata[metadata_key] = value
+                    else:
+                        import json
+                        metadata[metadata_key] = json.dumps(value)
             
             metadatas.append(metadata)
             documents_text.append(doc.text if hasattr(doc, 'text') else "")  # type: ignore
@@ -214,12 +231,25 @@ class ChromaVectorStore(VectorStore[D]):
         
         return ids
     
+    def _translate_filter_to_chroma(self, filter_obj: Union[MetadataFilter, Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Translate a MetadataFilter to ChromaDB filter format.
+        
+        Args:
+            filter_obj: The filter to translate
+            
+        Returns:
+            ChromaDB where clause dictionary
+        """
+        return ChromaFilterTranslator.translate(filter_obj)
+    
     async def similarity_search(
         self,
         query_embedding: List[float],
         k: int = 4,
         index_id: Optional[str] = None,
         query_text: Optional[str] = None,
+        filters: Optional[Union[MetadataFilter, Dict[str, Any]]] = None,
         **kwargs
     ) -> List[tuple[D, float]]:
         """
@@ -230,20 +260,30 @@ class ChromaVectorStore(VectorStore[D]):
             k: Number of results to return
             index_id: Optional index identifier to filter search results
             query_text: Original query text (not used by Chroma, included for compatibility)
+            filters: Optional metadata filters to apply
             **kwargs: Additional search parameters
             
         Returns:
             List of tuples containing (document, similarity_score)
         """
-        # Build where filter for index_id if provided
-        where_filter = kwargs.pop('where', None)
+        # Build where filter
+        where_filter = None
+        filter_clauses = []
+        
+        # Add index_id filter if provided
         if index_id is not None:
-            index_filter = {"_index_id": index_id}
-            if where_filter:
-                # Merge filters using $and
-                where_filter = {"$and": [where_filter, index_filter]}
-            else:
-                where_filter = index_filter
+            filter_clauses.append({"_index_id": {"$eq": index_id}})
+        
+        # Add user-provided filters
+        if filters is not None:
+            user_filter = self._translate_filter_to_chroma(filters)
+            filter_clauses.append(user_filter)
+        
+        # Combine filters
+        if len(filter_clauses) > 1:
+            where_filter = {"$and": filter_clauses}
+        elif len(filter_clauses) == 1:
+            where_filter = filter_clauses[0]
         
         # Query Chroma
         results = self._collection.query(
@@ -276,6 +316,7 @@ class ChromaVectorStore(VectorStore[D]):
                 
                 # Reconstruct document
                 doc_dict = {'text': text}
+                user_metadata = {}  # Collect flattened metadata fields
                 
                 # Parse metadata back to proper types
                 import json
@@ -283,14 +324,31 @@ class ChromaVectorStore(VectorStore[D]):
                     if key.startswith('_'):
                         continue  # Skip internal fields for now
                     
-                    # Try to parse JSON strings back to objects
-                    if isinstance(value, str):
-                        try:
-                            doc_dict[key] = json.loads(value)
-                        except (json.JSONDecodeError, TypeError):
-                            doc_dict[key] = value
+                    # Check if this is a flattened metadata field
+                    if key.startswith('metadata.'):
+                        # Extract the actual metadata key
+                        metadata_key = key[len('metadata.'):]
+                        # Try to parse JSON strings back to objects
+                        if isinstance(value, str):
+                            try:
+                                user_metadata[metadata_key] = json.loads(value)
+                            except (json.JSONDecodeError, TypeError):
+                                user_metadata[metadata_key] = value
+                        else:
+                            user_metadata[metadata_key] = value
                     else:
-                        doc_dict[key] = value
+                        # Regular field
+                        if isinstance(value, str):
+                            try:
+                                doc_dict[key] = json.loads(value)
+                            except (json.JSONDecodeError, TypeError):
+                                doc_dict[key] = value
+                        else:
+                            doc_dict[key] = value
+                
+                # Add reconstructed user metadata
+                if user_metadata:
+                    doc_dict['metadata'] = user_metadata
                 
                 # Add back essential fields
                 doc_dict['id'] = metadata.get('id', doc_id)
@@ -366,6 +424,7 @@ class ChromaVectorStore(VectorStore[D]):
         embedding = result['embeddings'][0] if result.get('embeddings') is not None and len(result['embeddings']) > 0 else None
         
         doc_dict = {'text': text}
+        user_metadata = {}  # Collect flattened metadata fields
         
         # Parse metadata back to proper types
         import json
@@ -373,14 +432,31 @@ class ChromaVectorStore(VectorStore[D]):
             if key.startswith('_') and key != '_doc_class':
                 continue  # Skip internal fields
             
-            # Try to parse JSON strings back to objects
-            if isinstance(value, str):
-                try:
-                    doc_dict[key] = json.loads(value)
-                except (json.JSONDecodeError, TypeError):
-                    doc_dict[key] = value
+            # Check if this is a flattened metadata field
+            if key.startswith('metadata.'):
+                # Extract the actual metadata key
+                metadata_key = key[len('metadata.'):]
+                # Try to parse JSON strings back to objects
+                if isinstance(value, str):
+                    try:
+                        user_metadata[metadata_key] = json.loads(value)
+                    except (json.JSONDecodeError, TypeError):
+                        user_metadata[metadata_key] = value
+                else:
+                    user_metadata[metadata_key] = value
             else:
-                doc_dict[key] = value
+                # Regular field
+                if isinstance(value, str):
+                    try:
+                        doc_dict[key] = json.loads(value)
+                    except (json.JSONDecodeError, TypeError):
+                        doc_dict[key] = value
+                else:
+                    doc_dict[key] = value
+        
+        # Add reconstructed user metadata
+        if user_metadata:
+            doc_dict['metadata'] = user_metadata
         
         # Add back essential fields
         doc_dict['id'] = metadata.get('id', document_id)

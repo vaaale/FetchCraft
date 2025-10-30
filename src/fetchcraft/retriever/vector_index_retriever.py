@@ -1,7 +1,7 @@
 """
 Vector index retriever implementation.
 """
-from typing import List, TypeVar, Optional, Any, Dict, Annotated
+from typing import List, TypeVar, Optional, Any, Dict, Annotated, Union
 
 from pydantic import Field, ConfigDict, SkipValidation
 
@@ -9,6 +9,12 @@ from .base import Retriever
 from ..node import Node, NodeWithScore, ObjectMapper
 
 D = TypeVar('D', bound=Node)
+
+# Import filter types
+try:
+    from ..filters import MetadataFilter
+except ImportError:
+    MetadataFilter = None
 
 
 class VectorIndexRetriever(Retriever[D]):
@@ -33,6 +39,7 @@ class VectorIndexRetriever(Retriever[D]):
         top_k: int = 4,
         resolve_parents: bool = True,
         object_mapper: Optional[ObjectMapper] = None,
+        filters: Optional[Union['MetadataFilter', Dict[str, Any]]] = None,
         **search_kwargs
     ):
         """
@@ -42,13 +49,34 @@ class VectorIndexRetriever(Retriever[D]):
             vector_index: The VectorIndex instance to use for retrieval (with vector store configured)
             top_k: Number of results to return (default: 4)
             resolve_parents: Whether to resolve parent nodes for SymNodes (default: True)
+            object_mapper: Optional object mapper for resolving ObjectNodes
+            filters: Default metadata filters to apply to all queries
             **search_kwargs: Additional keyword arguments to pass to search
+        
+        Example:
+            ```python
+            from fetchcraft import eq, and_, gte
+            
+            # Retriever with default filters
+            retriever = VectorIndexRetriever(
+                vector_index=index,
+                top_k=5,
+                filters=eq("category", "tutorial")
+            )
+            
+            # All queries will use the default filter
+            results = retriever.retrieve("machine learning")
+            
+            # Can override filters per query
+            results = retriever.retrieve("ML", filters=gte("year", 2024))
+            ```
         """
         super().__init__(
             vector_index=vector_index,
             top_k=top_k,
             resolve_parents=resolve_parents,
             object_mapper=object_mapper,
+            filters=filters,
             search_kwargs=search_kwargs
         )
 

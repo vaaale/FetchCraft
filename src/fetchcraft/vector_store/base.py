@@ -1,10 +1,16 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional, Dict, Any, TypeVar, Generic, Type
+from typing import List, Optional, Dict, Any, TypeVar, Generic, Type, Union
 
 from pydantic import BaseModel, ConfigDict, PrivateAttr
 
 # Type variable for document type
 D = TypeVar('D', bound=BaseModel)
+
+# Import filter types
+try:
+    from fetchcraft.filters import MetadataFilter
+except ImportError:
+    MetadataFilter = None
 
 class VectorStore(BaseModel, ABC, Generic[D]):
     """
@@ -73,6 +79,7 @@ class VectorStore(BaseModel, ABC, Generic[D]):
         k: int = 4,
         index_id: Optional[str] = None,
         query_text: Optional[str] = None,
+        filters: Optional[Union['MetadataFilter', Dict[str, Any]]] = None,
         **kwargs
     ) -> List[tuple[D, float]]:
         """
@@ -83,6 +90,7 @@ class VectorStore(BaseModel, ABC, Generic[D]):
             k: Number of results to return
             index_id: Optional index identifier to filter search results
             query_text: Original query text (required for hybrid search)
+            filters: Optional metadata filters to apply
             **kwargs: Additional search parameters
             
         Returns:
@@ -95,6 +103,7 @@ class VectorStore(BaseModel, ABC, Generic[D]):
         query: str,
         k: int = 4,
         index_id: Optional[str] = None,
+        filters: Optional[Union['MetadataFilter', Dict[str, Any]]] = None,
         **kwargs
     ) -> List[tuple[D, float]]:
         """
@@ -105,6 +114,7 @@ class VectorStore(BaseModel, ABC, Generic[D]):
             query: The query text
             k: Number of results to return
             index_id: Optional index identifier to filter search results
+            filters: Optional metadata filters to apply
             **kwargs: Additional search parameters
             
         Returns:
@@ -119,6 +129,7 @@ class VectorStore(BaseModel, ABC, Generic[D]):
             k=k,
             index_id=index_id,
             query_text=query,
+            filters=filters,
             **kwargs
         )
     

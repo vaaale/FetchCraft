@@ -1,4 +1,4 @@
-from typing import List, TypeVar, Optional, Annotated
+from typing import List, TypeVar, Optional, Annotated, Any
 from uuid import uuid4
 
 from pydantic import Field, SkipValidation
@@ -196,6 +196,7 @@ class VectorIndex(BaseIndex[D]):
         top_k: int = 4,
         resolve_parents: bool = True,
         object_mapper: Optional[ObjectMapper] = None,
+        filters: Optional[Any] = None,
         **search_kwargs
     ) -> 'VectorIndexRetriever[D]':
         """
@@ -206,13 +207,29 @@ class VectorIndex(BaseIndex[D]):
         Args:
             top_k: Number of results to return (default: 4)
             resolve_parents: Whether to resolve parent nodes for SymNodes (default: True)
+            object_mapper: Optional object mapper for resolving ObjectNodes
+            filters: Default metadata filters to apply to all queries
             **search_kwargs: Additional keyword arguments to pass to search
             
         Returns:
             A VectorIndexRetriever instance
-            :param top_k:
-            :param resolve_parents:
-            :param object_mapper:
+            
+        Example:
+            ```python
+            from fetchcraft import eq, and_, gte
+            
+            # Retriever with default filters
+            retriever = index.as_retriever(
+                top_k=5,
+                filters=eq("category", "tutorial")
+            )
+            
+            # All queries will use the default filter
+            results = retriever.retrieve("machine learning")
+            
+            # Can override filters per query
+            results = retriever.retrieve("ML", filters=gte("year", 2024))
+            ```
         """
         from ..retriever import VectorIndexRetriever
         
@@ -221,5 +238,6 @@ class VectorIndex(BaseIndex[D]):
             top_k=top_k,
             resolve_parents=resolve_parents,
             object_mapper=object_mapper,
+            filters=filters,
             **search_kwargs
         )

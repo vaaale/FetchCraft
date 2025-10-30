@@ -6,8 +6,10 @@ from qdrant_client.http import models
 from tqdm import tqdm
 
 from .base import VectorStore, D
+from .qdrant_filter_translator import QdrantFilterTranslator
 from ..embeddings import Embeddings
 from ..node import Node, DocumentNode, Chunk, SymNode, ObjectNode
+from ..filters import MetadataFilter
 
 try:
     from fastembed import SparseTextEmbedding
@@ -230,12 +232,25 @@ class QdrantVectorStore(VectorStore[Node]):
         
         return ids
     
+    def _translate_filter_to_qdrant(self, filter_obj: Union[MetadataFilter, Dict[str, Any]]) -> models.Filter:
+        """
+        Translate a MetadataFilter to Qdrant filter format.
+        
+        Args:
+            filter_obj: The filter to translate
+            
+        Returns:
+            Qdrant Filter object
+        """
+        return QdrantFilterTranslator.translate(filter_obj)
+    
     async def similarity_search(
         self, 
         query_embedding: List[float],
         k: int = 4,
         index_id: Optional[str] = None,
         query_text: Optional[str] = None,
+        filters: Optional[Union[MetadataFilter, Dict[str, Any]]] = None,
         **kwargs
     ) -> List[tuple[D, float]]:
         """
@@ -246,30 +261,47 @@ class QdrantVectorStore(VectorStore[Node]):
             k: Number of results to return
             index_id: Optional index identifier to filter search results
             query_text: Original query text (required for hybrid search)
+            filters: Optional metadata filters to apply
             **kwargs: Additional search parameters
             
         Returns:
             List of tuples containing (document, similarity_score)
         """
-        # Build filter for index_id if provided
-        query_filter = kwargs.pop('query_filter', None)
+        # Build filter
+        query_filter = None
+        must_conditions = []
+        must_not_conditions = []
+        should_conditions = []
+        
+        # Add index_id filter if provided
         if index_id is not None:
-            index_filter = models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="_index_id",
-                        match=models.MatchValue(value=index_id)
-                    )
-                ]
+            must_conditions.append(
+                models.FieldCondition(
+                    key="_index_id",
+                    match=models.MatchValue(value=index_id)
+                )
             )
-            # Merge with existing filter if provided
-            if query_filter:
-                if hasattr(query_filter, 'must'):
-                    query_filter.must.extend(index_filter.must)
-                else:
-                    query_filter = index_filter
-            else:
-                query_filter = index_filter
+        
+        # Add user-provided filters
+        if filters is not None:
+            user_filter = self._translate_filter_to_qdrant(filters)
+            if user_filter.must:
+                must_conditions.extend(user_filter.must)
+            if user_filter.should:
+                should_conditions.extend(user_filter.should)
+            if user_filter.must_not:
+                must_not_conditions.extend(user_filter.must_not)
+        
+        # Create final filter if we have any conditions
+        if must_conditions or must_not_conditions or should_conditions:
+            filter_kwargs = {}
+            if must_conditions:
+                filter_kwargs['must'] = must_conditions
+            if must_not_conditions:
+                filter_kwargs['must_not'] = must_not_conditions
+            if should_conditions:
+                filter_kwargs['should'] = should_conditions
+            query_filter = models.Filter(**filter_kwargs)
         
         # Perform hybrid search if enabled
         if self.enable_hybrid:

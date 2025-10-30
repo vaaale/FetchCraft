@@ -3,7 +3,7 @@ Base retriever interface for RAG framework.
 """
 import asyncio
 from abc import ABC, abstractmethod
-from typing import List, TypeVar, Generic, Optional, cast
+from typing import List, TypeVar, Generic, Optional, cast, Union, Any, Dict
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -12,6 +12,11 @@ from ..node import Node, NodeWithScore, NodeType, ObjectMapper, ObjectNode, Defa
 
 D = TypeVar('D', bound=Node)
 
+# Import filter types
+try:
+    from ..filters import MetadataFilter
+except ImportError:
+    MetadataFilter = None
 
 
 class Retriever(BaseModel, ABC, Generic[D], ObjectNodeMixin):
@@ -27,14 +32,18 @@ class Retriever(BaseModel, ABC, Generic[D], ObjectNodeMixin):
     resolve_parents: bool = Field(default=True, description="Whether to resolve parent nodes")
     object_mapper: Optional[ObjectMapper] = None
     top_k: int = Field(default=4, description="Number of results to return")
+    filters: Optional[Union['MetadataFilter', Dict[str, Any]]] = Field(
+        default=None, 
+        description="Default metadata filters applied to all queries"
+    )
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         validate_assignment=True,
     )
 
-    def __init__(self, object_mapper: Optional[ObjectMapper] = None, **kwargs):
+    def __init__(self, object_mapper: Optional[ObjectMapper] = None, filters: Optional[Union['MetadataFilter', Dict[str, Any]]] = None, **kwargs):
         object_mapper = object_mapper or DefaultObjectMapper()
-        super().__init__(object_mapper=object_mapper, **kwargs)
+        super().__init__(object_mapper=object_mapper, filters=filters, **kwargs)
 
     def retrieve(
         self,
@@ -69,11 +78,21 @@ class Retriever(BaseModel, ABC, Generic[D], ObjectNodeMixin):
 
         Args:
             query: The query text
-            **kwargs: Additional retrieval parameters
+            top_k: Number of results to return (overrides default if provided)
+            **kwargs: Additional retrieval parameters, including optional 'filters'
 
         Returns:
             List of NodeWithScore objects containing documents and their relevance scores
+            
+        Note:
+            If both default filters (from constructor) and query filters (from kwargs) are provided,
+            the query filters will override the default filters.
         """
+        # Merge default filters with query filters
+        # Query filters override default filters
+        if self.filters is not None and 'filters' not in kwargs:
+            kwargs['filters'] = self.filters
+        
         nodes = await self._retrieve(query=query, top_k=top_k, **kwargs)
 
         # Resolve nodes
