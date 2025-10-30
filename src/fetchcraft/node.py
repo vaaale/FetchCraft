@@ -440,6 +440,7 @@ class NodeWithScore(BaseModel):
     node_type: NodeType = NodeType.NODE_WITH_SCORE
     node: Node = Field(description="The document node")
     score: float = Field(description="Relevance score (typically 0.0 to 1.0)")
+    citations: List[Any] = Field(description="List of citations", default=[])
 
     model_config = {
         "arbitrary_types_allowed": True,
@@ -474,6 +475,7 @@ class ObjectNode(Node):
     node_type: NodeType = NodeType.OBJECT
     object_type: Any = Field(description="The object_type", default=None)
     data: Any | None = None
+    obj: Any | None = Field(exclude=True, default=None)
 
     @classmethod
     def from_retriever(cls, text: str, retriever: ObjectNodeMixin):
@@ -481,6 +483,15 @@ class ObjectNode(Node):
             text=text,
             object_type=ObjectType.VECTOR_INDEX_RETRIEVER,
             data=retriever.to_json(),
+        )
+
+    @classmethod
+    def from_agent(cls, text: str, agent: ObjectNodeMixin):
+        return cls(
+            text=text,
+            object_type=ObjectType.AGENT,
+            obj=agent,
+            data=agent.to_json(),
         )
 
 
@@ -493,7 +504,7 @@ class ObjectType(str, Enum):
 class ObjectMapper(BaseModel, ABC):
 
     @abstractmethod
-    async def resolve_object_node(self, node: ObjectNode, query: str, top_k: Optional[int] = None, **kwargs) -> List[Node]:
+    async def resolve_object_node(self, node: ObjectNode, score: float, query: str, top_k: Optional[int] = None, **kwargs) -> List[Node]:
         pass
 
 
@@ -505,14 +516,30 @@ class DefaultObjectMapper(ObjectMapper):
         super().__init__()
         self.factories = factories or {}
 
-
-    async def resolve_object_node(self, node: ObjectNode, query: str, top_k: Optional[int] = None, **kwargs) -> List[Node]:
+    async def resolve_object_node(self, node: ObjectNode, score: float, query: str, top_k: Optional[int] = None, **kwargs) -> List[Node]:
 
         if not node.id in self.object_map and not node.object_type in self.factories:
             raise ValueError(f"Unsupported object type: {node.object_type}\nMake sure to provide an ObjectMapper to the retriever.")
         elif not node.id in self.object_map:
-            self.object_map[node.id] = self.factories[node.object_type](node.data)
-            return await self.object_map[node.id].aretrieve(query, top_k, **kwargs)
-        else:
-            return await self.object_map[node.id].aretrieve(query, top_k, **kwargs)
+            obj = self.factories[node.object_type](node.data)
+            self.object_map[node.id] = obj
+            node.obj = obj
 
+        if ObjectType.VECTOR_INDEX_RETRIEVER == node.object_type:
+            return await self.object_map[node.id].aretrieve(query, top_k, **kwargs)
+        elif ObjectType.AGENT == node.object_type:
+            agent_response = await self.object_map[node.id].query(query, **kwargs)
+            response_node = NodeWithScore(
+                node=Node(
+                    text=agent_response.response.content,
+                ),
+                score=score,
+                citations=agent_response.citations
+            )
+            return [response_node]
+        else:
+            return await self.resolve_custom(node, score, query, top_k, **kwargs)
+
+    async def resolve_custom(self, node: ObjectNode, score: float, query: str, top_k: Optional[int] = None, **kwargs) -> List[Node]:
+        """Override this method to implement custom object resolution"""
+        return [node]

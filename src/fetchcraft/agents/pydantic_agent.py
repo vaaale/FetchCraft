@@ -9,6 +9,7 @@ from pydantic_ai import AgentStreamEvent, PartStartEvent, PartDeltaEvent, TextPa
 
 from .memory import Memory
 from ..logging import configure_logging
+from ..mixins import ObjectNodeMixin
 
 try:
     from pydantic_ai import Agent, RunContext, Tool
@@ -90,7 +91,7 @@ async def event_stream_handler(
         await handle_event(event)
 
 
-class ReActAgent(BaseAgent):
+class PydanticAgent(BaseAgent, ObjectNodeMixin):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     _tools: List[Tool] = PrivateAttr(default=None)
     model: Union[str, Model] = "openai:gpt-4-turbo"
@@ -136,6 +137,11 @@ class ReActAgent(BaseAgent):
         )
         self._tools = tools
 
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "agent_kwargs": self.agent_kwargs,
+        }
+
     @classmethod
     def create(
             cls,
@@ -143,7 +149,7 @@ class ReActAgent(BaseAgent):
             tools: List[Tool] | None = None,
             system_prompt: Optional[str] = None,
             **agent_kwargs
-    ) -> 'ReActAgent':
+    ) -> 'PydanticAgent':
         """
         Create a ReActAgent instance.
         

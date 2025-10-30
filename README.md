@@ -759,7 +759,7 @@ Build intelligent agents with retrieval capabilities:
 
 ```python
 from pydantic_ai import Tool
-from fetchcraft.agents import ReActAgent, RetrieverTool
+from fetchcraft.agents import PydanticAgent, RetrieverTool
 
 # Create retriever tool
 retriever = index.as_retriever(top_k=3)
@@ -767,7 +767,7 @@ retriever_tool = RetrieverTool.from_retriever(retriever)
 tools = [Tool(retriever_tool.get_tool_function(), takes_ctx=True)]
 
 # Create ReAct agent
-agent = ReActAgent.create(
+agent = PydanticAgent.create(
     model="gpt-4-turbo",
     tools=tools
 )

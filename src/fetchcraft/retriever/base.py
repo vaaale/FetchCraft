@@ -52,6 +52,9 @@ class Retriever(BaseModel, ABC, Generic[D], ObjectNodeMixin):
         Returns:
             List of NodeWithScore objects containing documents and their relevance scores
         """
+        import nest_asyncio
+        nest_asyncio.apply()
+
         loop = asyncio.get_event_loop()
         return loop.run_until_complete(self.aretrieve(query, top_k=top_k, **kwargs))
 
@@ -76,14 +79,6 @@ class Retriever(BaseModel, ABC, Generic[D], ObjectNodeMixin):
         # Resolve nodes
         result = []
         resolved_nodes = await self._resolve_recursively(nodes, result, query, top_k, **kwargs)
-        # for scored_node in nodes:
-        #     node = scored_node.node
-        #     score = scored_node.score
-        #     if NodeType.OBJECT == node.node_type:
-        #         new_nodes = await self._resolve_recursively(node, query, top_k, **kwargs)
-        #         result.extend(new_nodes)
-        #     else:
-        #         result.append(node)
         return resolved_nodes
 
     async def _resolve_recursively(
@@ -105,12 +100,17 @@ class Retriever(BaseModel, ABC, Generic[D], ObjectNodeMixin):
         """
         for node in nodes:
             _node = node
+            score = 1.0
             if NodeType.NODE_WITH_SCORE == node.node_type:
                 _node = node.node
+                score = node.score
+            else:
+                resolved_nodes.append(node)
+                continue
 
             if NodeType.OBJECT == _node.node_type:
                 _node = cast(ObjectNode, _node)
-                new_nodes = await self.object_mapper.resolve_object_node(_node, query, top_k, **kwargs)
+                new_nodes = await self.object_mapper.resolve_object_node(_node, score, query, top_k, **kwargs)
                 await self._resolve_recursively(new_nodes, resolved_nodes, query, top_k, **kwargs)
             else:
                 resolved_nodes.append(node)

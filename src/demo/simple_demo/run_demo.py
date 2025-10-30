@@ -20,7 +20,7 @@ from typing import List, Any
 from qdrant_client import QdrantClient
 from pydantic_ai import Tool
 
-from fetchcraft.agents import RetrieverTool, ReActAgent
+from fetchcraft.agents import RetrieverTool, PydanticAgent
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
 from fetchcraft.node import SymNode
@@ -228,7 +228,7 @@ async def setup_rag_system():
     tool_func = retriever_tool.get_tool_function()
     tools = [Tool(tool_func, takes_ctx=True, max_retries=3)]
     
-    agent = ReActAgent.create(
+    agent = PydanticAgent.create(
         model=LLM_MODEL,
         tools=tools,
         retries=3
@@ -242,7 +242,7 @@ async def setup_rag_system():
     return agent, vector_index
 
 
-async def repl_loop(agent: ReActAgent):
+async def repl_loop(agent: PydanticAgent):
     """
     Run an interactive REPL loop for the agent.
     

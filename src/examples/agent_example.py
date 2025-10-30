@@ -20,7 +20,7 @@ from qdrant_client import QdrantClient
 
 import logging
 
-from fetchcraft.agents import RetrieverTool, ReActAgent
+from fetchcraft.agents import RetrieverTool, PydanticAgent
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
 from fetchcraft.node import Node
@@ -93,14 +93,18 @@ async def basic_agent_example():
     print(f"✓ Created retriever\n")
     
     # Step 5: Create retriever tool
-    retriever_tool = RetrieverTool.from_retriever(retriever)
-    tool_func = retriever_tool.get_tool_function()
-    tools = [Tool(tool_func, takes_ctx=True, max_retries=3)]
+    tools = [
+        Tool(
+            RetrieverTool.from_retriever(retriever).get_tool_function(),
+            takes_ctx=True,
+            max_retries=3
+        )
+    ]
 
     print(f"✓ Created retriever tool\n")
     
     # Step 6: Create ReAct agent with the retriever tool
-    agent = ReActAgent.create(
+    agent = PydanticAgent.create(
         model=model,
         tools=tools,
         retries=3
@@ -177,7 +181,7 @@ When answering questions about landmarks:
 3. Include historical context when available
 4. If information is not in the documents, politely say so"""
     
-    agent = ReActAgent.create(
+    agent = PydanticAgent.create(
         tools=tools,
         model=model,
         system_prompt=custom_prompt
@@ -244,7 +248,7 @@ async def multi_step_reasoning_example():
     retriever_tool = RetrieverTool.from_retriever(retriever)
     tool_func = retriever_tool.get_tool_function()
     tools = [Tool(tool_func, takes_ctx=True, max_retries=3)]
-    agent = ReActAgent.create(tools=tools, model=model)
+    agent = PydanticAgent.create(tools=tools, model=model)
     
     print("✓ Setup complete\n")
     

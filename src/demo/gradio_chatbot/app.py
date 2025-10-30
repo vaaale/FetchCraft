@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
 import logging
 
-from fetchcraft.agents import ReActAgent, RetrieverTool
+from fetchcraft.agents import PydanticAgent, RetrieverTool
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
 from fetchcraft.node import SymNode
@@ -73,7 +73,7 @@ ENABLE_HYBRID = os.getenv("ENABLE_HYBRID", "true").lower() == "true"
 FUSION_METHOD = os.getenv("FUSION_METHOD", "rrf")
 
 # Global state
-agent: Optional[ReActAgent] = None
+agent: Optional[PydanticAgent] = None
 vector_index: Optional[VectorIndex] = None
 conversation_memory: Dict[str, List[Any]] = {}
 
@@ -215,7 +215,7 @@ async def setup_rag_system():
     tool_func = retriever_tool.get_tool_function()
     tools = [Tool(tool_func, takes_ctx=True, max_retries=3)]
     
-    agent = ReActAgent.create(
+    agent = PydanticAgent.create(
         model=LLM_MODEL,
         tools=tools,
         retries=3

@@ -15,7 +15,7 @@ from fetchcraft.node import Node
 class ChatMessage(BaseModel):
     """Format of messages sent to the browser."""
 
-    role: Literal['user', 'model']
+    role: Literal['user', 'assistant']
     timestamp: str
     content: str
 
@@ -25,7 +25,7 @@ class ChatMessage(BaseModel):
 
     @classmethod
     def assistant_message(cls, content: str) -> 'ChatMessage':
-        return cls(role='model', timestamp=datetime.now().isoformat(), content=content)
+        return cls(role='assistant', timestamp=datetime.now().isoformat(), content=content)
 
 @dataclass
 class Citation:
@@ -98,6 +98,9 @@ class BaseAgent(BaseModel, ABC):
             citation_id = match.group("citation_id")
             title = match.group("title")
             citation = citations.citation(int(citation_id))
+            if not citation:
+                continue
+
             citations.add_cited(citation)
 
             # Replace
