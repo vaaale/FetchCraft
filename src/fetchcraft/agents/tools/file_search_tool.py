@@ -2,13 +2,13 @@
 FileSearchTool for searching files on a filesystem using fsspec.
 """
 
-from typing import Optional, Callable, Any, List, Dict
 import logging
 from pathlib import Path
-import fnmatch
+from typing import Optional, Callable, Any, List, Dict
 
 try:
     from pydantic_ai import RunContext
+
     PYDANTIC_AI_AVAILABLE = True
 except ImportError:
     PYDANTIC_AI_AVAILABLE = False
@@ -16,12 +16,11 @@ except ImportError:
 
 try:
     import fsspec
+
     FSSPEC_AVAILABLE = True
 except ImportError:
     FSSPEC_AVAILABLE = False
     fsspec = None
-
-from .base import CitationContainer, Citation
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +29,7 @@ class FileSearchResult:
     """
     Result of a file search operation.
     """
-    
+
     def __init__(
         self,
         path: str,
@@ -54,7 +53,7 @@ class FileSearchResult:
         self.modified = modified
         self.file_type = file_type or Path(path).suffix
         self.metadata = metadata or {}
-    
+
     def __repr__(self) -> str:
         return f"FileSearchResult(path={self.path}, size={self.size}, type={self.file_type})"
 
@@ -79,7 +78,7 @@ class FileSearchTool:
         agent.register_tool(tool.get_tool_function())
         ```
     """
-    
+
     def __init__(
         self,
         root_path: str = ".",
@@ -109,25 +108,21 @@ class FileSearchTool:
                 "fsspec is required for FileSearchTool. "
                 "Install it with: pip install fsspec"
             )
-        
+
         self.root_path = str(root_path)
-        self.fs = fs or fsspec.filesystem('file')
+        self.fs = fs or fsspec.filesystem('dir', path=self.root_path)
         self.name = name
         self.formatter = formatter or self._default_formatter
         self.max_results = max_results
         self.allowed_extensions = allowed_extensions
         self.recursive = recursive
-        
-        # Verify root path exists
-        if not self.fs.exists(self.root_path):
-            raise ValueError(f"Root path does not exist: {self.root_path}")
-        
+
         # Default description
         if description is None:
             ext_info = ""
             if allowed_extensions:
                 ext_info = f" Allowed extensions: {', '.join(allowed_extensions)}."
-            
+
             description = f"""Search for files in the filesystem.
 
 Args:
@@ -147,9 +142,9 @@ Examples:
     - "**/*.py" - Find all Python files (recursive)
     - "data/*/output.csv" - Find output.csv in subdirectories of data/
 """
-        
+
         self.description = description
-    
+
     @classmethod
     def from_local_path(
         cls,
@@ -183,7 +178,7 @@ Examples:
             allowed_extensions=allowed_extensions,
             recursive=recursive
         )
-    
+
     def _is_allowed_extension(self, path: str) -> bool:
         """
         Check if a file has an allowed extension.
@@ -196,10 +191,10 @@ Examples:
         """
         if not self.allowed_extensions:
             return True
-        
+
         ext = Path(path).suffix.lower()
         return ext in [e.lower() for e in self.allowed_extensions]
-    
+
     def _normalize_path(self, path: str) -> str:
         """
         Normalize a path relative to root.
@@ -214,7 +209,7 @@ Examples:
         if path.startswith(self.root_path):
             path = path[len(self.root_path):].lstrip('/')
         return path
-    
+
     def _search_files(self, pattern: str, name_only: bool = True) -> List[FileSearchResult]:
         """
         Search for files matching the pattern.
@@ -227,29 +222,32 @@ Examples:
             List of FileSearchResult objects
         """
         results = []
-        
+
+        if pattern.startswith("/"):
+            pattern = pattern[1:]
+
         # Build search pattern
         if self.recursive and '**' not in pattern:
             # Add recursive search if not explicitly in pattern
-            search_pattern = f"{self.root_path}/**/{pattern}" if name_only else f"{self.root_path}/{pattern}"
+            search_pattern = f"**/{pattern}" if name_only else f"**/{pattern}"
         else:
-            search_pattern = f"{self.root_path}/{pattern}"
-        
+            search_pattern = f"{pattern}"
+
         logger.info(f"Searching with pattern: {search_pattern}")
-        
+
         try:
             # Use fsspec glob to find files
             matched_paths = self.fs.glob(search_pattern)
-            
+
             for path in matched_paths:
                 # Skip directories
                 if self.fs.isdir(path):
                     continue
-                
+
                 # Check extension filter
                 if not self._is_allowed_extension(path):
                     continue
-                
+
                 # Get file info
                 try:
                     info = self.fs.info(path)
@@ -259,7 +257,7 @@ Examples:
                     logger.warning(f"Could not get info for {path}: {e}")
                     size = None
                     modified = None
-                
+
                 # Create result
                 result = FileSearchResult(
                     path=self._normalize_path(path),
@@ -268,18 +266,18 @@ Examples:
                     file_type=Path(path).suffix
                 )
                 results.append(result)
-                
+
                 # Limit results
                 if len(results) >= self.max_results:
                     logger.info(f"Reached max results limit ({self.max_results})")
                     break
-        
+
         except Exception as e:
             logger.error(f"Error searching files: {e}")
             return []
-        
+
         return results
-    
+
     def _default_formatter(self, results: List[FileSearchResult]) -> str:
         """
         Default formatter for file search results.
@@ -292,17 +290,17 @@ Examples:
         """
         if not results:
             return "No files found matching the pattern."
-        
+
         formatted_results = [f"Found {len(results)} file(s):\n"]
-        
+
         for i, result in enumerate(results, 1):
             size_str = f"{result.size:,} bytes" if result.size is not None else "unknown size"
             formatted_results.append(
                 f"{i}. {result.path} ({size_str}, type: {result.file_type})"
             )
-        
+
         return "\n".join(formatted_results)
-    
+
     async def __call__(self, ctx, pattern: str, name_only: bool = True) -> str:
         """
         Execute the file search tool.
@@ -316,15 +314,15 @@ Examples:
             Formatted search results
         """
         logger.info(f"Searching files with pattern: {pattern} (name_only={name_only})")
-        
+
         # Perform search
         results = self._search_files(pattern, name_only)
-        
+
         logger.info(f"Found {len(results)} matching files")
-        
+
         # Format and return results
         return self.formatter(results)
-    
+
     def get_tool_function(self):
         """
         Get the async function to be registered as a tool.
@@ -337,16 +335,16 @@ Examples:
                 "pydantic-ai is required for FileSearchTool. "
                 "Install it with: pip install pydantic-ai"
             )
-        
+
         async def search_files(ctx: RunContext[Any], pattern: str, name_only: bool = True) -> str:
             """Search for files in the filesystem."""
             return await self(ctx, pattern, name_only)
-        
+
         # Set the docstring from description
         search_files.__doc__ = self.description
         search_files.__name__ = self.name
-        
+
         return search_files
-    
+
     def __repr__(self) -> str:
         return f"FileSearchTool(name={self.name}, root={self.root_path}, max_results={self.max_results})"

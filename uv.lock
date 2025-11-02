@@ -4151,6 +4151,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pathlib-abc"
+version = "0.5.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d6/cb/448649d7f25d228bf0be3a04590ab7afa77f15e056f8fa976ed05ec9a78f/pathlib_abc-0.5.2.tar.gz", hash = "sha256:fcd56f147234645e2c59c7ae22808b34c364bb231f685ddd9f96885aed78a94c", size = 33342, upload-time = "2025-10-10T18:37:20.524Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b1/29/c028a0731e202035f0e2e0bfbf1a3e46ad6c628cbb17f6f1cc9eea5d9ff1/pathlib_abc-0.5.2-py3-none-any.whl", hash = "sha256:4c9d94cf1b23af417ce7c0417b43333b06a106c01000b286c99de230d95eefbb", size = 19070, upload-time = "2025-10-10T18:37:19.437Z" },
+]
+
+[[package]]
 name = "pathspec"
 version = "0.12.1"
 source = { registry = "https://pypi.org/simple" }
@@ -5564,9 +5573,11 @@ source = { editable = "." }
 dependencies = [
     { name = "chromadb" },
     { name = "docling" },
+    { name = "fastapi" },
     { name = "fastembed" },
     { name = "fsspec" },
     { name = "gradio" },
+    { name = "jinja2" },
     { name = "llama-index" },
     { name = "mongomock-motor" },
     { name = "motor" },
@@ -5580,6 +5591,7 @@ dependencies = [
     { name = "pytest-asyncio" },
     { name = "qdrant-client" },
     { name = "torch" },
+    { name = "universal-pathlib" },
     { name = "uvicorn" },
 ]
 
@@ -5600,10 +5612,12 @@ requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
     { name = "chromadb", specifier = ">=1.2.2" },
     { name = "docling", specifier = ">=2.59.0" },
+    { name = "fastapi", specifier = ">=0.120.2" },
     { name = "fastembed", specifier = ">=0.7.3" },
     { name = "fsspec", specifier = ">=2025.9.0" },
     { name = "gradio", specifier = ">=5.49.1" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.12.0" },
+    { name = "jinja2", specifier = ">=3.1.6" },
     { name = "llama-index", specifier = ">=0.14.6" },
     { name = "mongomock-motor", specifier = ">=0.0.36" },
     { name = "motor", specifier = ">=3.7.1" },
@@ -5621,7 +5635,8 @@ requires-dist = [
     { name = "qdrant-client", specifier = ">=1.15.1" },
     { name = "qdrant-client", marker = "extra == 'qdrant'", specifier = ">=1.6.0" },
     { name = "torch", specifier = ">=2.9.0" },
-    { name = "uvicorn", specifier = ">=0.38.0" },
+    { name = "universal-pathlib", specifier = ">=0.3.4" },
+    { name = "uvicorn", specifier = "==0.35.0" },
 ]
 provides-extras = ["dev", "qdrant"]
 
@@ -6859,6 +6874,19 @@ wheels = [
 ]
 
 [[package]]
+name = "universal-pathlib"
+version = "0.3.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "fsspec" },
+    { name = "pathlib-abc" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/79/15/907728d15ebc125616eb275245d1f1ba0d5a66150eea74bea68651f22d87/universal_pathlib-0.3.4.tar.gz", hash = "sha256:8472df61ea931eb7e8158abf5a12ec9c45103dc58716c0103cf5e88712fa357a", size = 203284, upload-time = "2025-10-16T08:02:59.003Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ae/0c/6dc1e50b29ba5ebdbeaab325207e2bba93f072207a6787accc4630b811e3/universal_pathlib-0.3.4-py3-none-any.whl", hash = "sha256:69b6250d9a79dbc33a9e6a7b0e732aece8b0e178fe0af35f104b4e207fd9d5ae", size = 72105, upload-time = "2025-10-16T08:02:57.333Z" },
+]
+
+[[package]]
 name = "urllib3"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -6869,16 +6897,16 @@ wheels = [
 
 [[package]]
 name = "uvicorn"
-version = "0.38.0"
+version = "0.35.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "h11" },
     { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/cb/ce/f06b84e2697fef4688ca63bdb2fdf113ca0a3be33f94488f2cadb690b0cf/uvicorn-0.38.0.tar.gz", hash = "sha256:fd97093bdd120a2609fc0d3afe931d4d4ad688b6e75f0f929fde1bc36fe0e91d", size = 80605, upload-time = "2025-10-18T13:46:44.63Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5e/42/e0e305207bb88c6b8d3061399c6a961ffe5fbb7e2aa63c9234df7259e9cd/uvicorn-0.35.0.tar.gz", hash = "sha256:bc662f087f7cf2ce11a1d7fd70b90c9f98ef2e2831556dd078d131b96cc94a01", size = 78473, upload-time = "2025-06-28T16:15:46.058Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ee/d9/d88e73ca598f4f6ff671fb5fde8a32925c2e08a637303a1d12883c7305fa/uvicorn-0.38.0-py3-none-any.whl", hash = "sha256:48c0afd214ceb59340075b4a052ea1ee91c16fbc2a9b1469cca0e54566977b02", size = 68109, upload-time = "2025-10-18T13:46:42.958Z" },
+    { url = "https://files.pythonhosted.org/packages/d2/e2/dc81b1bd1dcfe91735810265e9d26bc8ec5da45b4c0f6237e286819194c3/uvicorn-0.35.0-py3-none-any.whl", hash = "sha256:197535216b25ff9b785e29a0b79199f55222193d47f820816e7da751e9bc8d4a", size = 66406, upload-time = "2025-06-28T16:15:44.816Z" },
 ]
 
 [package.optional-dependencies]

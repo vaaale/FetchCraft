@@ -7,7 +7,11 @@ from typing import Optional, Any, List, Union, Dict, AsyncIterable
 from pydantic_ai import AgentStreamEvent, PartStartEvent, PartDeltaEvent, TextPartDelta, \
     ThinkingPartDelta, ToolCallPartDelta, FunctionToolCallEvent, FunctionToolResultEvent, FinalResultEvent
 
+from .output_formatters import DefaultOutputFormatter
+from .base import BaseAgent
 from .memory import Memory
+from .model import AgentResponse, ChatMessage, CitationContainer
+from .output_formatters import OutputFormatter
 from ..logging import configure_logging
 from ..mixins import ObjectNodeMixin
 
@@ -23,7 +27,6 @@ except ImportError:
     Model = None
 
 from pydantic import ConfigDict, PrivateAttr
-from .base import BaseAgent, AgentResponse, CitationContainer, ChatMessage
 
 configure_logging("root")
 
@@ -148,6 +151,7 @@ class PydanticAgent(BaseAgent, ObjectNodeMixin):
             model: Union[str, Any] = "openai:gpt-4",
             tools: List[Tool] | None = None,
             system_prompt: Optional[str] = None,
+            output_formatter: Optional[OutputFormatter] = None,
             **agent_kwargs
     ) -> 'PydanticAgent':
         """
@@ -166,6 +170,7 @@ class PydanticAgent(BaseAgent, ObjectNodeMixin):
             model=model,
             tools=tools,
             system_prompt=system_prompt,
+            output_formatter=output_formatter or DefaultOutputFormatter(),
             agent_kwargs=agent_kwargs,
         )
 
@@ -213,7 +218,8 @@ class PydanticAgent(BaseAgent, ObjectNodeMixin):
             **kwargs
         )
         response = result.output
-        answer = self._post_process_citations(response, citations)
+
+        answer = self.output_formatter.format(response, citations)
 
         self._memory.add_memory(
             ChatMessage.user_message(question),

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}Response{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    .owui-card { font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                 color:var(--color-gray-100,#ececec);
+                 background-color:var(--color-stone-800,#1f2937);
+                 border:1px solid rgba(255,255,255,0.08);
+                 border-radius:14px; padding:16px; }
+    .muted { opacity: .7; }
+    .meta { opacity: .75; margin-top: 12px; font-size: .9rem; }
+    .btn { background: transparent; color: inherit; border: 1px solid rgba(255,255,255,.25);
+           border-radius: 10px; padding: 6px 10px; cursor: pointer; }
+    .btn:hover { border-color: rgba(255,255,255,.4); }
+    .btn-sm { padding: 4px 8px; font-size: .85rem; }
+
+    /* Heading above the answer */
+    .answer-heading { font-weight: 700; margin: 0 0 8px 0; font-size: 1.15rem; }
+
+    /* Citations */
+    .citations { margin-top: 12px; }
+    .citations-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .citations-head .spacer { flex: 1; }
+    .citations-list { display: grid; gap: 6px; }
+
+    details.cite { border-left: 2px solid rgba(255,255,255,.18); padding-left: 10px; border-radius: 2px; }
+    details.cite > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+    details.cite > summary::-webkit-details-marker { display: none; }
+
+    .cite-body { margin: 6px 0 4px 18px; }
+    .preview { white-space: pre-wrap; margin: 6px 0; line-height: 1.4; font-size: 0.9rem; }  /* smaller preview text */
+    .link a { text-decoration: underline; }
+
+    .arrow::before { content: "▸"; display: inline-block; transition: transform .15s ease; }
+    details[open] > summary .arrow::before { content: "▾"; }
+
+    @media (prefers-color-scheme: light) {
+      .owui-card { color:#0f172a; background-color:#f8fafc; border-color:rgba(2,6,23,.08); }
+      .btn { border-color: rgba(2,6,23,.2); }
+    }
+  </style>
+
+  {% block head %}{% endblock %}
+</head>
+<body>
+  {% block body %}{% endblock %}
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

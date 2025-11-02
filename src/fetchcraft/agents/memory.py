@@ -3,8 +3,8 @@ from typing import *
 
 from pydantic import BaseModel, Field
 
-from fetchcraft.agents.base import ChatMessage, Citation
-
+from fetchcraft.agents.base import ChatMessage
+from fetchcraft.agents.model import Citation
 
 CONTEXT_TEMPLATE = (
     "Below are some previously used context that might be useful.\n"

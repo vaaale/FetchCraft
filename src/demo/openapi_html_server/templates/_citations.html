@@ -1,0 +1,60 @@
+{# Partial: collapsible citations. Expects:
+   - uid
+   - citations (iterable with .score, .filename, .source, .text_preview)
+   - files_base_url
+#}
+
+{% if citations and citations|length > 0 %}
+  <div id="{{ uid }}" class="citations">
+    <div class="citations-head">
+      <strong>Citations ({{ citations|length }}):</strong>
+      <div class="spacer"></div>
+      <button type="button" class="btn btn-sm" data-role="toggle">Expand all</button>
+    </div>
+
+    <div class="citations-list">
+      {% for c in citations %}
+        <details class="cite" data-index="{{ loop.index }}">
+          <summary>
+            <span class="arrow" aria-hidden="true"></span>
+            <b>#{{ loop.index }}</b>&nbsp;Score: {{ c.score|fmt_score }}&nbsp;–&nbsp;{{ c.filename|e }}
+          </summary>
+          <div class="cite-body">
+            <p class="preview">{{ c.text_preview|e }}</p>
+            <p class="link">
+              <a href="{{ files_base_url }}/{{ c.source|e }}" target="_blank" rel="noopener">Open document</a>
+            </p>
+          </div>
+        </details>
+      {% endfor %}
+    </div>
+  </div>
+
+  <script>
+  (function(id){
+    function init(){
+      var root = document.getElementById(id);
+      if(!root) return;
+      var toggleBtn = root.querySelector('[data-role="toggle"]');
+      if(!toggleBtn) return;
+
+      function items(){ return Array.prototype.slice.call(root.querySelectorAll('details.cite')); }
+
+      toggleBtn.addEventListener('click', function(){
+        var ds = items();
+        if(!ds.length) return;
+        var shouldOpen = ds.some(function(d){ return !d.open; });
+        ds.forEach(function(d){ d.open = shouldOpen; });
+        toggleBtn.textContent = shouldOpen ? 'Collapse all' : 'Expand all';
+      });
+    }
+    if(document.readyState === 'loading'){
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      setTimeout(init, 0);
+    }
+  })('{{ uid }}');
+  </script>
+{% else %}
+  <p class="muted"><em>Citations (0)</em></p>
+{% endif %}

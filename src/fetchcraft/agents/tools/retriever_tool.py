@@ -5,6 +5,8 @@ RetrieverTool for integrating retrievers with agents.
 from typing import Optional, Callable, Any, List
 import logging
 
+from fetchcraft.agents.model import Citation
+
 try:
     from pydantic_ai import RunContext
     PYDANTIC_AI_AVAILABLE = True
@@ -12,8 +14,7 @@ except ImportError:
     PYDANTIC_AI_AVAILABLE = False
     RunContext = None
 
-from ..retriever.base import Retriever
-from .base import CitationContainer, Citation
+from fetchcraft.retriever.base import Retriever
 
 logger = logging.getLogger(__name__)
 
