@@ -1,5 +1,5 @@
 [project]
-name = "rag-framework"
+name = "fetchcraft-core"
 version = "0.1.0"
 description = "A flexible framework for building RAG applications"
 authors = [
