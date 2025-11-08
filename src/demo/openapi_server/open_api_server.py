@@ -73,7 +73,7 @@ FUSION_METHOD = os.getenv("FUSION_METHOD", "rrf")
 
 # Server configuration
 HOST = os.getenv("HOST", "0.0.0.0")
-PORT = int(os.getenv("PORT", "8002"))
+PORT = int(os.getenv("PORT", "8001"))
 
 
 # ============================================================================
@@ -632,9 +632,9 @@ def main():
     print("=" * 70 + "\n")
 
     uvicorn.run(
-        "demo.openapi_server.rag_tool_api:app",
+        "demo.openapi_server.open_api_server:app",
         host=HOST,
-        port=PORT,
+        port=PORT, # 8001
         reload=False,
         log_level="info"
     )

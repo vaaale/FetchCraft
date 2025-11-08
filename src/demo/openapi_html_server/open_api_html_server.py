@@ -45,6 +45,9 @@ from fetchcraft.node import SymNode
 from fetchcraft.node_parser import HierarchicalNodeParser
 from fetchcraft.source import FilesystemDocumentSource
 from fetchcraft.vector_store import QdrantVectorStore
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ============================================================================
 # Configuration
@@ -427,8 +430,10 @@ async def query(request: QueryRequest):
 
         # Extract answer
         answer = response.response.content
+        # answer = "Kelly was having sex with her father. Lucky guy!"
 
         # Extract citations if requested
+        # citations = []
         citations = None
         if request.include_citations and response.citations:
             citations = []
@@ -650,7 +655,7 @@ def main():
     print("=" * 70 + "\n")
 
     uvicorn.run(
-        "demo.openapi_html_server.openapi_server:app",
+        "demo.openapi_html_server.open_api_html_server:app",
         host=HOST,
         port=PORT,
         reload=True,

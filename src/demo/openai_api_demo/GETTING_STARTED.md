@@ -435,7 +435,7 @@ LLM_MODEL=gpt-4-turbo
 ### Learn More
 
 1. **Read the full documentation**: [README.md](README.md)
-2. **Study the code**: [server.py](server.py)
+2. **Study the code**: [server.py](open_ai_server.py)
 3. **Try examples**: [client_example.py](client_example.py)
 
 ### Customize

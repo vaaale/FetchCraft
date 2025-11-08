@@ -202,8 +202,9 @@ class PydanticAgent(BaseAgent, ObjectNodeMixin):
             The input should be your final answer."""
             return answer
 
-        if not self._memory:
-            self._memory = Memory()
+        # if not self._memory:
+        #     self._memory = Memory()
+        self._memory = Memory()
 
         # chat_history = messages if messages else []
         citations = CitationContainer()

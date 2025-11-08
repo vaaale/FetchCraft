@@ -610,7 +610,7 @@ def main():
     uvicorn.run(
         "demo.openai_api_demo.server:app",
         host=HOST,
-        port=PORT,
+        port=PORT, # 8002
         reload=True,
         log_level="info"
     )

@@ -301,7 +301,7 @@ class MinimalHTMLFormatter(OpenWebUIFormatter):
 ### Server Setup
 
 ```python
-# In src/demo/openai_api_demo/server.py
+# In src/demo/openai_api_demo/open_ai_server.py
 from fetchcraft.agents import OpenWebUIFormatter
 
 agent = PydanticAgent.create(
