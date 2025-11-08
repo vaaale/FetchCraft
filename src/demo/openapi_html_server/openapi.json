@@ -1,0 +1,380 @@
+{
+  "openapi": "3.1.0",
+  "servers": [
+    {
+      "url": "http://wingman.akhbar.home:8001"
+    }
+  ],
+  "info": {
+    "title": "RAG Tool API",
+    "description": "This api can be used to search for information.",
+    "contact": {
+      "name": "RAG Tool API",
+      "url": "https://github.com/yourusername/fetchcraft"
+    },
+    "license": {
+      "name": "MIT"
+    },
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/": {
+      "get": {
+        "tags": [
+          "General"
+        ],
+        "summary": "Root",
+        "description": "Root endpoint with API information.\n\nReturns basic information about the API and available endpoints.",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "General"
+        ],
+        "summary": "Health",
+        "description": "Health check endpoint.\n\nReturns the current status of the service and configuration information.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/query": {
+      "post": {
+        "tags": [
+          "RAG"
+        ],
+        "summary": "Query",
+        "description": "Query the RAG agent with a question.\n\nThis endpoint retrieves relevant documents from the vector database and uses\nan LLM to generate a comprehensive answer based on the retrieved context.\n\nArgs:\n    request: Query request containing the question and optional parameters\n\nReturns:\n    QueryResponse with the answer and optional citations\n\nRaises:\n    HTTPException: If the service is not initialized or an error occurs",
+        "operationId": "query_query_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tool-definition": {
+      "get": {
+        "tags": [
+          "Integration"
+        ],
+        "summary": "Get Tool Definition",
+        "description": "Get the tool definition for integration with AI agents.\n\nThis endpoint returns a tool definition in OpenAI function calling format\nthat can be used to integrate this RAG service as a tool in other AI agents.\n\nReturns:\n    ToolDefinition with function schema for integration",
+        "operationId": "get_tool_definition_tool_definition_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolDefinition"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi-tool-spec": {
+      "get": {
+        "tags": [
+          "Integration"
+        ],
+        "summary": "Get Openapi Tool Spec",
+        "description": "Get a simplified OpenAPI tool specification for easy integration.\n\nThis returns a compact specification that includes:\n- Base URL for the service\n- Authentication requirements\n- Main endpoints and their schemas\n\nThis format is designed to be easily consumed by AI agents that support\nOpenAPI tool integration (like GPT Actions, Claude Tools, etc.)",
+        "operationId": "get_openapi_tool_spec_openapi_tool_spec_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Citation": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Source document identifier"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "Name of the source file"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score",
+            "description": "Relevance score of this citation"
+          },
+          "text_preview": {
+            "type": "string",
+            "title": "Text Preview",
+            "description": "Preview of the cited text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "filename",
+          "score",
+          "text_preview"
+        ],
+        "title": "Citation",
+        "description": "Citation information from retrieved documents."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Service status"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "description": "API version"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "LLM model in use"
+          },
+          "collection": {
+            "type": "string",
+            "title": "Collection",
+            "description": "Vector database collection name"
+          },
+          "hybrid_search_enabled": {
+            "type": "boolean",
+            "title": "Hybrid Search Enabled",
+            "description": "Whether hybrid search is enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "version",
+          "model",
+          "collection",
+          "hybrid_search_enabled"
+        ],
+        "title": "HealthResponse",
+        "description": "Health check response."
+      },
+      "QueryRequest": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "title": "Question",
+            "description": "The question to ask the RAG agent",
+            "examples": [
+              "What is the main topic discussed in the documents?"
+            ]
+          },
+          "top_k": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top K",
+            "description": "Number of documents to retrieve",
+            "default": 3
+          },
+          "include_citations": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Citations",
+            "description": "Whether to include source citations in the response",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "title": "QueryRequest",
+        "description": "Request model for querying the RAG agent."
+      },
+      "QueryResponse": {
+        "properties": {
+          "answer": {
+            "type": "string",
+            "title": "Answer",
+            "description": "The agent's answer to the question"
+          },
+          "citations": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Citation"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Citations",
+            "description": "List of citations used to generate the answer"
+          },
+          "processing_time_ms": {
+            "type": "number",
+            "title": "Processing Time Ms",
+            "description": "Time taken to process the query in milliseconds"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "LLM model used for generation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "answer",
+          "processing_time_ms",
+          "model"
+        ],
+        "title": "QueryResponse",
+        "description": "Response model for RAG queries."
+      },
+      "ToolDefinition": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "Tool type",
+            "default": "function"
+          },
+          "function": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Function",
+            "description": "Function definition"
+          }
+        },
+        "type": "object",
+        "required": [
+          "function"
+        ],
+        "title": "ToolDefinition",
+        "description": "Tool definition for integration with AI agents."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
