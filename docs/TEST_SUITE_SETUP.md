@@ -270,7 +270,7 @@ pip install -e .
 ### Tests not found
 ```bash
 # Make sure you're in the project root
-cd /home/alex/PycharmProjects/MyIndex
+cd /home/alex/PycharmProjects/fetchcraft
 python -m pytest src/tests/ -v
 ```
 

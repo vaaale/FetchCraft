@@ -1,0 +1,52 @@
+[project]
+name = "fetchcraft-core"
+version = "0.1.0"
+description = "A flexible framework for building RAG applications"
+authors = [
+    {name = "Alexander Vaagan", email = "2428222+vaaale@users.noreply.github.com"},
+]
+requires-python = ">=3.12"
+readme = "README.md"
+dependencies = [
+    "pydantic>=2.0.0",
+    "qdrant-client>=1.15.1",
+    "openai>=1.0.0",
+    "pytest>=8.4.2",
+    "pydantic-ai>=0.0.14",
+    "pytest-asyncio>=1.2.0",
+    "chromadb>=1.2.2",
+    "fastembed>=0.7.3",
+    "pymongo>=4.15.3",
+    "fsspec>=2025.9.0",
+    "motor>=3.7.1",
+    "mongomock-motor>=0.0.36",
+    "nest-asyncio>=1.6.0",
+    "uvicorn==0.35.0",
+    "pymupdf4llm>=0.0.27",
+    "fastapi>=0.120.2",
+    "universal-pathlib>=0.3.4",
+    "llama-index>=0.14.6",
+    "llama-index-llms-openai>=0.6.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.0.0",
+]
+qdrant = [
+    "qdrant-client>=1.6.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+sources = ["src"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fetchcraft"]

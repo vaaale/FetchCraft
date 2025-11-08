@@ -46,7 +46,7 @@ async def main():
     parent_chunk = Chunk.from_text(
         text=long_text.strip(),
         chunk_index=0,
-        metadata={"topic": "ml", "source": "textbook"}
+        metadata={"topic": "ml", "parsing": "textbook"}
     )
 
     # 2. Create smaller SymNodes that reference the parent
@@ -107,7 +107,7 @@ The `Chunk` class provides a convenient helper method:
 # Create parent chunk
 parent = Chunk.from_text(
     text="Python is a programming language. It is widely used.",
-    metadata={"source": "docs"}
+    metadata={"parsing": "docs"}
 )
 
 # Create SymNodes from sub-texts

@@ -391,6 +391,7 @@ To add filter support for a new vector store, implement the `_translate_filter` 
 from fetchcraft.vector_store.base import VectorStore
 from fetchcraft.filters import MetadataFilter, FieldFilter, CompositeFilter
 
+
 class MyVectorStore(VectorStore):
     def _translate_filter(self, filter_obj: MetadataFilter):
         """Translate Fetchcraft filter to native format."""

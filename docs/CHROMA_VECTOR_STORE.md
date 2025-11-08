@@ -236,7 +236,7 @@ Use metadata to filter search results:
 ```python
 # Add documents with metadata
 chunks = parser.parse(text, metadata={
-    "source": "user_manual",
+    "parsing": "user_manual",
     "version": "2.0",
     "category": "installation"
 })

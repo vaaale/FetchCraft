@@ -1,0 +1,33 @@
+[project]
+name = "fetchcraft-parsing-docling"
+version = "0.1.0"
+description = "Docling file parsing for Fetchcraft"
+requires-python = ">=3.12"
+dependencies = [
+  "fetchcraft-core",
+  "docling>=2.59.0",
+  "torch>=2.9.0",
+  "fastapi>=0.115.0",
+  "uvicorn>=0.32.0",
+  "python-multipart>=0.0.9",
+  "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+fetchcraft-docling-server = "fetchcraft.parsing.docling.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+sources = ["src"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fetchcraft/"]
+
+[tool.uv]
+src-layout = true
+
+[tool.uv.sources]
+fetchcraft-core = { workspace = true }

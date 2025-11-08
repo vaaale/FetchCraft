@@ -30,7 +30,7 @@ services:
     volumes:
       # Mount documents directory for indexing
       - ./Documents:/app/Documents
-      # Optional: Mount source code for development (hot reload)
+      # Optional: Mount parsing code for development (hot reload)
       # - ./src:/app/src
     environment:
       # Qdrant Configuration

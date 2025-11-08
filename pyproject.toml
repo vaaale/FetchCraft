@@ -1,50 +1,32 @@
 [project]
-name = "fetchcraft-core"
+name = "fetchcraft"
 version = "0.1.0"
-description = "A flexible framework for building RAG applications"
-authors = [
-    {name = "Your Name", email = "your.email@example.com"},
-]
-requires-python = ">=3.10"
+description = "Add your description here"
 readme = "README.md"
+requires-python = ">=3.12"
 dependencies = [
-    "pydantic>=2.0.0",
-    "qdrant-client>=1.15.1",
-    "openai>=1.0.0",
-    "pytest>=8.4.2",
-    "pydantic-ai>=0.0.14",
-    "pytest-asyncio>=1.2.0",
-    "chromadb>=1.2.2",
-    "fastembed>=0.7.3",
-    "pymongo>=4.15.3",
-    "fsspec>=2025.9.0",
-    "gradio>=5.49.1",
-    "motor>=3.7.1",
-    "mongomock-motor>=0.0.36",
-    "nest-asyncio>=1.6.0",
-    "uvicorn==0.35.0",
-    "pymupdf4llm>=0.0.27",
-    "llama-index>=0.14.6",
-    "docling>=2.59.0",
-    "torch>=2.9.0",
-    "fastapi>=0.120.2",
-    "jinja2>=3.1.6",
-    "universal-pathlib>=0.3.4",
-    "llama-index-llms-openai>=0.6.6",
+    "fetchcraft-core",
+    "fetchcraft-openai-server",
+    "fetchcraft-openapi-server",
+    "fetchcraft-mcp-server",
+    "fetchcraft-parsing-docling",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0",
-    "pytest-asyncio>=0.21.0",
-    "black>=23.0.0",
-    "isort>=5.12.0",
-    "mypy>=1.0.0",
-]
-qdrant = [
-    "qdrant-client>=1.6.0",
+[tool.uv]
+
+[tool.uv.workspace]
+members = [
+    "packages/fetchcraft-core",
+    "packages/fetchcraft-parsing-docling",
+    "fetchcraft-demos/fetchcraft-openapi-server",
+    "fetchcraft-demos/fetchcraft-openai-server",
+    "fetchcraft-demos/fetchcraft-mcp-server",
 ]
 
-[build-system]
-requires = ["setuptools>=61.0.0", "wheel"]
-build-backend = "setuptools.build_meta"
+[tool.uv.sources]
+fetchcraft-core = { workspace = true }
+fetchcraft-parsing-docling = { workspace = true }
+fetchcraft-openapi-server = { workspace = true }
+fetchcraft-openai-server = { workspace = true }
+fetchcraft-mcp-server = { workspace = true }
+

@@ -62,7 +62,7 @@ store = MongoDBDocumentStore(
 doc = DocumentNode.from_text(
     text="This is the full document text...",
     metadata={
-        "source": "example.txt",
+        "parsing": "example.txt",
         "author": "John Doe",
         "date": "2025-01-15"
     }
@@ -213,7 +213,7 @@ print(f"Chunks: {len(chunk_nodes)}")
 docs = await store.list_documents(
     limit=100,
     filters={
-        "metadata.source": "example.txt",
+        "metadata.parsing": "example.txt",
         "metadata.date": {"$gte": "2025-01-01"}
     }
 )
@@ -294,7 +294,7 @@ for doc in docs:
 # MongoDB automatically creates indexes on:
 # - id (unique)
 # - doc_id
-# - metadata.source
+# - metadata.parsing
 
 # Add custom indexes if needed
 await store.collection.create_index([("metadata.custom_field", 1)])

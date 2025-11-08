@@ -70,7 +70,7 @@ child_nodes = [n for n in nodes if isinstance(n, SymNode)]
 
 ```python
 custom_metadata = {
-    "source": "research_paper.pdf",
+    "parsing": "research_paper.pdf",
     "author": "John Doe"
 }
 

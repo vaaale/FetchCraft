@@ -252,9 +252,10 @@ open output_formatter_example.html
 ```python
 from fetchcraft.agents.output_formatters import OpenWebUIFormatter
 
+
 class CustomHTMLFormatter(OpenWebUIFormatter):
     """Custom HTML formatter with additional features."""
-    
+
     def _add_styles(self) -> str:
         """Override to add custom CSS."""
         base_styles = super()._add_styles()
@@ -268,7 +269,7 @@ class CustomHTMLFormatter(OpenWebUIFormatter):
         </style>
         """
         return base_styles + custom_styles
-    
+
     def _build_references_section(self, citations) -> str:
         """Override to customize references."""
         # Your custom references HTML
