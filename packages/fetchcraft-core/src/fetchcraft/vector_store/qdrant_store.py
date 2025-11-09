@@ -150,7 +150,40 @@ class QdrantVectorStore(VectorStore[Node]):
         else:
             # Fall back to the default document class
             return self.document_class
-    
+
+    async def find(self, key: str, value: str, limit: int = 10):
+        """
+        Find documents by a specific key-value pair.
+
+        Args:
+            key: The key to search by
+            value: The value to search for
+
+        Returns:
+            List of documents that match the search criteria
+        """
+        search_filter = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key=key,
+                    match=models.MatchValue(value=value)
+                )
+            ]
+        )
+        found_points, next_page_offset = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=search_filter,
+            limit=limit,
+            with_payload=True
+        )
+        result = []
+        for point in found_points:
+            doc_class = self._get_doc_class(point.payload['_doc_class'])
+            node = doc_class.model_validate(point.payload)
+            result.append(node)
+        return result
+
+
     async def insert_nodes(self, nodes: List[Node], index_id: Optional[str] = None, show_progress: bool = False) -> List[str]:
         """
         Add documents to the Qdrant collection.

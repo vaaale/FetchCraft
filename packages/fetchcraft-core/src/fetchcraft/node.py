@@ -39,6 +39,7 @@ class Node(BaseModel):
     node_type: NodeType = NodeType.NODE
     text: str
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    hash_: Optional[str] = Field(description="Hash of the node", default=None, alias="hash", validation_alias="hash_")
     embedding: Optional[List[float]] = None
 
     # Document reference
@@ -52,12 +53,17 @@ class Node(BaseModel):
     next_id: Optional[str] = None
     previous_id: Optional[str] = None
 
-    # Cached hash (not persisted)
-    _doc_hash: Optional[str] = PrivateAttr(default=None)
-
     model_config = {
         "arbitrary_types_allowed": True,
     }
+
+    @property
+    def hash(self) -> Optional[str]:
+        """Get the hash of the node."""
+        if self.hash_ is None:
+            self.hash_ = self.get_hash()
+        return self.hash_
+
 
     @property
     def parent(self) -> Optional[str]:
@@ -156,20 +162,6 @@ class Node(BaseModel):
         if node_id in self.children_ids:
             self.children_ids.remove(node_id)
 
-    @property
-    def doc_hash(self) -> str:
-        """
-        Compute MD5 hash of text + metadata for change detection.
-        
-        The hash is computed dynamically and cached for performance.
-        
-        Returns:
-            MD5 hash as hex string
-        """
-        if self._doc_hash is None:
-            doc_hash = self.get_hash()
-            self._doc_hash = doc_hash
-        return self._doc_hash
 
     def get_hash(self) -> str:
         # Create a deterministic string from text and metadata

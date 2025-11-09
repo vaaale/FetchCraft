@@ -79,22 +79,24 @@ class VectorIndex(BaseIndex[D]):
         Returns:
             List of document IDs that were added
         """
-        # Delegate to vector store which handles embedding generation
-        if self._doc_store:
-            if show_progress:
-                nodes = tqdm(nodes)
 
-            ids = []
-            for node in nodes:
-                existing_doc = await self._doc_store.get_document(node.doc_id)
-                if existing_doc and node.id not in existing_doc.children_ids and not node.parent:
-                    tmp = not isinstance(node, Chunk)
-                    existing_doc.children_ids.append(node.id)
-                    await self._doc_store.update_document(existing_doc)
-                ids.extend(await self.vector_store.insert_nodes([node], index_id=self.index_id, show_progress=False))
-            return ids
-        else:
-            return await self.vector_store.insert_nodes(nodes, index_id=self.index_id, show_progress=show_progress)
+        if show_progress:
+            nodes = tqdm(nodes, desc="Processing documents")
+
+        insert_ids = []
+        for node in nodes:
+            existing_nodes = await self.vector_store.find('hash_', node.hash)
+            if existing_nodes:
+                # An identical node exists. Nothing to do
+                continue
+
+            if self._doc_store:
+                await self._doc_store.update_document(node)
+
+            await self.vector_store.insert_nodes([node], index_id=self.index_id, show_progress=False)
+            insert_ids.append(node.id)
+        # return await self.vector_store.insert_nodes(nodes, index_id=self.index_id, show_progress=show_progress)
+        return insert_ids
 
 
     async def search(

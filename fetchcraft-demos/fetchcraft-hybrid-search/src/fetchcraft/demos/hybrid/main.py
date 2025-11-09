@@ -184,9 +184,8 @@ async def setup_rag_system():
         api_key=EMBEDDING_API_KEY,
         base_url=EMBEDDING_BASE_URL
     )
-    dimension = embeddings.dimension
-    print(f"   ✓ Dense embeddings initialized: {EMBEDDING_MODEL} (dimension: {dimension})")
-    
+
+
     # Connect to Qdrant
     print(f"\n2️⃣  Connecting to Qdrant at {QDRANT_HOST}:{QDRANT_PORT}...")
     client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)

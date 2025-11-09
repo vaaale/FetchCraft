@@ -74,6 +74,8 @@ class HierarchicalNodeParser(NodeParser):
                 for child_size in self.child_sizes:
                     child_nodes = self._create_child_nodes(parent_chunk, child_size, metadata)
                     all_nodes.extend(child_nodes)
+                    for cn in child_nodes:
+                        document.add_child(cn.id)
         
         return all_nodes
     

@@ -1270,15 +1270,23 @@ version = "0.1.0"
 source = { editable = "packages/fetchcraft-parsing-docling" }
 dependencies = [
     { name = "docling" },
+    { name = "fastapi" },
     { name = "fetchcraft-core" },
+    { name = "python-dotenv" },
+    { name = "python-multipart" },
     { name = "torch" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "docling", specifier = ">=2.59.0" },
+    { name = "fastapi", specifier = ">=0.115.0" },
     { name = "fetchcraft-core", editable = "packages/fetchcraft-core" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "torch", specifier = ">=2.9.0" },
+    { name = "uvicorn", specifier = ">=0.32.0" },
 ]
 
 [[package]]

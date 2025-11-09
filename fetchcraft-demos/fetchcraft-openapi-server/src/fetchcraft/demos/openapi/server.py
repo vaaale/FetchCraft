@@ -36,12 +36,13 @@ from pydantic_ai import Tool
 from qdrant_client import QdrantClient
 
 from fetchcraft.agents import RetrieverTool, PydanticAgent
+from fetchcraft.document_store import MongoDBDocumentStore
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
 from fetchcraft.node import SymNode
 from fetchcraft.node_parser import HierarchicalNodeParser
 from fetchcraft.demos.openapi import QueryRequest, QueryResponse, HealthResponse, Citation
-from fetchcraft.parsing import FilesystemDocumentParser
+from fetchcraft.parsing.filesystem import FilesystemDocumentParser
 from fetchcraft.vector_store import QdrantVectorStore
 
 load_dotenv()
@@ -103,15 +104,10 @@ app_state = AppState()
 # RAG System Setup
 # ============================================================================
 
-def collection_exists(client: QdrantClient, collection_name: str) -> bool:
-    """Check if a collection exists in Qdrant."""
-    collections = client.get_collections().collections
-    collection_names = [collection.name for collection in collections]
-    return collection_name in collection_names
-
 
 async def load_and_index_documents(
     vector_index: VectorIndex,
+    doc_store: MongoDBDocumentStore,
     documents_path: Path,
     chunk_size: int = 8192,
     child_sizes: List[int] = None,
@@ -137,6 +133,7 @@ async def load_and_index_documents(
     documents = []
     async for doc in source.get_documents():
         documents.append(doc)
+        await doc_store.add_document(doc)
 
     if not documents:
         print("⚠️  No files found in the specified directory!")
@@ -176,22 +173,11 @@ async def setup_rag_system():
         api_key=EMBEDDING_API_KEY,
         base_url=EMBEDDING_BASE_URL
     )
-    print(f"   ✓ Embeddings initialized: {EMBEDDING_MODEL}")
 
-    # Connect to Qdrant
     print(f"\n2️⃣  Connecting to Qdrant at {QDRANT_HOST}:{QDRANT_PORT}...")
     client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
-    client.get_collections()
-    print(f"   ✓ Connected to Qdrant")
 
-    # Check if collection exists
-    print(f"\n3️⃣  Checking collection '{COLLECTION_NAME}'...")
-    needs_indexing = not collection_exists(client, COLLECTION_NAME)
-
-    if needs_indexing:
-        print(f"   ⚠️  Collection does not exist - will create and index")
-    else:
-        print(f"   ✓ Collection already exists")
+    needs_indexing = COLLECTION_NAME not in [collection.name for collection in client.get_collections().collections]
 
     # Create vector store
     vector_store = QdrantVectorStore(
@@ -202,19 +188,25 @@ async def setup_rag_system():
         enable_hybrid=ENABLE_HYBRID,
         fusion_method=FUSION_METHOD
     )
-    print(f"   ✓ Vector store created")
 
-    # Create vector index
+    doc_store = MongoDBDocumentStore(
+        database_name="fetchcraft",
+        collection_name=COLLECTION_NAME,
+    )
+
     vector_index = VectorIndex(
         vector_store=vector_store,
+        doc_store=doc_store,
         index_id=INDEX_ID
     )
+    print(f"   ✓ Vector index created")
 
     # Index documents if needed
     if needs_indexing:
         print(f"\n4️⃣  Indexing documents...")
         await load_and_index_documents(
             vector_index=vector_index,
+            doc_store=doc_store,
             documents_path=DOCUMENTS_PATH,
             chunk_size=CHUNK_SIZE,
             child_sizes=CHILD_CHUNKS,
@@ -431,163 +423,6 @@ async def query(request: QueryRequest):
             detail=f"Error processing query: {str(e)}"
         )
 
-
-# @app.get("/tool-definition", response_model=ToolDefinition, tags=["Integration"])
-# async def get_tool_definition():
-#     """
-#     Get the tool definition for integration with AI agents.
-#
-#     This endpoint returns a tool definition in OpenAI function calling format
-#     that can be used to integrate this RAG service as a tool in other AI agents.
-#
-#     Returns:
-#         ToolDefinition with function schema for integration
-#     """
-#     return ToolDefinition(
-#         type="function",
-#         function={
-#             "name": "query_rag_system",
-#             "description": (
-#                 "Query a RAG (Retrieval-Augmented Generation) system to answer questions "
-#                 "based on a document collection. This tool retrieves relevant documents "
-#                 "and generates comprehensive answers with parsing citations."
-#             ),
-#             "parameters": {
-#                 "type": "object",
-#                 "properties": {
-#                     "question": {
-#                         "type": "string",
-#                         "description": "The question to ask the RAG system"
-#                     },
-#                     "top_k": {
-#                         "type": "integer",
-#                         "description": "Number of documents to retrieve (1-10)",
-#                         "default": 3,
-#                         "minimum": 1,
-#                         "maximum": 10
-#                     },
-#                     "include_citations": {
-#                         "type": "boolean",
-#                         "description": "Whether to include parsing citations",
-#                         "default": True
-#                     }
-#                 },
-#                 "required": ["question"]
-#             },
-#             "returns": {
-#                 "type": "object",
-#                 "properties": {
-#                     "answer": {
-#                         "type": "string",
-#                         "description": "The generated answer"
-#                     },
-#                     "citations": {
-#                         "type": "array",
-#                         "description": "List of parsing citations",
-#                         "items": {
-#                             "type": "object",
-#                             "properties": {
-#                                 "parsing": {"type": "string"},
-#                                 "filename": {"type": "string"},
-#                                 "score": {"type": "number"},
-#                                 "text_preview": {"type": "string"}
-#                             }
-#                         }
-#                     }
-#                 }
-#             }
-#         }
-#     )
-#
-#
-# @app.get("/openapi-tool-spec", tags=["Integration"])
-# async def get_openapi_tool_spec():
-#     """
-#     Get a simplified OpenAPI tool specification for easy integration.
-#
-#     This returns a compact specification that includes:
-#     - Base URL for the service
-#     - Authentication requirements
-#     - Main endpoints and their schemas
-#
-#     This format is designed to be easily consumed by AI agents that support
-#     OpenAPI tool integration (like GPT Actions, Claude Tools, etc.)
-#     """
-#     base_url = f"http://{HOST}:{PORT}"
-#
-#     return {
-#         "openapi": "3.1.0",
-#         "info": {
-#             "title": "RAG Tool API",
-#             "description": "Query a document collection using RAG",
-#             "version": "1.0.0"
-#         },
-#         "servers": [
-#             {
-#                 "url": base_url,
-#                 "description": "RAG Tool API Server"
-#             }
-#         ],
-#         "paths": {
-#             "/query": {
-#                 "post": {
-#                     "operationId": "queryRagSystem",
-#                     "summary": "Query the RAG system",
-#                     "description": "Retrieve relevant documents and generate an answer",
-#                     "requestBody": {
-#                         "required": True,
-#                         "content": {
-#                             "application/json": {
-#                                 "schema": {
-#                                     "type": "object",
-#                                     "required": ["question"],
-#                                     "properties": {
-#                                         "question": {
-#                                             "type": "string",
-#                                             "description": "The question to ask"
-#                                         },
-#                                         "top_k": {
-#                                             "type": "integer",
-#                                             "default": 3,
-#                                             "minimum": 1,
-#                                             "maximum": 10
-#                                         },
-#                                         "include_citations": {
-#                                             "type": "boolean",
-#                                             "default": True
-#                                         }
-#                                     }
-#                                 }
-#                             }
-#                         }
-#                     },
-#                     "responses": {
-#                         "200": {
-#                             "description": "Successful response",
-#                             "content": {
-#                                 "application/json": {
-#                                     "schema": {
-#                                         "type": "object",
-#                                         "properties": {
-#                                             "answer": {"type": "string"},
-#                                             "citations": {"type": "array"},
-#                                             "processing_time_ms": {"type": "number"},
-#                                             "model": {"type": "string"}
-#                                         }
-#                                     }
-#                                 }
-#                             }
-#                         }
-#                     }
-#                 }
-#             }
-#         }
-#     }
-#
-
-# ============================================================================
-# Main Entry Point
-# ============================================================================
 
 def main():
     """Run the FastAPI server."""

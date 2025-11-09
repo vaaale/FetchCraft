@@ -56,6 +56,20 @@ class VectorStore(BaseModel, ABC, Generic[D]):
         return await self._embeddings.embed_documents(texts)
     
     @abstractmethod
+    async def find(self, key: str, value: str):
+        """
+        Find documents by a specific key-value pair.
+
+        Args:
+            key: The key to search by
+            value: The value to search for
+
+        Returns:
+            List of documents that match the search criteria
+        """
+        pass
+
+    @abstractmethod
     async def insert_nodes(self, documents: List[D], index_id: Optional[str] = None, show_progress: bool = False) -> List[str]:
         """
         Add documents to the vector store.

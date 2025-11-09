@@ -17,7 +17,7 @@ class FilesystemDocumentParser(DocumentParser):
         "arbitrary_types_allowed": True,
     }
 
-    async def get_documents(self, metadata: Optional[Dict[str, Any]] = None) -> AsyncGenerator[DocumentNode, None]:
+    async def get_documents(self, metadata: Optional[Dict[str, Any]] = None, **kwargs) -> AsyncGenerator[DocumentNode, None]:
         # Get files matching pattern
 
         if self.recursive:

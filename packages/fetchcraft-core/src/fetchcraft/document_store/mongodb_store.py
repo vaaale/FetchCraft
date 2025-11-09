@@ -144,8 +144,15 @@ class MongoDBDocumentStore(DocumentStore[Node]):
         Returns:
             The document ID
         """
-        await self._ensure_indexes()
-        
+        # await self._ensure_indexes()
+
+        existing = await self.list_documents(filters={"metadata.source": document.metadata["source"]})
+        if existing:
+            if len(existing) > 1:
+                raise ValueError(f"Multiple documents with hash {document.hash} found")
+
+            document.id = existing[0].id
+
         # Convert document to dict
         doc_dict = document.model_dump()
         doc_dict['_doc_class'] = document.__class__.__name__
@@ -172,7 +179,7 @@ class MongoDBDocumentStore(DocumentStore[Node]):
         if not documents:
             return []
         
-        await self._ensure_indexes()
+        # await self._ensure_indexes()
         
         # Convert all documents to dicts
         doc_dicts = []
