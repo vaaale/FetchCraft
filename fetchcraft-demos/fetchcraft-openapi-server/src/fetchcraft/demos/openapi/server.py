@@ -45,7 +45,7 @@ from fetchcraft.demos.openapi import QueryRequest, QueryResponse, HealthResponse
 from fetchcraft.parsing.filesystem import FilesystemDocumentParser
 from fetchcraft.vector_store import QdrantVectorStore
 
-load_dotenv()
+load_dotenv(dotenv_path="/app/.env")
 
 # ============================================================================
 # Configuration

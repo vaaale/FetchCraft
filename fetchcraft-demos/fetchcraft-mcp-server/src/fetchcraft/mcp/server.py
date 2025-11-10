@@ -33,7 +33,7 @@ from fetchcraft.node_parser import HierarchicalNodeParser
 from fetchcraft.parsing.filesystem import FilesystemDocumentParser
 from fetchcraft.vector_store import QdrantVectorStore
 
-load_dotenv()
+load_dotenv(dotenv_path="/app/.env")
 
 # ============================================================================
 # Configuration
@@ -495,6 +495,12 @@ def main():
     print(f"  • Host: {HOST}")
     print(f"  • Port: {PORT}")
     print("=" * 70 + "\n")
+
+
+    # print all environment variables
+    print("\nEnvironment Variables:")
+    for key, value in os.environ.items():
+        print(f"  • {key}: {value}")
 
     # Run the MCP server using stdio transport
     mcp.run(transport="streamable-http")

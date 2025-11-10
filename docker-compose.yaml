@@ -28,19 +28,48 @@ services:
 
   # Fetchcraft OpenAPI Server
   fetchcraft-openapi-server:
-    build:
-      context: .
-      dockerfile: Dockerfile
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+    image: fetchcraft
+    hostname: openapi-server
     ports:
       - "8001:8001"
     volumes:
       - ./Documents:/app/Documents
       - ./demo_queue.db:/app/demo_queue.db
+      - /home/alex/PycharmProjects/fetchcraft/fetchcraft-demos/fetchcraft-openapi-server/.env:/app/.env
+
     env_file:
       - fetchcraft-demos/fetchcraft-openapi-server/.env
     environment:
       - HOST=0.0.0.0
       - PORT=8001
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+    depends_on:
+      - qdrant
+    restart: unless-stopped
+    networks: [ 'demo-net' ]
+
+  fetchcraft-mcp-server:
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+    image: fetchcraft
+    entrypoint: ["uv", "run", "fetchcraft-mcp-server"]
+    hostname: mcp-server
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./Documents:/app/Documents
+      - ./demo_queue.db:/app/demo_queue.db
+      - /home/alex/PycharmProjects/fetchcraft/fetchcraft-demos/fetchcraft-mcp-server/.env:/app/.env
+    env_file:
+      - fetchcraft-demos/fetchcraft-mcp-server/.env
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8003
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
     depends_on:
