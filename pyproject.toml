@@ -1,6 +1,6 @@
 [project]
 name = "fetchcraft"
-version = "0.1.0"
+version = "0.2.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -11,6 +11,8 @@ dependencies = [
     "fetchcraft-mcp-server",
     "fetchcraft-parsing-docling",
     "fetchcraft-ingestion-admin",
+    "fetchcraft-gradio-chatbot",
+    "fetchcraft-hybrid-search",
 ]
 
 [tool.uv]
@@ -20,6 +22,8 @@ members = [
     "packages/fetchcraft-core",
     "packages/fetchcraft-parsing-docling",
     "fetchcraft-demos/fetchcraft-openapi-server",
+    "fetchcraft-demos/fetchcraft-gradio-chatbot",
+    "fetchcraft-demos/fetchcraft-hybrid-search",
     "fetchcraft-demos/fetchcraft-openai-server",
     "fetchcraft-demos/fetchcraft-mcp-server",
     "packages/fetchcraft-ingestion-admin",
@@ -32,4 +36,6 @@ fetchcraft-openapi-server = { workspace = true }
 fetchcraft-openai-server = { workspace = true }
 fetchcraft-mcp-server = { workspace = true }
 fetchcraft-ingestion-admin = { workspace = true }
+fetchcraft-gradio-chatbot = { workspace = true }
+fetchcraft-hybrid-search = { workspace = true }
 

@@ -43,7 +43,7 @@ from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
 from fetchcraft.node import SymNode
 from fetchcraft.node_parser import HierarchicalNodeParser, SimpleNodeParser
-from fetchcraft.parsing import FilesystemDocumentParser
+from fetchcraft.parsing.filesystem import FilesystemDocumentParser
 from fetchcraft.vector_store import QdrantVectorStore
 
 # ============================================================================

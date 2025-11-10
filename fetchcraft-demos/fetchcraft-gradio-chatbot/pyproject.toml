@@ -1,6 +1,6 @@
 [project]
 name = "fetchcraft-gradio-chatbot"
-version = "0.1.0"
+version = "0.2.0"
 description = "Fetchcraft demo using a simple Gradio UI"
 requires-python = ">=3.12"
 dependencies = [
@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-fetchcraft-openai-server = "fetchcraft.demos.gradio.app:main"
+fetchcraft-gradio-chatbot = "fetchcraft.demos.gradio.app:main"
 
 [build-system]
 requires = ["hatchling"]

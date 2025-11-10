@@ -39,7 +39,7 @@ import gradio as gr
 from qdrant_client import QdrantClient
 from pydantic_ai import Tool
 
-from fetchcraft.parsing import FilesystemDocumentParser
+from fetchcraft.parsing.filesystem import FilesystemDocumentParser
 from fetchcraft.node_parser import HierarchicalNodeParser, SimpleNodeParser
 
 # Configure logging
