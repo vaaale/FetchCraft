@@ -47,6 +47,26 @@ services:
     restart: unless-stopped
     networks: [ 'demo-net' ]
 
+#  docling-serve:
+#    image: ghcr.io/docling-project/docling-serve-cu126:main
+#    container_name: docling-serve
+#    ports:
+#      - "5001:5001"
+#    environment:
+#      - DOCLING_SERVE_ENABLE_UI=true
+#      - DOCLING_SERVE_MAX_SYNC_WAIT=1200
+#      - DOCLING_SERVE_ARTIFACTS_PATH=/app/models
+#      - NVIDIA_VISIBLE_DEVICES=all
+##        NVIDIA_VISIBLE_DEVICES: "all" # https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/docker-specialized.html
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#              device_ids: [ '1' ]
+#              capabilities: [gpu]
+#    restart: always
+
   fetchcraft-docling-server:
 #    build:
 #      context: .
@@ -85,6 +105,13 @@ services:
       - qdrant
     restart: unless-stopped
     networks: [ 'demo-net' ]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: [ '1' ]
+              capabilities: [gpu]
 
   fetchcraft-ingestion-mcp-server:
 #    build:

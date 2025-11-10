@@ -123,23 +123,24 @@ class DoclingDocumentParser(DocumentParser):
                 "Install it with: pip install docling"
             )
 
-        download_path = snapshot_download(repo_id="RapidAI/RapidOCR")
-
-        # Setup RapidOcrOptions for English detection
-        det_model_path = os.path.join(
-            download_path, "onnx", "PP-OCRv5", "det", "ch_PP-OCRv5_server_det.onnx"
-        )
-        rec_model_path = os.path.join(
-            download_path, "onnx", "PP-OCRv5", "rec", "ch_PP-OCRv5_rec_server_infer.onnx"
-        )
-        cls_model_path = os.path.join(
-            download_path, "onnx", "PP-OCRv4", "cls", "ch_ppocr_mobile_v2.0_cls_infer.onnx"
-        )
-        self.ocr_options = RapidOcrOptions(
-            det_model_path=det_model_path,
-            rec_model_path=rec_model_path,
-            cls_model_path=cls_model_path,
-        )
+        # print("Downloading RapidOCR models")
+        # download_path = snapshot_download(repo_id="RapidAI/RapidOCR")
+        #
+        # # Setup RapidOcrOptions for English detection
+        # det_model_path = os.path.join(
+        #     download_path, "onnx", "PP-OCRv5", "det", "ch_PP-OCRv5_server_det.onnx"
+        # )
+        # rec_model_path = os.path.join(
+        #     download_path, "onnx", "PP-OCRv5", "rec", "ch_PP-OCRv5_rec_server_infer.onnx"
+        # )
+        # cls_model_path = os.path.join(
+        #     download_path, "onnx", "PP-OCRv4", "cls", "ch_ppocr_mobile_v2.0_cls_infer.onnx"
+        # )
+        # self.ocr_options = RapidOcrOptions(
+        #     det_model_path=det_model_path,
+        #     rec_model_path=rec_model_path,
+        #     cls_model_path=cls_model_path,
+        # )
 
     async def parse(self, file: File, metadata: Optional[Dict[str, Any]] = None) -> AsyncGenerator[DocumentNode, None]:
         raise NotImplementedError("Not implemented")
@@ -205,13 +206,14 @@ class DoclingDocumentParser(DocumentParser):
         try:
             # Configure pipeline options
             # Download RapidOCR models from Hugging Face
-            print("Downloading RapidOCR models")
-            if self.ocr_options:
-                pipeline_options = PdfPipelineOptions(
-                    ocr_options=self.ocr_options,
-                )
-            else:
-                pipeline_options = PdfPipelineOptions()
+            # if self.ocr_options:
+            #     pipeline_options = PdfPipelineOptions(
+            #         ocr_options=self.ocr_options,
+            #     )
+            # else:
+            #     pipeline_options = PdfPipelineOptions()
+
+            pipeline_options = PdfPipelineOptions()
 
             # pipeline_options = PdfPipelineOptions()
             pipeline_options.do_ocr = self.do_ocr
