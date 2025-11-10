@@ -284,6 +284,7 @@ async def health():
     
     Returns the current status of the service and configuration information.
     """
+
     return HealthResponse(
         status="healthy" if app_state.initialized else "initializing",
         version=VERSION,
@@ -294,7 +295,8 @@ async def health():
             "page_chunks": PAGE_CHUNKS,
             "do_ocr": DO_OCR,
             "do_table_structure": DO_TABLE_STRUCTURE
-        }
+        },
+        environment=dict(os.environ)
     )
 
 
@@ -370,7 +372,11 @@ async def parse_documents(
 def main():
     """Run the FastAPI server."""
     import uvicorn
-    
+
+    print("\nEnvironment Variables:")
+    for key, value in os.environ.items():
+        print(f"  • {key}: {value}")
+
     uvicorn.run(
         "fetchcraft.parsing.docling.server:app",
         host=HOST,

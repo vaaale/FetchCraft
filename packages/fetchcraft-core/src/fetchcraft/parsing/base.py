@@ -10,7 +10,7 @@ from fetchcraft.node import DocumentNode
 class DocumentParser(BaseModel, ABC):
 
     @abstractmethod
-    async def parse(self, file: File) -> AsyncGenerator[DocumentNode, None]:
+    async def parse(self, file: File, metadata: Optional[Dict[str, Any]] = None) -> AsyncGenerator[DocumentNode, None]:
         """
         Parse a file and yield document nodes.
         """

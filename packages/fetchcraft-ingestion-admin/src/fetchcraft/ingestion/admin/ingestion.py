@@ -1,7 +1,6 @@
 import asyncio
 import os
 import pathlib
-from typing import Optional
 
 from qdrant_client import QdrantClient
 
@@ -9,12 +8,14 @@ from fetchcraft.connector.filesystem import FilesystemConnector, LocalFile
 from fetchcraft.document_store import MongoDBDocumentStore, DocumentStore
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
-from fetchcraft.ingestion.sqlite_backend import AsyncSQLiteQueue
 from fetchcraft.ingestion.base import ConnectorSource, IngestionPipeline, Record, Sink
-from .transformation import ChunkingTransformation
+from fetchcraft.ingestion.pipeline.transformation import ChunkingTransformation
+from fetchcraft.ingestion.sqlite_backend import AsyncSQLiteQueue
 from fetchcraft.node import DocumentNode, Node
 from fetchcraft.node_parser import HierarchicalNodeParser
-from fetchcraft.parsing import TextFileParser
+from fetchcraft.parsing.docling import DoclingDocumentParser
+from fetchcraft.parsing.docling.client.docling_parser import RemoteDoclingParser
+from fetchcraft.parsing.text_file_parser import TextFileParser
 from fetchcraft.vector_store import QdrantVectorStore
 
 # Configuration
@@ -23,6 +24,8 @@ QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 DOCUMENT_DB = os.getenv("DOCUMENT_DB", "fetchcraft")  # Different collection for hybrid search
 COLLECTION_NAME = os.getenv("COLLECTION_NAME", "fetchcraft_chatbot")
 DOCUMENTS_PATH = pathlib.Path(os.getenv("DOCUMENTS_PATH", "Documents"))
+DOCLING_SERVER = os.getenv("DOCLING_SERVER", "http://localhost:8001")
+INGESTION_DB = os.getenv("INGESTION_DB", "ingestion_queue.db")
 
 # Embeddings configuration (adjust based on your setup)
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "bge-m3")
@@ -125,12 +128,22 @@ async def main():
         return count == 0
 
 
-    backend = AsyncSQLiteQueue("demo_queue.db")
+    backend = AsyncSQLiteQueue(INGESTION_DB)
 
     index_sink = VectorIndexSink(vector_index=vector_index, index_id=INDEX_ID)
     pipeline = (
         IngestionPipeline(backend=backend)
-        .source(ConnectorSource(connector=FilesystemConnector(path=document_path, filter=None), parser=TextFileParser()))
+        .source(ConnectorSource(
+            connector=FilesystemConnector(
+                path=document_path,
+                filter=None
+            ),
+            parser_map={
+                "text/plain": TextFileParser(),
+                "text": TextFileParser(),
+                "default": RemoteDoclingParser(docling_url=DOCLING_SERVER)
+            }
+        ))
         # .add_transformation(DocumentSummarization(max_sentences=2, simulate_latency=0.2), deferred=True)
         # .add_transformation(ExtractKeywords())
         .add_transformation(ChunkingTransformation(chunker=chunker))

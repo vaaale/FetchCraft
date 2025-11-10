@@ -3,11 +3,15 @@ from typing import *
 
 import fsspec
 
+from fetchcraft.connector import File
 from fetchcraft.node import DocumentNode
 from fetchcraft.parsing.base import DocumentParser
 
 
 class FilesystemDocumentParser(DocumentParser):
+    async def parse(self, file: File) -> AsyncGenerator[DocumentNode, None]:
+        raise NotImplemented("Parsing a single file is not supported for FilesystemDocumentParser")
+
     fs: Optional[fsspec.AbstractFileSystem] = None
     pattern: str
     recursive: bool = True

@@ -4,8 +4,8 @@ version = "0.1.0"
 description = "MCP server for administering Fetchcraft ingestion pipelines"
 requires-python = ">=3.12"
 dependencies = [
-    "fetchcraft-core",
-    "mcp",
+  "fetchcraft-core",
+  "mcp",
 ]
 
 [project.scripts]
@@ -26,3 +26,4 @@ src-layout = true
 
 [tool.uv.sources]
 fetchcraft-core = { workspace = true }
+

@@ -4,7 +4,9 @@ from pathlib import Path
 from typing import *
 from uuid import uuid4
 
+import fsspec
 from pydantic import BaseModel, Field
+import mimetypes
 
 
 class Role(BaseModel):
@@ -17,6 +19,16 @@ class Role(BaseModel):
 class File(BaseModel, ABC):
     id: str = Field(description="File ID", default=str(uuid4().int))
     path: Path
+    mimetype: str
+    encoding: str
+
+    def __init__(self, path: Path, fs: fsspec.AbstractFileSystem, mimetype: Optional[str] = None, encoding: Optional[str] = None, **kwargs):
+        if mimetype is None or encoding is None:
+            _mimetype, _encoding = mimetypes.guess_type(path) or "application/octet-stream"
+            mimetype = mimetype or _mimetype or "text/plain"
+            encoding = encoding or _encoding or "utf-8"
+
+        super().__init__(path=path, fs=fs, mimetype=mimetype, encoding=encoding, **kwargs)
 
     @property
     def path(self) -> Path:

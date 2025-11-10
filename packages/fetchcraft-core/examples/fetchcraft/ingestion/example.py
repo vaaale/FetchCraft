@@ -9,12 +9,14 @@ from fetchcraft.document_store import MongoDBDocumentStore, DocumentStore
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
 from fetchcraft.ingestion.base import ConnectorSource, IngestionPipeline, Record, Sink
+from fetchcraft.ingestion.pipeline.transformation import ChunkingTransformation
 from fetchcraft.ingestion.sqlite_backend import AsyncSQLiteQueue
 from fetchcraft.node import DocumentNode, Node
 from fetchcraft.node_parser import HierarchicalNodeParser
-from fetchcraft.parsing import TextFileParser
+from fetchcraft.parsing.docling import DoclingDocumentParser
+from fetchcraft.parsing.docling.client.docling_parser import RemoteDoclingParser
+from fetchcraft.parsing.text_file_parser import TextFileParser
 from fetchcraft.vector_store import QdrantVectorStore
-from transformation import ChunkingTransformation
 
 # Configuration
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
@@ -63,7 +65,6 @@ class VectorIndexSink(Sink):
     def num_records(self) -> int:
         return self.counter
 
-
 class DocumentStoreSink(Sink):
 
     def __init__(self, doc_store: DocumentStore):
@@ -79,13 +80,16 @@ class DocumentStoreSink(Sink):
             print(f"DocumentStoreSink Indexed: {record.id}")
 
 
+
 # -----------------------------
 # Demo usage
 # -----------------------------
 
 async def main():
     document_path = DOCUMENTS_PATH
+    document_path = "/mnt/storage/data/knowledge/single/"
     doc_store = MongoDBDocumentStore(
+        connection_string="mongodb://localhost:27017",
         database_name="fetchcraft",
         collection_name=COLLECTION_NAME,
     )
@@ -117,18 +121,28 @@ async def main():
         doc_store=doc_store,
         index_id=INDEX_ID
     )
-
     def filter_fn(file: LocalFile) -> bool:
         filepath = str(file.path)
         count = asyncio.get_event_loop().run_until_complete(doc_store.count_documents(filters={"metadata.source": filepath}))
         return count == 0
+
 
     backend = AsyncSQLiteQueue("demo_queue.db")
 
     index_sink = VectorIndexSink(vector_index=vector_index, index_id=INDEX_ID)
     pipeline = (
         IngestionPipeline(backend=backend)
-        .source(ConnectorSource(connector=FilesystemConnector(path=document_path, filter=None), parser=TextFileParser()))
+        .source(ConnectorSource(
+            connector=FilesystemConnector(
+                path=document_path,
+                filter=None
+            ),
+            parser_map={
+                "text/plain": TextFileParser(),
+                "text": TextFileParser(),
+                "default": RemoteDoclingParser(docling_url="http://localhost:8001")
+            }
+        ))
         # .add_transformation(DocumentSummarization(max_sentences=2, simulate_latency=0.2), deferred=True)
         # .add_transformation(ExtractKeywords())
         .add_transformation(ChunkingTransformation(chunker=chunker))
@@ -168,6 +182,5 @@ async def main():
 
 if __name__ == "__main__":
     import contextlib
-
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(main())

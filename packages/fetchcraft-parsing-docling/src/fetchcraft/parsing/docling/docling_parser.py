@@ -10,6 +10,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import AsyncGenerator, Optional, Dict, Any, List
 
+from fetchcraft.connector import File
+
 try:
     from docling.document_converter import DocumentConverter
     from docling.datamodel.base_models import InputFormat
@@ -94,7 +96,7 @@ class DoclingDocumentParser(DocumentParser):
             print(f"Tables found: {doc.metadata.get('num_tables', 0)}")
         ```
     """
-    
+
     directory: Path
     pattern: str = "*"
     recursive: bool = True
@@ -115,7 +117,11 @@ class DoclingDocumentParser(DocumentParser):
                 "docling is not installed. "
                 "Install it with: pip install docling"
             )
-    
+
+    async def parse(self, file: File, metadata: Optional[Dict[str, Any]] = None) -> AsyncGenerator[DocumentNode, None]:
+        raise NotImplementedError("Not implemented")
+
+
     async def get_documents(
         self, 
         metadata: Optional[Dict[str, Any]] = None,

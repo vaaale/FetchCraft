@@ -19,10 +19,10 @@ dependencies = [
 members = [
     "packages/fetchcraft-core",
     "packages/fetchcraft-parsing-docling",
-    "packages/fetchcraft-ingestion-admin",
     "fetchcraft-demos/fetchcraft-openapi-server",
     "fetchcraft-demos/fetchcraft-openai-server",
     "fetchcraft-demos/fetchcraft-mcp-server",
+    "packages/fetchcraft-ingestion-admin",
 ]
 
 [tool.uv.sources]

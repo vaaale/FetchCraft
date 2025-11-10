@@ -8,9 +8,6 @@ from pydantic import ConfigDict
 
 from fetchcraft.connector import Connector, File
 from fetchcraft.connector.base import Role
-from fetchcraft.document_store import DocumentStore
-from fetchcraft.parsing import TextFileParser
-from fetchcraft.parsing.base import DocumentParser
 
 
 class LocalFile(File):

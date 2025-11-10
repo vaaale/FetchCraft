@@ -8,6 +8,8 @@ from PDF files with markdown formatting using pymupdf4llm.
 from pathlib import Path
 from typing import AsyncGenerator, Optional, Dict, Any
 
+from fetchcraft.connector import File
+
 try:
     import pymupdf4llm
     PYMUPDF4LLM_AVAILABLE = True
@@ -41,7 +43,10 @@ class PDFDocumentParser(DocumentParser):
             print(f"Loaded: {doc.metadata['filename']}")
         ```
     """
-    
+
+    async def parse(self, file: File) -> AsyncGenerator[DocumentNode, None]:
+        raise NotImplementedError("Parsing a single file is not supported for PDFDocumentParser")
+
     directory: Path
     pattern: str = "*.pdf"
     recursive: bool = True

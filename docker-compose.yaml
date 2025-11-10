@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Qdrant vector database
   qdrant:
@@ -36,17 +34,30 @@ services:
     ports:
       - "8001:8001"
     volumes:
-      - ./Documents:/app/Documents
-      - ./demo_queue.db:/app/demo_queue.db
-      - ./fetchcraft/fetchcraft-demos/fetchcraft-openapi-server/.env:/app/.env
-
+      - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
     env_file:
-      - fetchcraft-demos/fetchcraft-openapi-server/.env
+      - ./.env
     environment:
       - HOST=0.0.0.0
       - PORT=8001
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
+    depends_on:
+      - qdrant
+    restart: unless-stopped
+    networks: [ 'demo-net' ]
+
+  fetchcraft-docling-server:
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+    image: fetchcraft
+    entrypoint: ["uv", "run", "fetchcraft-docling-server"]
+    hostname: docling-server
+    ports:
+      - "8020:8001"
+    volumes:
+      - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
     depends_on:
       - qdrant
     restart: unless-stopped
@@ -62,11 +73,9 @@ services:
     ports:
       - "8003:8003"
     volumes:
-      - ./Documents:/app/Documents
-      - ./demo_queue.db:/app/demo_queue.db
-      - .//fetchcraft-demos/fetchcraft-mcp-server/.env:/app/.env
+      - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
     env_file:
-      - fetchcraft-demos/fetchcraft-mcp-server/.env
+      - ./.env
     environment:
       - HOST=0.0.0.0
       - PORT=8003
@@ -88,18 +97,19 @@ services:
       - "8004:8004"
     volumes:
       - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
-      - ./demo_queue.db:/app/demo_queue.db
-      - ./fetchcraft-demos/fetchcraft-mcp-server/.env:/app/.env
+      - ${INGESTION_DB:-./demo_queue.db}:/app/${INGESTION_DB}
     env_file:
-      - fetchcraft-demos/fetchcraft-mcp-server/.env
+      - ./.env
     environment:
       - HOST=0.0.0.0
       - PORT=8003
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
+      - DOCUMENTS_PATH=/app/Documents
     depends_on:
       - qdrant
       - mongodb
+      - fetchcraft-docling-server
     restart: unless-stopped
     networks: [ 'demo-net' ]
 
