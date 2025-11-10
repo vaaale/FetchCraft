@@ -249,9 +249,9 @@ class DoclingDocumentParser(DocumentParser):
                     page_text = result.document.export_to_markdown(page_no=page_num)
                     tables = page_table.get(page_num, [])
 
-                    table_dicts = [table.export_to_dataframe().to_dict(orient='records') for table in tables]
+                    table_dicts = [table.export_to_dataframe(result.document).to_dict(orient='records') for table in tables]
                     table_json = json.dumps(table_dicts, indent=2)
-                    table_list_md = "\n\n".join([table.export_to_markdown() for table in tables])
+                    table_list_md = "\n\n".join([table.export_to_markdown(result.document) for table in tables])
 
                     if page_text.strip() or tables:  # Skip empty pages
                         page_metadata = {
