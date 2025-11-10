@@ -390,6 +390,6 @@ class ConnectorSource(Source):
     async def read(self) -> AsyncIterable[Record]:  # async generator
         async for file in self.connector.read():
             parser = self.parser_map.get(file.mimetype, self.parser_map.get("default"))
-            documents = await parser.parse(file)
+            documents = parser.parse(file)
             async for doc in documents:
                 yield Record(id=str(file.path), payload={"document": doc.model_dump()}, meta={"path": str(file.path)})

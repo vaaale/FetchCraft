@@ -1,6 +1,8 @@
 # Use Python 3.12 slim image
 FROM python:3.12-slim
 
+RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
+
 # Set working directory
 WORKDIR /app
 

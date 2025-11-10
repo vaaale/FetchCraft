@@ -88,5 +88,5 @@ class FilesystemConnector(Connector):
         for path in self.fs.glob("**/*"):
             if self.fs.isdir(path) or (self.filter and not self.filter(LocalFile(path=path, fs=self.fs))):
                 continue
-
+            print(f"Ingesting file: {path}")
             yield LocalFile(path=path, fs=self.fs)
