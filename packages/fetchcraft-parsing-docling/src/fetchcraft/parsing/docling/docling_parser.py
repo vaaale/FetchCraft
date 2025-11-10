@@ -6,16 +6,20 @@ from various document formats using Docling, which offers superior
 document understanding including layout analysis, table extraction, and more.
 """
 import json
+import os
 from collections import defaultdict
 from pathlib import Path
 from typing import AsyncGenerator, Optional, Dict, Any, List
+
+from huggingface_hub import snapshot_download
 
 from fetchcraft.connector import File
 
 try:
     from docling.document_converter import DocumentConverter
     from docling.datamodel.base_models import InputFormat
-    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
+
     DOCLING_AVAILABLE = True
 except ImportError:
     DOCLING_AVAILABLE = False
@@ -104,7 +108,8 @@ class DoclingDocumentParser(DocumentParser):
     do_ocr: bool = True  # Enable OCR for scanned documents
     do_table_structure: bool = True  # Extract table structure
     filter_supported_only: bool = True  # If True, only process supported file formats
-    
+    ocr_options: Optional[RapidOcrOptions] = None
+
     model_config = {
         "arbitrary_types_allowed": True,
     }
@@ -117,6 +122,24 @@ class DoclingDocumentParser(DocumentParser):
                 "docling is not installed. "
                 "Install it with: pip install docling"
             )
+
+        download_path = snapshot_download(repo_id="RapidAI/RapidOCR")
+
+        # Setup RapidOcrOptions for English detection
+        det_model_path = os.path.join(
+            download_path, "onnx", "PP-OCRv5", "det", "ch_PP-OCRv5_server_det.onnx"
+        )
+        rec_model_path = os.path.join(
+            download_path, "onnx", "PP-OCRv5", "rec", "ch_PP-OCRv5_rec_server_infer.onnx"
+        )
+        cls_model_path = os.path.join(
+            download_path, "onnx", "PP-OCRv4", "cls", "ch_ppocr_mobile_v2.0_cls_infer.onnx"
+        )
+        self.ocr_options = RapidOcrOptions(
+            det_model_path=det_model_path,
+            rec_model_path=rec_model_path,
+            cls_model_path=cls_model_path,
+        )
 
     async def parse(self, file: File, metadata: Optional[Dict[str, Any]] = None) -> AsyncGenerator[DocumentNode, None]:
         raise NotImplementedError("Not implemented")
@@ -181,7 +204,16 @@ class DoclingDocumentParser(DocumentParser):
         """
         try:
             # Configure pipeline options
-            pipeline_options = PdfPipelineOptions()
+            # Download RapidOCR models from Hugging Face
+            print("Downloading RapidOCR models")
+            if self.ocr_options:
+                pipeline_options = PdfPipelineOptions(
+                    ocr_options=self.ocr_options,
+                )
+            else:
+                pipeline_options = PdfPipelineOptions()
+
+            # pipeline_options = PdfPipelineOptions()
             pipeline_options.do_ocr = self.do_ocr
             pipeline_options.do_table_structure = self.do_table_structure
             

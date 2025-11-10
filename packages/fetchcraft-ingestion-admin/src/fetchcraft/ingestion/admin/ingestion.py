@@ -1,6 +1,7 @@
 import asyncio
 import os
 import pathlib
+import traceback
 
 from qdrant_client import QdrantClient
 
@@ -75,11 +76,15 @@ class DocumentStoreSink(Sink):
 
     async def write(self, record: Record) -> None:
         async with self._lock:
-            doc = DocumentNode.model_validate(record.payload["document"])
-            node_id = await self.doc_store.add_document(doc)
-            doc.id = node_id
-            record.payload["document"] = doc.model_dump()
-            print(f"DocumentStoreSink Indexed: {record.id}")
+            try:
+                doc = DocumentNode.model_validate(record.payload["document"])
+                node_id = await self.doc_store.add_document(doc)
+                doc.id = node_id
+                record.payload["document"] = doc.model_dump()
+                print(f"DocumentStoreSink Indexed: {record.id}")
+            except Exception as e:
+                print(f"DocumentStoreSink Error: {e}")
+                traceback.print_exc()
 
 
 

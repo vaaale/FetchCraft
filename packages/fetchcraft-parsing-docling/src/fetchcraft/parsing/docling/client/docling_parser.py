@@ -29,7 +29,9 @@ class RemoteDoclingParser(DocumentParser):
             tmp.write(await file.read())
             result = await self.client.parse_single(tmp.name)
             for data in result['nodes']:
-                yield DocumentNode.model_validate(data)
+                doc = DocumentNode.model_validate(data)
+                doc.metadata.update(file.metadata())
+                yield doc
 
 
     async def get_documents(self, metadata: Optional[Dict[str, Any]] = None, **kwargs) -> AsyncGenerator[DocumentNode, None]:
