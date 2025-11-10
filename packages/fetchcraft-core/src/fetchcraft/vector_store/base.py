@@ -54,7 +54,7 @@ class VectorStore(BaseModel, ABC, Generic[D]):
         if self._embeddings is None:
             raise ValueError("Embeddings model not configured for this vector store")
         return await self._embeddings.embed_documents(texts)
-    
+
     @abstractmethod
     async def find(self, key: str, value: str):
         """

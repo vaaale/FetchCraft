@@ -440,6 +440,11 @@ def main():
     print(f"  • Output HTML: {OUTPUT_HTML}")
     print("=" * 70 + "\n")
 
+    # print all environment variables
+    print("\nEnvironment Variables:")
+    for key, value in os.environ.items():
+        print(f"  • {key}: {value}")
+
     uvicorn.run(
         "fetchcraft.demos.openapi.server:app",
         host=HOST,

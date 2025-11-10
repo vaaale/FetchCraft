@@ -56,8 +56,6 @@ docs/_build/
 .gitattributes
 
 # Docker
-Dockerfile
-docker-compose.yaml
 .dockerignore
 
 # Data and logs

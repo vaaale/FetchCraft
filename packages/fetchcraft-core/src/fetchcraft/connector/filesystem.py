@@ -46,7 +46,7 @@ class LocalFile(File):
         otw = bool(stat.S_IWGRP & st['mode'])
         otx = bool(stat.S_IXGRP & st['mode'])
         other_role = Role(name="other", read=otr, write=otw, execute=otx)
-        return [user_role, group_role, other_role]
+        return [user_role.model_dump(), group_role.model_dump(), other_role.model_dump()]
 
 
     def metadata(self) -> dict:

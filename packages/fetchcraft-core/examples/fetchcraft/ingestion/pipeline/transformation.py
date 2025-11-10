@@ -43,5 +43,6 @@ class ChunkingTransformation(Transformation):
     async def process(self, record: Record) -> Record:
         doc = DocumentNode.model_validate(record.payload["document"])
         nodes = self.chunker.get_nodes([doc])
+        record.payload["document"] = doc.model_dump()
         record.payload["chunks"] = nodes
         return record

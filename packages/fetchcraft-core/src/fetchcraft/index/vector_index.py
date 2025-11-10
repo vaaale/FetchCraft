@@ -65,7 +65,21 @@ class VectorIndex(BaseIndex[D]):
             A new VectorIndex instance
         """
         return cls(vector_store=vector_store, doc_store=doc_store, index_id=index_id)
-    
+
+    async def delete_document_nodes(self, doc: D):
+        """
+        Delete all nodes associated with a document.
+
+        Args:
+            doc_id: The ID of the document to delete nodes for
+        """
+        documents = await self._doc_store.list_documents(filters={"hash": doc.hash})
+        if documents:
+            document = documents[0]
+            children = document.children_ids
+            await self.vector_store.delete(children, index_id=self.index_id)
+
+
     async def add_nodes(self, nodes: List[D], show_progress: bool = False) -> List[str]:
         """
         Add documents to the index.
@@ -80,22 +94,22 @@ class VectorIndex(BaseIndex[D]):
             List of document IDs that were added
         """
 
-        if show_progress:
-            nodes = tqdm(nodes, desc="Processing documents")
-
-        insert_ids = []
-        for node in nodes:
-            existing_nodes = await self.vector_store.find('hash_', node.hash)
-            if existing_nodes:
-                # An identical node exists. Nothing to do
-                continue
-
-            if self._doc_store:
-                await self._doc_store.update_document(node)
-
-            await self.vector_store.insert_nodes([node], index_id=self.index_id, show_progress=False)
-            insert_ids.append(node.id)
-        # return await self.vector_store.insert_nodes(nodes, index_id=self.index_id, show_progress=show_progress)
+        # if show_progress:
+        #     nodes = tqdm(nodes, desc="Processing documents")
+        #
+        # insert_ids = []
+        # for node in nodes:
+        #     existing_nodes = await self.vector_store.find('hash_', node.hash)
+        #     if existing_nodes:
+        #         # An identical node exists. Nothing to do
+        #         continue
+        #
+        #     if self._doc_store:
+        #         await self._doc_store.update_document(node)
+        #
+        #     await self.vector_store.insert_nodes([node], index_id=self.index_id, show_progress=False)
+        #     insert_ids.append(node.id)
+        return await self.vector_store.insert_nodes(nodes, index_id=self.index_id, show_progress=show_progress)
         return insert_ids
 
 

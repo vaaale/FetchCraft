@@ -55,6 +55,8 @@ class VectorIndexSink(Sink):
     async def write(self, record: Record) -> None:
         async with self._lock:
             nodes = record.payload.get("chunks", [])
+            doc = DocumentNode.model_validate(record.payload["document"])
+            await self.vector_index.delete_document_nodes(doc)
             await self.vector_index.add_nodes(nodes)
             self.counter += 1
             print(f"{self.index_id} Indexed[{self.counter}]: {record.id}")

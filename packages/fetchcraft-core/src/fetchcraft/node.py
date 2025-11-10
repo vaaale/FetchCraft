@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Optional, List, Dict, Any
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr, computed_field
 
 from fetchcraft.mixins import ObjectNodeMixin
 
@@ -39,7 +39,7 @@ class Node(BaseModel):
     node_type: NodeType = NodeType.NODE
     text: str
     metadata: Dict[str, Any] = Field(default_factory=dict)
-    hash_: Optional[str] = Field(description="Hash of the node", default=None, alias="hash", validation_alias="hash_")
+    hash_: Optional[str] = Field(description="Hash of the node", default=None, exclude=True)
     embedding: Optional[List[float]] = None
 
     # Document reference
@@ -57,6 +57,7 @@ class Node(BaseModel):
         "arbitrary_types_allowed": True,
     }
 
+    @computed_field
     @property
     def hash(self) -> Optional[str]:
         """Get the hash of the node."""

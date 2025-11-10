@@ -60,6 +60,7 @@ class HierarchicalNodeParser(NodeParser):
         all_nodes = []
         
         for document in documents:
+            document_nodes = []
             text = document.text
             metadata.update(document.metadata)
             
@@ -68,15 +69,20 @@ class HierarchicalNodeParser(NodeParser):
             
             # Step 2: For each parent chunk, create child SymNodes
             for parent_chunk in parent_chunks:
-                all_nodes.append(parent_chunk)
+                document_nodes.append(parent_chunk)
                 
                 # Create child SymNodes at each specified size
                 for child_size in self.child_sizes:
                     child_nodes = self._create_child_nodes(parent_chunk, child_size, metadata)
-                    all_nodes.extend(child_nodes)
+                    document_nodes.extend(child_nodes)
                     for cn in child_nodes:
                         document.add_child(cn.id)
-        
+
+            node_ids = list(set([n.id for n in document_nodes] + document.children_ids))
+            document.children_ids = node_ids
+
+            all_nodes.extend(document_nodes)
+
         return all_nodes
     
     def _create_parent_chunks(
