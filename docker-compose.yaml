@@ -71,17 +71,26 @@ services:
 #    build:
 #      context: .
 #      dockerfile: Dockerfile
-    image: fetchcraft
+    image: fetchcraft-gpu
     entrypoint: ["uv", "run", "fetchcraft-docling-server"]
     hostname: docling-server
     ports:
       - "8020:8001"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
     volumes:
       - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
     depends_on:
       - qdrant
     restart: unless-stopped
     networks: [ 'demo-net' ]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: [ '1' ]
+              capabilities: [gpu]
 
   fetchcraft-mcp-server:
 #    build:
@@ -105,13 +114,6 @@ services:
       - qdrant
     restart: unless-stopped
     networks: [ 'demo-net' ]
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: [ '1' ]
-              capabilities: [gpu]
 
   fetchcraft-ingestion-mcp-server:
 #    build:
