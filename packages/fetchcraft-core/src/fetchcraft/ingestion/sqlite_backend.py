@@ -6,7 +6,7 @@ import time
 import uuid
 from typing import Optional
 
-from fetchcraft.ingestion import AsyncQueueBackend
+from fetchcraft.ingestion.base import AsyncQueueBackend
 from fetchcraft.ingestion.base import to_json, QueueMessage, from_json
 
 

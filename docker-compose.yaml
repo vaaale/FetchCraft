@@ -9,7 +9,7 @@ services:
       - "6333:6333"
       - "6334:6334"
     volumes:
-      - /mnt/storage/AI-Infrastructure/qdrant-data:/qdrant/storage
+      - qdrant-data:/qdrant/storage
     environment:
       - QDRANT__SERVICE__GRPC_PORT=6334
     networks: [ 'demo-net' ]
@@ -23,7 +23,7 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - /mnt/storage/AI-Infrastructure/mongodb-data:/data/db
+      - mongodb-data:/data/db
     restart: always
 
   # Fetchcraft OpenAPI Server
@@ -38,7 +38,7 @@ services:
     volumes:
       - ./Documents:/app/Documents
       - ./demo_queue.db:/app/demo_queue.db
-      - /home/alex/PycharmProjects/fetchcraft/fetchcraft-demos/fetchcraft-openapi-server/.env:/app/.env
+      - ./fetchcraft/fetchcraft-demos/fetchcraft-openapi-server/.env:/app/.env
 
     env_file:
       - fetchcraft-demos/fetchcraft-openapi-server/.env
@@ -64,7 +64,7 @@ services:
     volumes:
       - ./Documents:/app/Documents
       - ./demo_queue.db:/app/demo_queue.db
-      - /home/alex/PycharmProjects/fetchcraft/fetchcraft-demos/fetchcraft-mcp-server/.env:/app/.env
+      - .//fetchcraft-demos/fetchcraft-mcp-server/.env:/app/.env
     env_file:
       - fetchcraft-demos/fetchcraft-mcp-server/.env
     environment:
@@ -74,6 +74,32 @@ services:
       - QDRANT_PORT=6333
     depends_on:
       - qdrant
+    restart: unless-stopped
+    networks: [ 'demo-net' ]
+
+  fetchcraft-ingestion-mcp-server:
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+    image: fetchcraft
+    entrypoint: ["uv", "run", "fetchcraft-ingestion-admin"]
+    hostname: mcp-server
+    ports:
+      - "8004:8004"
+    volumes:
+      - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
+      - ./demo_queue.db:/app/demo_queue.db
+      - ./fetchcraft-demos/fetchcraft-mcp-server/.env:/app/.env
+    env_file:
+      - fetchcraft-demos/fetchcraft-mcp-server/.env
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8003
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+    depends_on:
+      - qdrant
+      - mongodb
     restart: unless-stopped
     networks: [ 'demo-net' ]
 
@@ -115,7 +141,7 @@ services:
       - MEILI_NO_ANALYTICS=true
       - MEILI_MASTER_KEY=${MEILI_MASTER_KEY}
     volumes:
-      - ./meili_data_v1.12:/meili_data
+      - meili_data:/meili_data
 
   vectordb:
     container_name: librechat-vectordb
@@ -141,9 +167,11 @@ services:
       - librechat.env
 
 networks:
-  loadbalancing:
   demo-net:
     driver: bridge
 
 volumes:
   pgdata2:
+  mongodb-data:
+  qdrant-data:
+  meili_data:

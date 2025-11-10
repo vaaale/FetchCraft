@@ -1,6 +1,7 @@
 import asyncio
 import os
 import pathlib
+from typing import Optional
 
 from qdrant_client import QdrantClient
 
@@ -8,13 +9,13 @@ from fetchcraft.connector.filesystem import FilesystemConnector, LocalFile
 from fetchcraft.document_store import MongoDBDocumentStore, DocumentStore
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
-from fetchcraft.ingestion.base import ConnectorSource, IngestionPipeline, Record, Sink
 from fetchcraft.ingestion.sqlite_backend import AsyncSQLiteQueue
+from fetchcraft.ingestion.base import ConnectorSource, IngestionPipeline, Record, Sink
+from .transformation import ChunkingTransformation
 from fetchcraft.node import DocumentNode, Node
 from fetchcraft.node_parser import HierarchicalNodeParser
 from fetchcraft.parsing import TextFileParser
 from fetchcraft.vector_store import QdrantVectorStore
-from transformation import ChunkingTransformation
 
 # Configuration
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
@@ -63,7 +64,6 @@ class VectorIndexSink(Sink):
     def num_records(self) -> int:
         return self.counter
 
-
 class DocumentStoreSink(Sink):
 
     def __init__(self, doc_store: DocumentStore):
@@ -79,6 +79,7 @@ class DocumentStoreSink(Sink):
             print(f"DocumentStoreSink Indexed: {record.id}")
 
 
+
 # -----------------------------
 # Demo usage
 # -----------------------------
@@ -86,6 +87,7 @@ class DocumentStoreSink(Sink):
 async def main():
     document_path = DOCUMENTS_PATH
     doc_store = MongoDBDocumentStore(
+        connection_string="mongodb://mongodb:27017",
         database_name="fetchcraft",
         collection_name=COLLECTION_NAME,
     )
@@ -117,11 +119,11 @@ async def main():
         doc_store=doc_store,
         index_id=INDEX_ID
     )
-
     def filter_fn(file: LocalFile) -> bool:
         filepath = str(file.path)
         count = asyncio.get_event_loop().run_until_complete(doc_store.count_documents(filters={"metadata.source": filepath}))
         return count == 0
+
 
     backend = AsyncSQLiteQueue("demo_queue.db")
 
@@ -168,6 +170,5 @@ async def main():
 
 if __name__ == "__main__":
     import contextlib
-
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(main())

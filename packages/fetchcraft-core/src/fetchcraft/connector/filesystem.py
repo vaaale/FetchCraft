@@ -50,6 +50,19 @@ class LocalFile(File):
 
 
     def metadata(self) -> dict:
+
+        def _getpwuid(uid: int) -> str:
+            try:
+                return getpwuid(uid).pw_name
+            except KeyError:
+                return str(uid)
+
+        def _getpwgid(gid: int) -> str:
+            try:
+                return getpwuid(gid).pw_name
+            except KeyError:
+                return str(gid)
+
         st = self.fs.stat(str(self.path))
         return {
             "filename": self.path.name,
@@ -57,8 +70,8 @@ class LocalFile(File):
             "size": st["size"],
             "modified": st["mtime"],
             "created": st["created"],
-            "owner": getpwuid(st["uid"]).pw_name,
-            "group": getpwuid(st["gid"]).pw_name,
+            "owner": _getpwuid(st["uid"]),
+            "group": _getpwgid(st["gid"]),
             "permissions": self.permissions()
         }
 

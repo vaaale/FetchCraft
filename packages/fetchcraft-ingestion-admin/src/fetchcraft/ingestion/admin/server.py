@@ -15,7 +15,7 @@ Features:
 Usage:
     python -m fetchcraft.ingestion.admin.server
 """
-
+import asyncio
 import json
 import os
 import sqlite3
@@ -27,6 +27,7 @@ from typing import List, Optional, Dict, Any
 
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
+from fetchcraft.ingestion.admin.ingestion import main as run_ingestion
 
 load_dotenv()
 
@@ -37,6 +38,7 @@ load_dotenv()
 DB_PATH = os.getenv("DB_PATH", "demo_queue.db")
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8004"))
+DOCUMENTS_PATH = Path(os.getenv("DOCUMENTS_PATH", "Documents"))
 
 # ============================================================================
 # Global State
@@ -596,6 +598,18 @@ def main():
     print(f"  • Host: {HOST}")
     print(f"  • Port: {PORT}")
     print("=" * 70 + "\n")
+
+    # print all environment variables
+    print("\nEnvironment Variables:")
+    for key, value in os.environ.items():
+        print(f"  • {key}: {value}")
+
+    marker_file = Path(DOCUMENTS_PATH) / ".ingested"
+    if not marker_file.exists():
+        print("Running ingestion...")
+        asyncio.run(run_ingestion())
+        marker_file.touch()
+
 
     # Run the MCP server using streamable-http transport
     mcp.run(transport="streamable-http")

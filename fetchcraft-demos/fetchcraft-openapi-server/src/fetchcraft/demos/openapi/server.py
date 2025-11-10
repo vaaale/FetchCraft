@@ -78,7 +78,8 @@ FUSION_METHOD = os.getenv("FUSION_METHOD", "rrf")
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8001"))
 
-OUTPUT_HTML=os.getenv("OUTPUT_HTML", False)
+OUTPUT_HTML = os.getenv("OUTPUT_HTML", False)
+
 
 # ============================================================================
 # Request/Response Models
@@ -286,6 +287,9 @@ app = FastAPI(
     license_info={
         "name": "MIT",
     },
+    servers=[
+        {"url": f"http://openapi-server:8001", "description": "Local development server"},
+    ]
 )
 
 # Add CORS middleware to handle OPTIONS requests and cross-origin requests

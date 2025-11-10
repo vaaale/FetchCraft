@@ -1,1 +1,0 @@
-"""Fetchcraft ingestion administration package."""
