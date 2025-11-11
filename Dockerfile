@@ -19,11 +19,11 @@ RUN uv sync --frozen
 RUN mkdir -p /app/Documents
 
 # Expose the default port
-EXPOSE 8001
+#EXPOSE 8001
 
 # Set environment variables
-ENV HOST=0.0.0.0
-ENV PORT=8001
+#ENV HOST=0.0.0.0
+#ENV PORT=8001
 ENV PYTHONUNBUFFERED=1
 
 # Run the server

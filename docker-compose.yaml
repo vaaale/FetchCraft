@@ -100,14 +100,14 @@ services:
     entrypoint: ["uv", "run", "fetchcraft-mcp-server"]
     hostname: mcp-server
     ports:
-      - "8003:8003"
+      - "8003:8001"
     volumes:
       - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
     env_file:
       - ./.env
     environment:
       - HOST=0.0.0.0
-      - PORT=8003
+      - PORT=8001
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
     depends_on:
@@ -123,7 +123,7 @@ services:
     entrypoint: ["uv", "run", "fetchcraft-ingestion-admin"]
     hostname: mcp-server
     ports:
-      - "8004:8004"
+      - "8004:8001"
     volumes:
       - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
       - ${INGESTION_DB:-./demo_queue.db}:/app/${INGESTION_DB}
@@ -131,7 +131,7 @@ services:
       - ./.env
     environment:
       - HOST=0.0.0.0
-      - PORT=8003
+      - PORT=8001
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - DOCUMENTS_PATH=/app/Documents
