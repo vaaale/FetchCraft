@@ -1269,7 +1269,7 @@ requires-dist = [
 
 [[package]]
 name = "fetchcraft-core"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/fetchcraft-core" }
 dependencies = [
     { name = "chromadb" },
@@ -1363,7 +1363,7 @@ requires-dist = [{ name = "fetchcraft-core", editable = "packages/fetchcraft-cor
 
 [[package]]
 name = "fetchcraft-ingestion-admin"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/fetchcraft-ingestion-admin" }
 dependencies = [
     { name = "fetchcraft-core" },
@@ -1378,7 +1378,7 @@ requires-dist = [
 
 [[package]]
 name = "fetchcraft-mcp-server"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "fetchcraft-demos/fetchcraft-mcp-server" }
 dependencies = [
     { name = "fetchcraft-core" },
@@ -1393,7 +1393,7 @@ requires-dist = [
 
 [[package]]
 name = "fetchcraft-openai-server"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "fetchcraft-demos/fetchcraft-openai-server" }
 dependencies = [
     { name = "fetchcraft-core" },
@@ -1404,7 +1404,7 @@ requires-dist = [{ name = "fetchcraft-core", editable = "packages/fetchcraft-cor
 
 [[package]]
 name = "fetchcraft-openapi-server"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "fetchcraft-demos/fetchcraft-openapi-server" }
 dependencies = [
     { name = "fetchcraft-core" },
@@ -1419,7 +1419,7 @@ requires-dist = [
 
 [[package]]
 name = "fetchcraft-parsing-docling"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/fetchcraft-parsing-docling" }
 dependencies = [
     { name = "docling" },

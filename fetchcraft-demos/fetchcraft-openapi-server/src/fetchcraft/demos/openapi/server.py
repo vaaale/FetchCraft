@@ -288,7 +288,8 @@ app = FastAPI(
         "name": "MIT",
     },
     servers=[
-        {"url": f"http://openapi-server:8001", "description": "Local development server"},
+        # {"url": "http://wingman.akhbar.home:8001", "description": "Production server"},
+        {"url": "http://openapi-server:8001", "description": "Local development server"}
     ]
 )
 

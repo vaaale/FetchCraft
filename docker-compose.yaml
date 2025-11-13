@@ -143,7 +143,8 @@ services:
     networks: [ 'demo-net' ]
 
   librechat:
-    image: librechat-html
+    image: librechat-dev-alex
+#    image: ghcr.io/danny-avila/librechat-dev-api:latest
     container_name: librechat
     ports:
       - "3080:3080"
@@ -161,6 +162,8 @@ services:
       - MEILI_HOST=http://meilisearch:7700
       - RAG_PORT=${RAG_PORT:-8000}
       - RAG_API_URL=http://rag_api:${RAG_PORT:-8010}
+    env_file:
+      - ./librechat.env
     volumes:
       - ./librechat.yaml:/app/librechat.yaml
       - ./librechat.env:/app/.env

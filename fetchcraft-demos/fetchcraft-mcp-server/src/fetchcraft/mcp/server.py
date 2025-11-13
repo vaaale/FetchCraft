@@ -17,10 +17,10 @@ import os
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 from dotenv import load_dotenv
-from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp import FastMCP
 from pydantic_ai import Tool
 from qdrant_client import QdrantClient
 
@@ -28,10 +28,8 @@ from fetchcraft.agents import RetrieverTool, PydanticAgent
 from fetchcraft.document_store import MongoDBDocumentStore
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
-from fetchcraft.node import SymNode
-from fetchcraft.node_parser import HierarchicalNodeParser
-from fetchcraft.parsing.filesystem import FilesystemDocumentParser
 from fetchcraft.vector_store import QdrantVectorStore
+from fetchcraft.mcp.html_formatter import FindFilesHTMLFormatter
 
 load_dotenv(dotenv_path="/app/.env")
 
@@ -41,7 +39,7 @@ load_dotenv(dotenv_path="/app/.env")
 
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
-COLLECTION_NAME = os.getenv("COLLECTION_NAME", "fetchcraft_mcp")
+COLLECTION_NAME = os.getenv("COLLECTION_NAME", "fetchcraft_chatbot")
 DOCUMENTS_PATH = Path(os.getenv("DOCUMENTS_PATH", "Documents"))
 
 # Embeddings configuration
@@ -65,6 +63,7 @@ FUSION_METHOD = os.getenv("FUSION_METHOD", "rrf")
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8001"))
 
+
 # ============================================================================
 # Global State
 # ============================================================================
@@ -80,72 +79,6 @@ class AppState:
 
 
 app_state = AppState()
-
-
-# ============================================================================
-# Helper Functions
-# ============================================================================
-
-def collection_exists(client: QdrantClient, collection_name: str) -> bool:
-    """Check if a collection exists in Qdrant."""
-    collections = client.get_collections().collections
-    collection_names = [collection.name for collection in collections]
-    return collection_name in collection_names
-
-
-async def load_and_index_documents(
-    vector_index: VectorIndex,
-    doc_store: MongoDBDocumentStore,
-    documents_path: Path,
-    chunk_size: int = 8192,
-    child_sizes: List[int] = None,
-    overlap: int = 200,
-) -> int:
-    """Load documents from a directory and index them."""
-    print(f"\n📂 Loading documents from: {documents_path}")
-
-    if not documents_path.exists():
-        print(f"⚠️  Documents path does not exist: {documents_path}")
-        return 0
-
-    if child_sizes is None:
-        child_sizes = [4096, 1024]
-
-    # Load documents from filesystem
-    source = FilesystemDocumentParser.from_directory(
-        directory=documents_path,
-        pattern="*",
-        recursive=True
-    )
-
-    documents = []
-    async for doc in source.get_documents():
-        await doc_store.add_document(doc)
-        documents.append(doc)
-
-    if not documents:
-        print("⚠️  No files found in the specified directory!")
-        return 0
-
-    print(f"  ✓ Loaded {len(documents)} documents")
-
-    # Parse documents into nodes
-    parser = HierarchicalNodeParser(
-        chunk_size=chunk_size,
-        overlap=overlap,
-        child_sizes=child_sizes,
-        child_overlap=50
-    )
-
-    all_nodes = parser.get_nodes(documents)
-    all_chunks = [n for n in all_nodes if isinstance(n, SymNode)]
-    print(f"  ✓ Created {len(all_chunks)} chunks for indexing")
-
-    # Index all chunks
-    await vector_index.add_nodes(all_chunks, show_progress=True)
-
-    print(f"✅ Successfully indexed {len(all_chunks)} chunks!")
-    return len(all_chunks)
 
 
 async def setup_rag_system():
@@ -169,15 +102,6 @@ async def setup_rag_system():
     client.get_collections()
     print(f"   ✓ Connected to Qdrant")
 
-    # Check if collection exists
-    print(f"\n3️⃣  Checking collection '{COLLECTION_NAME}'...")
-    needs_indexing = not collection_exists(client, COLLECTION_NAME)
-
-    if needs_indexing:
-        print(f"   ⚠️  Collection does not exist - will create and index")
-    else:
-        print(f"   ✓ Collection already exists")
-
     # Create vector store
     vector_store = QdrantVectorStore(
         client=client,
@@ -200,24 +124,8 @@ async def setup_rag_system():
         index_id=INDEX_ID
     )
 
-    # Index documents if needed
-    if needs_indexing:
-        print(f"\n4️⃣  Indexing documents...")
-        await load_and_index_documents(
-            vector_index=vector_index,
-            doc_store=doc_store,
-            documents_path=DOCUMENTS_PATH,
-            chunk_size=CHUNK_SIZE,
-            child_sizes=CHILD_CHUNKS,
-            overlap=CHUNK_OVERLAP
-        )
-    else:
-        print(f"\n4️⃣  Skipping document indexing (collection already exists)")
-
     # Create retriever
-    print(f"\n5️⃣  Creating retriever...")
     retriever = vector_index.as_retriever(top_k=3, resolve_parents=True)
-    print(f"   ✓ Retriever created")
 
     # Create agent
     print(f"\n6️⃣  Creating RAG agent...")
@@ -342,13 +250,13 @@ async def query(
         traceback.print_exc()
         raise RuntimeError(f"Error processing query: {str(e)}")
 
-
 @mcp.tool()
 async def find_files(
     query: str,
     num_results: int = 10,
-    offset: int = 0
-) -> dict:
+    offset: int = 0,
+    # format_html: bool = False
+) -> dict | str:
     """
     Find files using semantic search.
 
@@ -362,6 +270,7 @@ async def find_files(
 
     Returns:
         Dictionary containing the list of matching files, total count, and offset
+        If format_html=True, returns a dictionary with 'html' key containing the formatted HTML
     """
     if not app_state.initialized or not app_state.retriever:
         raise RuntimeError("RAG system not initialized. Please try again in a moment.")
@@ -377,21 +286,15 @@ async def find_files(
 
         # Convert nodes to file results
         files = []
-        seen_sources = set()
-        
+
         for node in paginated_nodes:
             # Get filename from metadata
-            source = node.node.metadata.get("parsing", "Unknown")
+            source = node.node.metadata.get("source", "Unknown")
             filename = node.node.metadata.get("filename", "N/A")
-            
-            # Skip duplicates (same parsing file)
-            if source in seen_sources:
-                continue
-            seen_sources.add(source)
 
             files.append({
                 "filename": filename,
-                "parsing": source,
+                "source": source,
                 "score": float(node.score) if node.score else 0.0,
                 "text_preview": (
                     node.node.text[:200] + "..."
@@ -400,11 +303,28 @@ async def find_files(
                 )
             })
 
-        return {
+        result = {
             "files": files,
             "total": len(nodes),
             "offset": offset
         }
+
+        # If HTML format requested, convert to HTML
+        format_html = True
+        if format_html:
+            formatter = FindFilesHTMLFormatter()
+            html_content = formatter.format(result)
+            # return html_output
+
+            response_header = f"Your search results for query: {query}"
+            search_id = "_".join(query.split())
+            artifact_header = f':::artifact{{identifier="{search_id}" type="text/html" title="File Search Results"}}'
+            # html_content = "<!DOCTYPE html>\n<html lang=\"en\"><body><h1>Hello World</h1></body></html>"
+            # result = f"```html\n{html_content}\n```"
+            result = f"{response_header}\n{artifact_header}\n{html_content}\n"
+            return result
+        else:
+            return result
 
     except Exception as e:
         import traceback
@@ -443,18 +363,18 @@ async def get_file(filename: str) -> dict:
             # If it's not an absolute path, look in the documents directory
             if not file_path.is_absolute():
                 file_path = app_state.documents_path / filename
-        
+
         # Check if file exists
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {filename}")
-        
+
         # Read file content
         try:
             content = file_path.read_text(encoding='utf-8')
         except UnicodeDecodeError:
             # Try with different encoding
             content = file_path.read_text(encoding='latin-1')
-        
+
         # Get file metadata
         stat = file_path.stat()
         metadata = {
@@ -495,7 +415,6 @@ def main():
     print(f"  • Host: {HOST}")
     print(f"  • Port: {PORT}")
     print("=" * 70 + "\n")
-
 
     # print all environment variables
     print("\nEnvironment Variables:")

@@ -27,11 +27,12 @@ COLLECTION_NAME = os.getenv("COLLECTION_NAME", "fetchcraft_chatbot")
 DOCUMENTS_PATH = pathlib.Path(os.getenv("DOCUMENTS_PATH", "Documents"))
 DOCLING_SERVER = os.getenv("DOCLING_SERVER", "http://localhost:8001")
 INGESTION_DB = os.getenv("INGESTION_DB", "ingestion_queue.db")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://mongodb:27017")
 
 # Embeddings configuration (adjust based on your setup)
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "bge-m3")
-EMBEDDING_API_KEY = os.getenv("OPENAI_API_KEY", "sk-321")
-EMBEDDING_BASE_URL = os.getenv("OPENAI_BASE_URL", None)  # None = use OpenAI default
+EMBEDDING_API_KEY = os.getenv("EMBEDDING_API_KEY", "sk-321")
+EMBEDDING_BASE_URL = os.getenv("EMBEDDING_BASE_URL", None)  # None = use OpenAI default
 INDEX_ID = os.getenv("INDEX_ID", "docs-index")
 
 # LLM configuration for the agent
@@ -95,7 +96,7 @@ class DocumentStoreSink(Sink):
 async def main():
     document_path = DOCUMENTS_PATH
     doc_store = MongoDBDocumentStore(
-        connection_string="mongodb://mongodb:27017",
+        connection_string=MONGO_URI,
         database_name="fetchcraft",
         collection_name=COLLECTION_NAME,
     )
@@ -144,9 +145,8 @@ async def main():
                 filter=None
             ),
             parser_map={
-                "text/plain": TextFileParser(),
-                "text": TextFileParser(),
-                "default": RemoteDoclingParser(docling_url=DOCLING_SERVER)
+                "default": TextFileParser(),
+                "application/pdf": RemoteDoclingParser(docling_url=DOCLING_SERVER)
             }
         ))
         # .add_transformation(DocumentSummarization(max_sentences=2, simulate_latency=0.2), deferred=True)
