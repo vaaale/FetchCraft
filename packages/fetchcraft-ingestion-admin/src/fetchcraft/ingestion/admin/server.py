@@ -583,6 +583,29 @@ async def list_queues() -> dict:
         raise RuntimeError(f"Error listing queues: {str(e)}")
 
 
+@mcp.tool()
+async def execute_ingestion() -> str:
+    """
+    Run the ingestion pipeline.
+
+    This tool will run the ingestion pipeline to refresh the knowledgebase.
+
+    Returns:
+        Dictionary confirming the retry operation
+    """
+    from multiprocessing import Process
+    
+    def _run_ingestion_wrapper():
+        """Wrapper to run the async ingestion function in a separate process."""
+        asyncio.run(run_ingestion())
+    
+    print("Starting ingestion in a separate process...")
+    p = Process(target=_run_ingestion_wrapper, name="ingestion-process")
+    p.start()
+    
+    return f"Ingestion started in process {p.pid}. The process will run independently."
+
+
 # ============================================================================
 # Main Entry Point
 # ============================================================================

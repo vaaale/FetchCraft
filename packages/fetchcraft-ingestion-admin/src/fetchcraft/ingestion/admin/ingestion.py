@@ -10,7 +10,7 @@ from fetchcraft.document_store import MongoDBDocumentStore, DocumentStore
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
 from fetchcraft.ingestion.base import ConnectorSource, IngestionPipeline, Record, Sink
-from fetchcraft.ingestion.pipeline.transformation import ChunkingTransformation
+from fetchcraft.ingestion.pipeline.transformation import ChunkingTransformation, DocumentSummarization
 from fetchcraft.ingestion.sqlite_backend import AsyncSQLiteQueue
 from fetchcraft.node import DocumentNode, Node
 from fetchcraft.node_parser import HierarchicalNodeParser
@@ -149,7 +149,7 @@ async def main():
                 "application/pdf": RemoteDoclingParser(docling_url=DOCLING_SERVER)
             }
         ))
-        # .add_transformation(DocumentSummarization(max_sentences=2, simulate_latency=0.2), deferred=True)
+        # .add_transformation(DocumentSummarization(max_sentences=2), deferred=True)
         # .add_transformation(ExtractKeywords())
         .add_transformation(ChunkingTransformation(chunker=chunker))
         .add_sink(DocumentStoreSink(doc_store=doc_store))
