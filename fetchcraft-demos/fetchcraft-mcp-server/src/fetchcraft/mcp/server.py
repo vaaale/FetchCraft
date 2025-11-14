@@ -52,10 +52,6 @@ INDEX_ID = os.getenv("INDEX_ID", "docs-index")
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4-turbo")
 
 # Chunking configuration
-CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "8192"))
-CHILD_CHUNKS = [int(chunk_size) for chunk_size in os.getenv("CHILD_CHUNKS", "4096,1024").split(",")]
-CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
-
 # Hybrid search configuration
 ENABLE_HYBRID = bool(os.getenv("ENABLE_HYBRID", True))
 FUSION_METHOD = os.getenv("FUSION_METHOD", "rrf")
