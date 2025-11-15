@@ -13,6 +13,7 @@ dependencies = [
     "fetchcraft-ingestion-admin",
     "fetchcraft-gradio-chatbot",
     "fetchcraft-hybrid-search",
+    "llama-index-llms-openai-like>=0.5.3",
 ]
 
 [tool.uv]

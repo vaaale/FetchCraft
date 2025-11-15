@@ -27,7 +27,7 @@ import os
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -36,13 +36,10 @@ from pydantic_ai import Tool
 from qdrant_client import QdrantClient
 
 from fetchcraft.agents import RetrieverTool, PydanticAgent
+from fetchcraft.demos.openapi import QueryRequest, QueryResponse, HealthResponse, Citation
 from fetchcraft.document_store import MongoDBDocumentStore
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
-from fetchcraft.node import SymNode
-from fetchcraft.node_parser import HierarchicalNodeParser
-from fetchcraft.demos.openapi import QueryRequest, QueryResponse, HealthResponse, Citation
-from fetchcraft.parsing.filesystem import FilesystemDocumentParser
 from fetchcraft.vector_store import QdrantVectorStore
 
 load_dotenv(dotenv_path="/app/.env")
@@ -82,11 +79,6 @@ OUTPUT_HTML = os.getenv("OUTPUT_HTML", False)
 
 
 # ============================================================================
-# Request/Response Models
-# ============================================================================
-
-
-# ============================================================================
 # Global State
 # ============================================================================
 
@@ -99,66 +91,6 @@ class AppState:
 
 
 app_state = AppState()
-
-
-# ============================================================================
-# RAG System Setup
-# ============================================================================
-
-
-async def load_and_index_documents(
-    vector_index: VectorIndex,
-    doc_store: MongoDBDocumentStore,
-    documents_path: Path,
-    chunk_size: int = 8192,
-    child_sizes: List[int] = None,
-    overlap: int = 200,
-) -> int:
-    """Load documents from a directory and index them."""
-    print(f"\n📂 Loading documents from: {documents_path}")
-
-    if not documents_path.exists():
-        print(f"⚠️  Documents path does not exist: {documents_path}")
-        return 0
-
-    if child_sizes is None:
-        child_sizes = [4096, 1024]
-
-    # Load documents from filesystem
-    source = FilesystemDocumentParser.from_directory(
-        directory=documents_path,
-        pattern="*",
-        recursive=True
-    )
-
-    documents = []
-    async for doc in source.get_documents():
-        documents.append(doc)
-        await doc_store.add_document(doc)
-
-    if not documents:
-        print("⚠️  No files found in the specified directory!")
-        return 0
-
-    print(f"  ✓ Loaded {len(documents)} documents")
-
-    # Parse documents into nodes
-    parser = HierarchicalNodeParser(
-        chunk_size=chunk_size,
-        overlap=overlap,
-        child_sizes=child_sizes,
-        child_overlap=50
-    )
-
-    all_nodes = parser.get_nodes(documents)
-    all_chunks = [n for n in all_nodes if isinstance(n, SymNode)]
-    print(f"  ✓ Created {len(all_chunks)} chunks for indexing")
-
-    # Index all chunks
-    await vector_index.add_nodes(all_chunks, show_progress=True)
-
-    print(f"✅ Successfully indexed {len(all_chunks)} chunks!")
-    return len(all_chunks)
 
 
 async def setup_rag_system():
@@ -177,8 +109,6 @@ async def setup_rag_system():
 
     print(f"\n2️⃣  Connecting to Qdrant at {QDRANT_HOST}:{QDRANT_PORT}...")
     client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
-
-    needs_indexing = COLLECTION_NAME not in [collection.name for collection in client.get_collections().collections]
 
     # Create vector store
     vector_store = QdrantVectorStore(
@@ -200,26 +130,8 @@ async def setup_rag_system():
         doc_store=doc_store,
         index_id=INDEX_ID
     )
-    print(f"   ✓ Vector index created")
 
-    # Index documents if needed
-    if needs_indexing:
-        print(f"\n4️⃣  Indexing documents...")
-        await load_and_index_documents(
-            vector_index=vector_index,
-            doc_store=doc_store,
-            documents_path=DOCUMENTS_PATH,
-            chunk_size=CHUNK_SIZE,
-            child_sizes=CHILD_CHUNKS,
-            overlap=CHUNK_OVERLAP
-        )
-    else:
-        print(f"\n4️⃣  Skipping document indexing (collection already exists)")
-
-    # Create retriever
-    print(f"\n5️⃣  Creating retriever...")
     retriever = vector_index.as_retriever(top_k=3, resolve_parents=True)
-    print(f"   ✓ Retriever created")
 
     # Create agent
     print(f"\n6️⃣  Creating RAG agent...")

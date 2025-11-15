@@ -20,15 +20,13 @@ class ExtractKeywords(Transformation):
 
 
 class DocumentSummarization(Transformation):
-    def __init__(self, max_sentences: int = 3, simulate_latency: float = 0.0):
+    def __init__(self, max_sentences: int = 30):
         self.max_sentences = max_sentences
-        self.simulate_latency = simulate_latency
 
     async def process(self, record: Record) -> Record:
-        if self.simulate_latency:
-            await asyncio.sleep(self.simulate_latency)
         doc = DocumentNode.model_validate(record.payload["document"])
         text = doc.text
+
         sentences = [s.strip() for s in text.split(".") if s.strip()]
         selected = sentences[: self.max_sentences]
         record.meta["summary"] = ". ".join(selected)
