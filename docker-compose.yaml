@@ -92,15 +92,15 @@ services:
               device_ids: [ '1' ]
               capabilities: [gpu]
 
-  fetchcraft-mcp-server:
+  fetchcraft-admin:
 #    build:
 #      context: .
 #      dockerfile: Dockerfile
     image: fetchcraft
-    entrypoint: ["uv", "run", "fetchcraft-mcp-server"]
-    hostname: mcp-server
+    entrypoint: ["uv", "run", "fetchcraft-admin"]
+    hostname: fetchcraft-admin
     ports:
-      - "8003:8001"
+      - "8040:8001"
     volumes:
       - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
     env_file:
@@ -110,11 +110,37 @@ services:
       - PORT=8001
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
+      - POSTGRES_URL=postgresql://postgres:password@pgvector:5432/ingestion
     depends_on:
       - qdrant
+      - mongodb
+      - fetchcraft-docling-server
     restart: unless-stopped
     networks: [ 'demo-net' ]
 
+#  fetchcraft-mcp-server:
+##    build:
+##      context: .
+##      dockerfile: Dockerfile
+#    image: fetchcraft
+#    entrypoint: ["uv", "run", "fetchcraft-mcp-server"]
+#    hostname: mcp-server
+#    ports:
+#      - "8003:8001"
+#    volumes:
+#      - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
+#    env_file:
+#      - ./.env
+#    environment:
+#      - HOST=0.0.0.0
+#      - PORT=8001
+#      - QDRANT_HOST=qdrant
+#      - QDRANT_PORT=6333
+#    depends_on:
+#      - qdrant
+#    restart: unless-stopped
+#    networks: [ 'demo-net' ]
+#
 #  fetchcraft-ingestion-mcp-server:
 ##    build:
 ##      context: .
@@ -147,7 +173,7 @@ services:
 #    image: ghcr.io/danny-avila/librechat-dev-api:latest
     container_name: librechat
     ports:
-      - "3080:3080"
+      - "3090:3080"
     depends_on:
       - mongodb
 #      - rag_api
