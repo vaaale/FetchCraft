@@ -3,7 +3,7 @@ name = "fetchcraft"
 version = "0.2.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "fetchcraft-core",
     "fetchcraft-openai-server",
@@ -13,7 +13,9 @@ dependencies = [
     "fetchcraft-ingestion-admin",
     "fetchcraft-gradio-chatbot",
     "fetchcraft-hybrid-search",
+    "fetchcraft-admin",
     "llama-index-llms-openai-like>=0.5.3",
+    "asyncpg>=0.30.0",
 ]
 
 [tool.uv]
@@ -28,6 +30,7 @@ members = [
     "fetchcraft-demos/fetchcraft-openai-server",
     "fetchcraft-demos/fetchcraft-mcp-server",
     "packages/fetchcraft-ingestion-admin",
+    "packages/fetchcraft-admin",
 ]
 
 [tool.uv.sources]
@@ -39,4 +42,5 @@ fetchcraft-mcp-server = { workspace = true }
 fetchcraft-ingestion-admin = { workspace = true }
 fetchcraft-gradio-chatbot = { workspace = true }
 fetchcraft-hybrid-search = { workspace = true }
+fetchcraft-admin = { workspace = true }
 

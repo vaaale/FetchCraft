@@ -15,7 +15,7 @@ import aiohttp
 class AsyncDoclingParserClient:
     """Async client for the Docling parsing server."""
 
-    def __init__(self, base_url: str = "http://localhost:8080"):
+    def __init__(self, base_url: str = "http://localhost:8080", timeout: int = 60 * 40):
         """
         Initialize the client.
         
@@ -23,6 +23,7 @@ class AsyncDoclingParserClient:
             base_url: Base URL of the parsing server
         """
         self.base_url = base_url
+        self.timeout = timeout
 
     async def health(self) -> Dict[str, Any]:
         """
@@ -54,7 +55,7 @@ class AsyncDoclingParserClient:
                 raise FileNotFoundError(f"File not found: {path}")
             data.add_field('files', open(path, 'rb'), filename=path.name)
 
-        async with aiohttp.ClientSession(read_timeout=60 * 10) as session:
+        async with aiohttp.ClientSession(read_timeout=self.timeout) as session:
             async with session.post(f"{self.base_url}/parse", data=data) as response:
                 response.raise_for_status()
                 return await response.json()

@@ -132,6 +132,7 @@ mcp = FastMCP(
     lifespan=app_lifespan,
     host=HOST,
     port=PORT,
+
 )
 
 
@@ -627,11 +628,11 @@ def main():
     for key, value in os.environ.items():
         print(f"  • {key}: {value}")
 
-    marker_file = Path(DOCUMENTS_PATH) / ".ingested"
-    if not marker_file.exists():
-        print("Running ingestion...")
-        asyncio.run(run_ingestion())
-        marker_file.touch()
+    # marker_file = Path(DOCUMENTS_PATH) / ".ingested"
+    # if not marker_file.exists():
+    #     print("Running ingestion...")
+    #     asyncio.run(run_ingestion())
+    #     marker_file.touch()
 
 
     # Run the MCP server using streamable-http transport

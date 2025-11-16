@@ -115,32 +115,32 @@ services:
     restart: unless-stopped
     networks: [ 'demo-net' ]
 
-  fetchcraft-ingestion-mcp-server:
-#    build:
-#      context: .
-#      dockerfile: Dockerfile
-    image: fetchcraft
-    entrypoint: ["uv", "run", "fetchcraft-ingestion-admin"]
-    hostname: mcp-server
-    ports:
-      - "8004:8001"
-    volumes:
-      - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
-      - ${INGESTION_DB:-./demo_queue.db}:/app/${INGESTION_DB}
-    env_file:
-      - ./.env
-    environment:
-      - HOST=0.0.0.0
-      - PORT=8001
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
-      - DOCUMENTS_PATH=/app/Documents
-    depends_on:
-      - qdrant
-      - mongodb
-      - fetchcraft-docling-server
-    restart: unless-stopped
-    networks: [ 'demo-net' ]
+#  fetchcraft-ingestion-mcp-server:
+##    build:
+##      context: .
+##      dockerfile: Dockerfile
+#    image: fetchcraft
+#    entrypoint: ["uv", "run", "fetchcraft-ingestion-admin"]
+#    hostname: ingestion-mcp-server
+#    ports:
+#      - "8004:8001"
+#    volumes:
+#      - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
+#      - ./ingestion_queue.db:/app/ingestion_queue.db
+#    env_file:
+#      - ./.env
+#    environment:
+#      - HOST=0.0.0.0
+#      - PORT=8001
+#      - QDRANT_HOST=qdrant
+#      - QDRANT_PORT=6333
+#      - DOCUMENTS_PATH=/app/Documents
+#    depends_on:
+#      - qdrant
+#      - mongodb
+#      - fetchcraft-docling-server
+#    restart: unless-stopped
+#    networks: [ 'demo-net' ]
 
   librechat:
     image: librechat-dev-alex
@@ -150,7 +150,7 @@ services:
       - "3080:3080"
     depends_on:
       - mongodb
-      - rag_api
+#      - rag_api
 #    image: ghcr.io/danny-avila/librechat-dev:latest
     restart: always
     user: "${UID}:${GID}"
@@ -185,35 +185,49 @@ services:
     volumes:
       - meili_data:/meili_data
 
-  vectordb:
-    container_name: librechat-vectordb
-    image: pgvector/pgvector:0.8.0-pg15-trixie
+  pgvector:
+    #    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
+    container_name: pgvector
+    hostname: pgvector
+    networks: [ 'demo-net' ]
+    restart: unless-stopped
+    ports:
+      - 5432:5432
     environment:
-      POSTGRES_DB: mydatabase
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
-    restart: always
-    volumes:
-      - pgdata2:/var/lib/postgresql/data
-
-  rag_api:
-    container_name: rag_api
-    image: ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest
-    environment:
-      - DB_HOST=vectordb
-      - RAG_PORT=${RAG_PORT:-8020}
-    restart: always
-    depends_on:
-      - vectordb
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_DB
     env_file:
-      - librechat.env
+      - .env
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ 'CMD-SHELL', 'pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}' ]
+      #      test: ['CMD-SHELL', 'docker exec -it postgres pg_isready -h localhost -U postgres  && docker exec -it postgres psql -U postgres -c "CREATE EXTENSION vector" &&  docker exec -it postgres psql -U postgres -c "ALTER USER postgres PASSWORD 'password';" && docker exec -it postgres psql -U postgres -c "CREATE DATABASE vector_db;"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+#  rag_api:
+#    container_name: rag_api
+#    image: ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest
+#    environment:
+#      - DB_HOST=pgvector
+#      - RAG_PORT=${RAG_PORT:-8020}
+#    restart: always
+#    networks: [ 'demo-net' ]
+#    depends_on:
+#      - pgvector
+#    env_file:
+#      - librechat.env
 
 networks:
   demo-net:
     driver: bridge
 
 volumes:
-  pgdata2:
   mongodb-data:
   qdrant-data:
   meili_data:
+  pg-data:

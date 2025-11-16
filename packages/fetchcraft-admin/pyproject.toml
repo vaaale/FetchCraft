@@ -1,0 +1,32 @@
+[project]
+name = "fetchcraft-admin"
+version = "0.1.0"
+description = "Web-based administration interface for Fetchcraft document ingestion"
+requires-python = ">=3.12"
+dependencies = [
+  "fetchcraft-core",
+  "fastapi>=0.104.0",
+  "uvicorn[standard]>=0.24.0",
+  "python-multipart>=0.0.6",
+  "asyncpg>=0.29.0",
+  "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+fetchcraft-admin = "fetchcraft.admin.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+sources = ["src"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fetchcraft/"]
+
+[tool.uv]
+src-layout = true
+
+[tool.uv.sources]
+fetchcraft-core = { workspace = true }

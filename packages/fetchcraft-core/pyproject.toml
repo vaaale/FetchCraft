@@ -40,6 +40,9 @@ dev = [
 qdrant = [
     "qdrant-client>=1.6.0",
 ]
+postgres = [
+    "asyncpg>=0.29.0",
+]
 
 [build-system]
 requires = ["hatchling"]

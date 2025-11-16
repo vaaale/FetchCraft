@@ -25,6 +25,14 @@ from fetchcraft.parsing.base import DocumentParser
 
 UTC = timezone.utc
 
+# -----------------------------
+# Pipeline (async) with multiple sinks + deferred steps
+# -----------------------------
+
+MAIN_QUEUE = "ingest.main"
+DEFER_QUEUE = "ingest.deferred"
+ERROR_QUEUE = "ingest.error"
+
 
 def utcnow() -> datetime:
     return datetime.now(tz=UTC)
@@ -105,11 +113,12 @@ class WorkerConfig:
 
 
 class Worker:
-    def __init__(self, name: str, backend: AsyncQueueBackend, handler: Callable[[dict], Awaitable[None]], cfg: WorkerConfig):
+    def __init__(self, name: str, backend: AsyncQueueBackend, handler: Callable[[dict], Awaitable[None]], cfg: WorkerConfig, error_queue: Optional[str] = None):
         self.name = name
         self.backend = backend
         self.handler = handler
         self.cfg = cfg
+        self.error_queue = error_queue
         self._task: Optional[asyncio.Task] = None
         self._stopped = asyncio.Event()
 
@@ -129,7 +138,21 @@ class Worker:
                 attempts = int(body.get("__attempts__", 0)) + 1
                 body["__attempts__"] = attempts
                 if attempts >= self.cfg.max_retries:
-                    print(f"[Worker {self.name}] dropping {msg.id} after {attempts} attempts: {e}")
+                    # Send to error queue instead of dropping
+                    if self.error_queue:
+                        error_body = {
+                            "type": "error",
+                            "original_queue": self.cfg.queue_name,
+                            "message_id": msg.id,
+                            "attempts": attempts,
+                            "error": str(e),
+                            "error_type": e.__class__.__name__,
+                            "original_body": body,
+                        }
+                        await self.backend.enqueue(self.error_queue, body=error_body)
+                        print(f"[Worker {self.name}] moved {msg.id} to error queue after {attempts} attempts: {e}")
+                    else:
+                        print(f"[Worker {self.name}] dropping {msg.id} after {attempts} attempts: {e}")
                     await self.backend.ack(self.cfg.queue_name, msg.id)
                 else:
                     await self.backend.nack(self.cfg.queue_name, msg.id, requeue_delay_seconds=int(self.cfg.backoff_seconds * attempts))
@@ -142,14 +165,6 @@ class Worker:
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-
-
-# -----------------------------
-# Pipeline (async) with multiple sinks + deferred steps
-# -----------------------------
-
-MAIN_QUEUE = "ingest.main"
-DEFER_QUEUE = "ingest.deferred"
 
 
 @dataclass
@@ -189,8 +204,8 @@ class IngestionPipeline:
     async def run(self):
         self._validate()
         # Start workers
-        self._main_worker = Worker("main", self.backend, self._handle_main, WorkerConfig(queue_name=MAIN_QUEUE))
-        self._defer_worker = Worker("deferred", self.backend, self._handle_deferred, WorkerConfig(queue_name=DEFER_QUEUE))
+        self._main_worker = Worker("main", self.backend, self._handle_main, WorkerConfig(queue_name=MAIN_QUEUE), error_queue=ERROR_QUEUE)
+        self._defer_worker = Worker("deferred", self.backend, self._handle_deferred, WorkerConfig(queue_name=DEFER_QUEUE), error_queue=ERROR_QUEUE)
         await asyncio.gather(self._main_worker.start(), self._defer_worker.start())
 
         # Enqueue initial records
@@ -207,6 +222,8 @@ class IngestionPipeline:
         Grace period is to avoid races where new messages are enqueued between checks.
         """
         # First: loop until we *see* empty queues
+        print(f"[wait_until_idle] Waiting for queues to drain...")
+        iteration = 0
         while True:
             if hasattr(self.backend, "has_pending"):
                 has_work = await self.backend.has_pending(MAIN_QUEUE, DEFER_QUEUE)  # type: ignore[attr-defined]
@@ -214,11 +231,17 @@ class IngestionPipeline:
                 # Fallback for in-memory/backends without has_pending: just sleep.
                 has_work = True
             if not has_work:
+                print(f"[wait_until_idle] Queues empty after {iteration} checks")
                 break
+            if iteration % 10 == 0:
+                print(f"[wait_until_idle] Still waiting... (iteration {iteration})")
+            iteration += 1
             await asyncio.sleep(poll_interval)
 
         # Second: short grace period to be sure nothing new got enqueued
+        print(f"[wait_until_idle] Starting {grace_seconds}s grace period...")
         deadline = asyncio.get_event_loop().time() + grace_seconds
+        grace_check = 0
         while asyncio.get_event_loop().time() < deadline:
             if hasattr(self.backend, "has_pending"):
                 has_work = await self.backend.has_pending(MAIN_QUEUE, DEFER_QUEUE)  # type: ignore[attr-defined]
@@ -226,8 +249,12 @@ class IngestionPipeline:
                 has_work = True
             if has_work:
                 # new work appeared – go back to main loop
+                print(f"[wait_until_idle] Work appeared during grace period (check {grace_check}), restarting...")
                 return await self.wait_until_idle(poll_interval, grace_seconds)
+            grace_check += 1
             await asyncio.sleep(poll_interval)
+        
+        print(f"[wait_until_idle] Grace period complete, queues are idle!")
 
     async def _start_workers(self) -> None:
         self._main_worker = Worker(
@@ -235,12 +262,14 @@ class IngestionPipeline:
             self.backend,
             self._handle_main,
             WorkerConfig(queue_name=MAIN_QUEUE),
+            error_queue=ERROR_QUEUE,
         )
         self._defer_worker = Worker(
             "deferred",
             self.backend,
             self._handle_deferred,
             WorkerConfig(queue_name=DEFER_QUEUE),
+            error_queue=ERROR_QUEUE,
         )
         await asyncio.gather(
             self._main_worker.start(),
@@ -361,8 +390,16 @@ class IngestionPipeline:
             else:
                 await asyncio.to_thread(sink.write, rec)
         except Exception as e:
-            # Some better fault handling should be implemented, like publishing to an error queue.
-            print(f"Error writing to sink {sink}: {e}")
+            # Send sink errors to error queue
+            error_body = {
+                "type": "sink_error",
+                "sink": sink.__class__.__name__,
+                "error": str(e),
+                "error_type": e.__class__.__name__,
+                "record": dataclasses.asdict(rec),
+            }
+            await self.backend.enqueue(ERROR_QUEUE, body=error_body)
+            print(f"Error writing to sink {sink}: {e} - sent to error queue")
 
     def _serialize_steps(self) -> list[dict]:
         return [
@@ -381,7 +418,7 @@ class IngestionPipeline:
 
 
 class ConnectorSource(Source):
-    def __init__(self, connector: Connector, parser: Optional[DocumentParser]=None, parser_map: Optional[Dict[str, DocumentParser]] = None):
+    def __init__(self, connector: Connector, parser: Optional[DocumentParser] = None, parser_map: Optional[Dict[str, DocumentParser]] = None):
         self.connector = connector
         self.parser_map = parser_map or {}
         if parser and "default" not in self.parser_map:

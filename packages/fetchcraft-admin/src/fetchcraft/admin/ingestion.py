@@ -2,6 +2,7 @@ import asyncio
 import os
 import pathlib
 import traceback
+from typing import Optional
 
 from qdrant_client import QdrantClient
 
@@ -11,6 +12,7 @@ from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
 from fetchcraft.ingestion.base import ConnectorSource, IngestionPipeline, Record, Sink
 from fetchcraft.ingestion.pipeline.transformation import ChunkingTransformation
+from fetchcraft.ingestion.postgres_backend import AsyncPostgresQueue
 from fetchcraft.ingestion.sqlite_backend import AsyncSQLiteQueue
 from fetchcraft.node import DocumentNode, Node
 from fetchcraft.node_parser import HierarchicalNodeParser
@@ -27,6 +29,7 @@ DOCUMENTS_PATH = pathlib.Path(os.getenv("DOCUMENTS_PATH", "Documents"))
 DOCLING_SERVER = os.getenv("DOCLING_SERVER", "http://localhost:8001")
 INGESTION_DB = os.getenv("INGESTION_DB", "ingestion_queue.db")
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://mongodb:27017")
+POSTGRES_URL = os.getenv("POSTGRES_URL","postgresql://postgres:password@localhost:5432/ingestion")
 
 # Embeddings configuration (adjust based on your setup)
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "bge-m3")
@@ -92,8 +95,8 @@ class DocumentStoreSink(Sink):
 # Demo usage
 # -----------------------------
 
-async def main():
-    document_path = DOCUMENTS_PATH
+async def run_ingestion(document_path: Optional[str] = None):
+    document_path = document_path or DOCUMENTS_PATH
     doc_store = MongoDBDocumentStore(
         connection_string=MONGO_URI,
         database_name="fetchcraft",
@@ -133,7 +136,10 @@ async def main():
         return count == 0
 
 
-    backend = AsyncSQLiteQueue(INGESTION_DB)
+    # backend = AsyncSQLiteQueue(INGESTION_DB)
+    backend = AsyncPostgresQueue(
+        connection_string=POSTGRES_URL
+    )
 
     index_sink = VectorIndexSink(vector_index=vector_index, index_id=INDEX_ID)
     pipeline = (
@@ -183,9 +189,3 @@ async def main():
     #         print("Pipeline running...")
     # except KeyboardInterrupt:
     #     pass
-
-
-if __name__ == "__main__":
-    import contextlib
-    with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(main())

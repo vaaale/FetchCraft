@@ -14,10 +14,11 @@ class RemoteDoclingParser(DocumentParser):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     docling_url: str
     client: AsyncDoclingParserClient
+    timeout: int = 60 * 40
 
-    def __init__(self, docling_url: str = "http://localhost:8080"):
-        client = AsyncDoclingParserClient(docling_url)
-        super().__init__(docling_url=docling_url, client=client)
+    def __init__(self, docling_url: str = "http://localhost:8080", timeout: int = 60*40):
+        client = AsyncDoclingParserClient(docling_url, timeout)
+        super().__init__(docling_url=docling_url, client=client, timeout=timeout)
 
 
     async def parse(self, file: File, metadata: Optional[Dict[str, Any]] = None) -> AsyncGenerator[DocumentNode, None]:
