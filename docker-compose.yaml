@@ -118,29 +118,29 @@ services:
     restart: unless-stopped
     networks: [ 'demo-net' ]
 
-#  fetchcraft-mcp-server:
-##    build:
-##      context: .
-##      dockerfile: Dockerfile
-#    image: fetchcraft
-#    entrypoint: ["uv", "run", "fetchcraft-mcp-server"]
-#    hostname: mcp-server
-#    ports:
-#      - "8003:8001"
-#    volumes:
-#      - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
-#    env_file:
-#      - ./.env
-#    environment:
-#      - HOST=0.0.0.0
-#      - PORT=8001
-#      - QDRANT_HOST=qdrant
-#      - QDRANT_PORT=6333
-#    depends_on:
-#      - qdrant
-#    restart: unless-stopped
-#    networks: [ 'demo-net' ]
-#
+  fetchcraft-mcp-server:
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+    image: fetchcraft
+    entrypoint: ["uv", "run", "fetchcraft-mcp-server"]
+    hostname: mcp-server
+    ports:
+      - "8003:8001"
+    volumes:
+      - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
+    env_file:
+      - ./.env
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8001
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+    depends_on:
+      - qdrant
+    restart: unless-stopped
+    networks: [ 'demo-net' ]
+
 #  fetchcraft-ingestion-mcp-server:
 ##    build:
 ##      context: .

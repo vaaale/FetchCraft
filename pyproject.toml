@@ -10,7 +10,6 @@ dependencies = [
     "fetchcraft-openapi-server",
     "fetchcraft-mcp-server",
     "fetchcraft-parsing-docling",
-    "fetchcraft-ingestion-admin",
     "fetchcraft-gradio-chatbot",
     "fetchcraft-hybrid-search",
     "fetchcraft-admin",
@@ -29,7 +28,6 @@ members = [
     "fetchcraft-demos/fetchcraft-hybrid-search",
     "fetchcraft-demos/fetchcraft-openai-server",
     "fetchcraft-demos/fetchcraft-mcp-server",
-    "packages/fetchcraft-ingestion-admin",
     "packages/fetchcraft-admin",
 ]
 
@@ -39,7 +37,6 @@ fetchcraft-parsing-docling = { workspace = true }
 fetchcraft-openapi-server = { workspace = true }
 fetchcraft-openai-server = { workspace = true }
 fetchcraft-mcp-server = { workspace = true }
-fetchcraft-ingestion-admin = { workspace = true }
 fetchcraft-gradio-chatbot = { workspace = true }
 fetchcraft-hybrid-search = { workspace = true }
 fetchcraft-admin = { workspace = true }

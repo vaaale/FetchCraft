@@ -15,7 +15,7 @@ import aiohttp
 class AsyncDoclingParserClient:
     """Async client for the Docling parsing server."""
 
-    def __init__(self, base_url: str = "http://localhost:8080", timeout: int = 60 * 40):
+    def __init__(self, base_url: str = "http://localhost:8003", timeout: int = 60 * 40):
         """
         Initialize the client.
         
@@ -120,6 +120,119 @@ class AsyncDoclingParserClient:
         tasks = [parse_with_semaphore(path) for path in file_paths]
         return await asyncio.gather(*tasks)
 
+    async def submit_job(self, *file_paths) -> Dict[str, Any]:
+        """
+        Submit files for parsing and return immediately with a job ID.
+        
+        This is non-blocking - it returns a job ID immediately without
+        waiting for parsing to complete. Use get_job_status() to poll
+        for completion and get_job_results() to retrieve results.
+        
+        Args:
+            *file_paths: Variable number of file paths (str or Path)
+            
+        Returns:
+            Job submission response with job_id
+        """
+        data = aiohttp.FormData()
+
+        for path in file_paths:
+            path = Path(path)
+            if not path.exists():
+                raise FileNotFoundError(f"File not found: {path}")
+            data.add_field('files', open(path, 'rb'), filename=path.name)
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f"{self.base_url}/submit", data=data) as response:
+                response.raise_for_status()
+                return await response.json()
+
+    async def get_job_status(self, job_id: str) -> Dict[str, Any]:
+        """
+        Get the current status of a submitted job.
+        
+        Args:
+            job_id: The job identifier returned from submit_job()
+            
+        Returns:
+            Job status information including current state and timestamps
+        """
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{self.base_url}/jobs/{job_id}") as response:
+                response.raise_for_status()
+                return await response.json()
+
+    async def get_job_results(self, job_id: str) -> Dict[str, Any]:
+        """
+        Get the results of a completed job.
+        
+        Args:
+            job_id: The job identifier returned from submit_job()
+            
+        Returns:
+            Job results including parsing output if completed
+        """
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{self.base_url}/jobs/{job_id}/results") as response:
+                response.raise_for_status()
+                return await response.json()
+
+    async def submit_and_wait(
+        self, 
+        *file_paths,
+        poll_interval: float = 1.0,
+        timeout: float = None
+    ) -> Dict[str, Any]:
+        """
+        Submit files for parsing and wait for completion.
+        
+        This is a convenience method that submits a job and polls until
+        it completes, then returns the results. Use this for a simpler
+        API when you want to wait for results.
+        
+        Args:
+            *file_paths: Variable number of file paths (str or Path)
+            poll_interval: Seconds to wait between status checks (default: 1.0)
+            timeout: Maximum seconds to wait for completion (default: None = no timeout)
+            
+        Returns:
+            Parsing results when job completes
+            
+        Raises:
+            TimeoutError: If timeout is reached before job completes
+            RuntimeError: If job fails
+        """
+        # Submit job
+        submit_response = await self.submit_job(*file_paths)
+        job_id = submit_response['job_id']
+        
+        print(f"Job {job_id} submitted, waiting for completion...")
+        
+        start_time = asyncio.get_event_loop().time()
+        
+        while True:
+            # Check status
+            status = await self.get_job_status(job_id)
+            
+            if status['status'] == 'completed':
+                # Get results
+                results = await self.get_job_results(job_id)
+                print(f"Job {job_id} completed successfully")
+                return results['results']
+            
+            elif status['status'] == 'failed':
+                error = status.get('error', 'Unknown error')
+                raise RuntimeError(f"Job {job_id} failed: {error}")
+            
+            # Check timeout
+            if timeout is not None:
+                elapsed = asyncio.get_event_loop().time() - start_time
+                if elapsed > timeout:
+                    raise TimeoutError(f"Job {job_id} did not complete within {timeout} seconds")
+            
+            # Wait before next poll
+            await asyncio.sleep(poll_interval)
+
 
 async def main():
     """Example usage."""
@@ -155,6 +268,30 @@ async def main():
     # Only create this if files exist
     # results = await client.parse_parallel(file_paths, max_concurrent=3)
     # print(f"Processed {len(results)} files in parallel")
+
+    # Example 5: Async job submission (non-blocking)
+    print("\n--- Example 5: Async job submission ---")
+    # submit_response = await client.submit_job("document.pdf")
+    # job_id = submit_response['job_id']
+    # print(f"Job submitted: {job_id}")
+    # 
+    # # Poll for status
+    # status = await client.get_job_status(job_id)
+    # print(f"Job status: {status['status']}")
+    # 
+    # # Wait for completion and get results
+    # while status['status'] not in ['completed', 'failed']:
+    #     await asyncio.sleep(1)
+    #     status = await client.get_job_status(job_id)
+    # 
+    # if status['status'] == 'completed':
+    #     results = await client.get_job_results(job_id)
+    #     print(f"Job completed with {results['results']['total_nodes']} nodes")
+
+    # Example 6: Submit and wait (convenience method)
+    print("\n--- Example 6: Submit and wait ---")
+    # results = await client.submit_and_wait("document.pdf", poll_interval=1.0)
+    # print(f"Parsing completed with {results['total_nodes']} nodes")
 
     print("\n✓ Examples completed")
 
