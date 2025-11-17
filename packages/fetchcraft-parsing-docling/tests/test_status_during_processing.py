@@ -11,9 +11,11 @@ This script:
 import asyncio
 import time
 from pathlib import Path
+import pytest
 from fetchcraft.parsing.docling import AsyncDoclingParserClient
 
 
+@pytest.mark.asyncio
 async def test_status_during_processing():
     """Test that status checks work while parsing is in progress."""
     
@@ -22,9 +24,7 @@ async def test_status_during_processing():
     test_pdf = os.getenv("TEST_PDF", "/mnt/storage/data/knowledge/textfiles_tiny/finance/Crayon/Crayon_annual-report_2021.pdf")
     
     if not Path(test_pdf).exists():
-        print(f"❌ Test file not found: {test_pdf}")
-        print("   Set TEST_PDF environment variable to a valid PDF file")
-        return
+        pytest.skip(f"Test file not found: {test_pdf}. Set TEST_PDF environment variable to a valid PDF file.")
     
     client = AsyncDoclingParserClient(base_url="http://localhost:8003")
     

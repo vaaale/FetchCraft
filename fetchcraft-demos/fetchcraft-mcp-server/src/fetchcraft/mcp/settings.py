@@ -14,7 +14,9 @@ class MCPServerSettings(BaseSettings):
     documents_path: str = "Documents"
     embedding_model: str = "bge-m3"
     embedding_api_key: str = "sk-321"
-    embedding_base_url: str = "http://localhost:8000/v1"
+    embedding_base_url: str = "http://wingman.akhbar.home:8000/v1"
+    opanai_api_key: str = "sk-321"
+    openai_base_url: str = "http://wingman.akhbar.home:8000/v1"
     index_id: str = "docs-index"
     llm_model: str = "gpt-4-turbo"
     enable_hybrid: bool = True

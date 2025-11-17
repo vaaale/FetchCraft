@@ -71,3 +71,4 @@ pdfs/
 
 # Keep README for package info
 !README.md
+Dockerfile*

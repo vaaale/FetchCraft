@@ -135,8 +135,10 @@ services:
     environment:
       - HOST=0.0.0.0
       - PORT=8001
-      - QDRANT_HOST=qdrant
+      - QDRANT_HOST=wingman.akhbar.home
       - QDRANT_PORT=6333
+      - OPENAI_API_KEY=sk-321
+      - OPENAI_BASE_URL=http://wingman.akhbar.home:8000/v1
     depends_on:
       - qdrant
     restart: unless-stopped
@@ -174,7 +176,7 @@ services:
 #    image: ghcr.io/danny-avila/librechat-dev-app:latest
     container_name: librechat
     ports:
-      - "3090:3080"
+      - "3080:3080"
     depends_on:
       - mongodb
 #      - rag_api

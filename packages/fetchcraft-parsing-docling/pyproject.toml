@@ -31,3 +31,10 @@ src-layout = true
 
 [tool.uv.sources]
 fetchcraft-core = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=1.2.0",
+    "httpx>=0.27.0",
+]

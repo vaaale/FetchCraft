@@ -463,6 +463,10 @@ async def stream_response(
     # Query the agent (we'll simulate streaming by chunking the response)
     response = await app_state.agent.query(question, messages=memory)
     answer = response.response.content
+    request_id = str(uuid.uuid4().hex[:24])
+
+    artifact_header = f':::artifact{{identifier="{request_id}" type="text/html" title="File Search Results"}}'
+
     # answer = f"""
     # ```html
     # <form>
