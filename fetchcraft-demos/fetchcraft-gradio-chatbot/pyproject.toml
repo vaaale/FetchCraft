@@ -2,7 +2,7 @@
 name = "fetchcraft-gradio-chatbot"
 version = "0.2.0"
 description = "Fetchcraft demo using a simple Gradio UI"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 dependencies = [
   "fetchcraft-core",
   "gradio>=5.49.1",

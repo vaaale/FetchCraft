@@ -2,7 +2,7 @@
 name = "fetchcraft-mcp-server"
 version = "0.2.0"
 description = "MCP server for Fetchcraft"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 dependencies = [
   "fetchcraft-core",
   "mcp",

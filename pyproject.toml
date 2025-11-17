@@ -13,8 +13,6 @@ dependencies = [
     "fetchcraft-gradio-chatbot",
     "fetchcraft-hybrid-search",
     "fetchcraft-admin",
-    "llama-index-llms-openai-like>=0.5.3",
-    "asyncpg>=0.30.0",
 ]
 
 [tool.uv]

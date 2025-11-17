@@ -74,17 +74,20 @@ class LocalFile(File):
 
 
 class FilesystemConnector(Connector):
+    path: Path
     fs: fsspec.AbstractFileSystem
     filter: Optional[Callable[[LocalFile], bool]] = None
 
     def __init__(self, path: Path, fs: Optional[fsspec.AbstractFileSystem] = None, filter: Optional[Callable[[LocalFile], bool]] = None):
         if fs is None:
             fs = fsspec.filesystem("dir", path=path)
+        self.path = path
         self.fs =fs
         self.filter = filter
 
 
     async def read(self) -> AsyncIterable[LocalFile]:
+        print(f"Ingesting files from {self.path}")
         for path in self.fs.glob("**/*"):
             if self.fs.isdir(path) or (self.filter and not self.filter(LocalFile(path=path, fs=self.fs))):
                 continue

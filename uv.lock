@@ -17,7 +17,6 @@ members = [
     "fetchcraft-core",
     "fetchcraft-gradio-chatbot",
     "fetchcraft-hybrid-search",
-    "fetchcraft-ingestion-admin",
     "fetchcraft-mcp-server",
     "fetchcraft-openai-server",
     "fetchcraft-openapi-server",
@@ -1127,32 +1126,26 @@ name = "fetchcraft"
 version = "0.2.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "asyncpg" },
     { name = "fetchcraft-admin" },
     { name = "fetchcraft-core" },
     { name = "fetchcraft-gradio-chatbot" },
     { name = "fetchcraft-hybrid-search" },
-    { name = "fetchcraft-ingestion-admin" },
     { name = "fetchcraft-mcp-server" },
     { name = "fetchcraft-openai-server" },
     { name = "fetchcraft-openapi-server" },
     { name = "fetchcraft-parsing-docling" },
-    { name = "llama-index-llms-openai-like" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "fetchcraft-admin", editable = "packages/fetchcraft-admin" },
     { name = "fetchcraft-core", editable = "packages/fetchcraft-core" },
     { name = "fetchcraft-gradio-chatbot", editable = "fetchcraft-demos/fetchcraft-gradio-chatbot" },
     { name = "fetchcraft-hybrid-search", editable = "fetchcraft-demos/fetchcraft-hybrid-search" },
-    { name = "fetchcraft-ingestion-admin", editable = "packages/fetchcraft-ingestion-admin" },
     { name = "fetchcraft-mcp-server", editable = "fetchcraft-demos/fetchcraft-mcp-server" },
     { name = "fetchcraft-openai-server", editable = "fetchcraft-demos/fetchcraft-openai-server" },
     { name = "fetchcraft-openapi-server", editable = "fetchcraft-demos/fetchcraft-openapi-server" },
     { name = "fetchcraft-parsing-docling", editable = "packages/fetchcraft-parsing-docling" },
-    { name = "llama-index-llms-openai-like", specifier = ">=0.5.3" },
 ]
 
 [[package]]
@@ -1275,21 +1268,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "fetchcraft-core", editable = "packages/fetchcraft-core" }]
-
-[[package]]
-name = "fetchcraft-ingestion-admin"
-version = "0.2.0"
-source = { editable = "packages/fetchcraft-ingestion-admin" }
-dependencies = [
-    { name = "fetchcraft-core" },
-    { name = "mcp" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fetchcraft-core", editable = "packages/fetchcraft-core" },
-    { name = "mcp" },
-]
 
 [[package]]
 name = "fetchcraft-mcp-server"
@@ -2271,20 +2249,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/02/64/62c079203c659ba379a286c36d556a9f88098976d4eac76ed3892d42fc0b/llama_index_llms_openai-0.6.7.tar.gz", hash = "sha256:70ec68233fc4a3fbce3fccd21ad427013a74e51768986d4e57a1860365abc824", size = 25518, upload-time = "2025-11-03T15:20:03.139Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/61/a2/1180fe8133bf9aac067d26526bf7e89362f45ebae7993efadb4718fcbd0d/llama_index_llms_openai-0.6.7-py3-none-any.whl", hash = "sha256:39dbffb8d31f9bf9f4fa799042ff1f06aefc735387adaae17c2facc867093351", size = 26520, upload-time = "2025-11-03T15:20:02.129Z" },
-]
-
-[[package]]
-name = "llama-index-llms-openai-like"
-version = "0.5.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "llama-index-core" },
-    { name = "llama-index-llms-openai" },
-    { name = "transformers" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/9b/fd/aed635d298380cfdc84a4e475a8367d8fcdd4677cd8914de2f495edea28d/llama_index_llms_openai_like-0.5.3.tar.gz", hash = "sha256:84bdfc88bb5d9ea806bdd1be4b4378357781c0637c78c548242aac857f165090", size = 4993, upload-time = "2025-09-28T23:48:26.659Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/aa/22/3d15a3f0f2c4befecb8e7a81a4a0bbd3121f567b22b9ac34817ecf15a155/llama_index_llms_openai_like-0.5.3-py3-none-any.whl", hash = "sha256:9ef2374916427e1a21db0ea5f624056fb323e13308c6722b3de0384dfecd467b", size = 4689, upload-time = "2025-09-28T23:48:25.557Z" },
 ]
 
 [[package]]

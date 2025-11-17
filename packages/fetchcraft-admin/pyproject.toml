@@ -1,8 +1,8 @@
 [project]
 name = "fetchcraft-admin"
-version = "0.1.0"
+version = "0.2.0"
 description = "Web-based administration interface for Fetchcraft document ingestion"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 dependencies = [
   "fetchcraft-core",
   "fastapi>=0.104.0",

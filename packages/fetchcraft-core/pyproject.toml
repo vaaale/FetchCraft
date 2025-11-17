@@ -5,7 +5,7 @@ description = "A flexible framework for building RAG applications"
 authors = [
     {name = "Alexander Vaagan", email = "2428222+vaaale@users.noreply.github.com"},
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 readme = "README.md"
 dependencies = [
     "pydantic>=2.0.0",

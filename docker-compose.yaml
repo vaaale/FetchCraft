@@ -111,6 +111,7 @@ services:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - POSTGRES_URL=postgresql://postgres:password@pgvector:5432/ingestion
+      - DOCUMENTS_PATH=/app/Documents
     depends_on:
       - qdrant
       - mongodb

@@ -2,7 +2,7 @@
 name = "fetchcraft-openapi-server"
 version = "0.2.0"
 description = "OpenAPI-based server for Fetchcraft"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 dependencies = [
   "fetchcraft-core",
   "jinja2>=3.1.6",

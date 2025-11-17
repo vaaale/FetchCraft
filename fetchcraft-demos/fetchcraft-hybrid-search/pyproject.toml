@@ -2,7 +2,7 @@
 name = "fetchcraft-hybrid-search"
 version = "0.2.0"
 description = "Fetchcraft demo using Hybrid Search"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 dependencies = [
   "fetchcraft-core",
 ]
