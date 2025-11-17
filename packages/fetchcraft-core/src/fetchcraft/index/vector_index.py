@@ -7,6 +7,7 @@ from tqdm import tqdm
 from fetchcraft.document_store import DocumentStore
 from fetchcraft.index.base import BaseIndex
 from fetchcraft.node import Node, Chunk, ObjectMapper
+from fetchcraft.retriever import Retriever
 from fetchcraft.vector_store.base import VectorStore
 
 D = TypeVar('D', bound=Node)
@@ -110,7 +111,6 @@ class VectorIndex(BaseIndex[D]):
         #     await self.vector_store.insert_nodes([node], index_id=self.index_id, show_progress=False)
         #     insert_ids.append(node.id)
         return await self.vector_store.insert_nodes(nodes, index_id=self.index_id, show_progress=show_progress)
-        return insert_ids
 
 
     async def search(
@@ -214,7 +214,7 @@ class VectorIndex(BaseIndex[D]):
         object_mapper: Optional[ObjectMapper] = None,
         filters: Optional[Any] = None,
         **search_kwargs
-    ) -> 'VectorIndexRetriever[D]':
+    ) -> Retriever[D]:
         """
         Create a retriever from this index.
         

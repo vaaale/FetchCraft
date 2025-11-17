@@ -241,8 +241,6 @@ async def chat_async(
     Returns:
         Tuple of (response text, citations)
     """
-    global agent, conversation_memory
-    
     if agent is None:
         return "⚠️ System not initialized. Please wait...", []
     
@@ -385,7 +383,6 @@ def format_citations_html(citations: List[Dict[str, Any]]) -> str:
 
 def clear_conversation(session_id: str):
     """Clear conversation memory for a session."""
-    global conversation_memory
     if session_id in conversation_memory:
         del conversation_memory[session_id]
     return [], "<div style='padding: 20px; text-align: center; color: #666;'>Conversation cleared</div>"
@@ -547,11 +544,10 @@ def create_gradio_interface():
 
 async def initialize_system():
     """Initialize the RAG system before starting the app."""
-    global agent, vector_index
-    
+
     try:
         logger.info("Starting system initialization...")
-        agent, vector_index = await setup_rag_system()
+        await setup_rag_system()
         logger.info("System initialization complete!")
         return True
     except Exception as e:

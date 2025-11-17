@@ -1150,7 +1150,7 @@ requires-dist = [
 
 [[package]]
 name = "fetchcraft-admin"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/fetchcraft-admin" }
 dependencies = [
     { name = "asyncpg" },
@@ -1274,14 +1274,16 @@ name = "fetchcraft-mcp-server"
 version = "0.2.0"
 source = { editable = "fetchcraft-demos/fetchcraft-mcp-server" }
 dependencies = [
+    { name = "fastmcp" },
     { name = "fetchcraft-core" },
-    { name = "mcp" },
+    { name = "pydantic-settings" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "fastmcp", specifier = ">=2.13.0.2" },
     { name = "fetchcraft-core", editable = "packages/fetchcraft-core" },
-    { name = "mcp" },
+    { name = "pydantic-settings", specifier = ">=2.11.0" },
 ]
 
 [[package]]
