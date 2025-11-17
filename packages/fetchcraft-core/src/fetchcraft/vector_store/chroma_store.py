@@ -1,14 +1,14 @@
 """
 ChromaDB vector store implementation.
 """
-from typing import List, Dict, Any, Optional, Type, Union
+from typing import List, Dict, Any, Optional, Type, Union, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, ConfigDict
 
 from .base import VectorStore, D
 from .chroma_filter_translator import ChromaFilterTranslator
-from ..node import Node, DocumentNode, Chunk, SymNode
+from ..node import Node, DocumentNode, Chunk, SymNode, ObjectNode
 from ..filters import MetadataFilter
 
 
@@ -24,6 +24,8 @@ class ChromaConfig(BaseModel):
     collection_name: str = "documents"
     persist_directory: Optional[str] = None
     distance: str = "cosine"  # Can be "cosine", "l2", or "ip" (inner product)
+    enable_hybrid: bool = False  # Enable hybrid search (not fully supported by ChromaDB)
+    fusion_method: Literal["rrf", "dbsf"] = "rrf"  # Fusion method for hybrid search (for API compatibility)
 
 
 class ChromaVectorStore(VectorStore[D]):
@@ -38,6 +40,8 @@ class ChromaVectorStore(VectorStore[D]):
     collection_name: str = Field(description="Name of the collection")
     document_class: Optional[Type[D]] = Field(default=None, description="Document class type")
     distance: str = Field(default="cosine", description="Distance metric (cosine, l2, or ip)")
+    enable_hybrid: bool = Field(default=False, description="Enable hybrid search (note: limited support in ChromaDB)")
+    fusion_method: Literal["rrf", "dbsf", "mmr"] = Field(default="rrf", description="Fusion method for hybrid search (for API compatibility)")
     _collection: Any = None  # ChromaDB collection instance
     
     model_config = ConfigDict(
@@ -52,6 +56,8 @@ class ChromaVectorStore(VectorStore[D]):
         embeddings: Optional[Any] = None,
         document_class: Optional[Type[D]] = None,
         distance: str = "cosine",
+        enable_hybrid: bool = False,
+        fusion_method: Literal["rrf", "dbsf"] = "rrf",
         **kwargs
     ):
         """
@@ -63,6 +69,8 @@ class ChromaVectorStore(VectorStore[D]):
             embeddings: Embeddings model for generating document embeddings
             document_class: The document model class (defaults to Node if not provided)
             distance: Distance metric to use ("cosine", "l2", or "ip")
+            enable_hybrid: Enable hybrid search (note: limited support in ChromaDB)
+            fusion_method: Fusion method for hybrid search ("rrf" or "dbsf", for API compatibility)
         """
         if not CHROMADB_AVAILABLE:
             raise ImportError(
@@ -75,6 +83,8 @@ class ChromaVectorStore(VectorStore[D]):
             collection_name=collection_name,
             document_class=document_class or Node,  # type: ignore
             distance=distance,
+            enable_hybrid=enable_hybrid,
+            fusion_method=fusion_method,
             **kwargs
         )
         self._embeddings = embeddings
@@ -120,9 +130,93 @@ class ChromaVectorStore(VectorStore[D]):
             return DocumentNode  # type: ignore
         elif class_name == 'Node':
             return Node  # type: ignore
+        elif class_name == 'ObjectNode':
+            return ObjectNode  # type: ignore
         else:
             # Fall back to the default document class
             return self.document_class
+    
+    async def find(self, key: str, value: str, limit: int = 10):
+        """
+        Find documents by a specific key-value pair.
+        
+        Args:
+            key: The key to search by
+            value: The value to search for
+            limit: Maximum number of results to return
+            
+        Returns:
+            List of documents that match the search criteria
+        """
+        # Build where filter for the key-value pair
+        where_filter = {key: {"$eq": value}}
+        
+        # Get documents matching the filter
+        results = self._collection.get(
+            where=where_filter,
+            limit=limit,
+            include=["embeddings", "metadatas", "documents"]
+        )
+        
+        # Parse results
+        output = []
+        if results and results['ids'] and len(results['ids']) > 0:
+            for i in range(len(results['ids'])):
+                doc_id = results['ids'][i]
+                metadata = results['metadatas'][i] if results.get('metadatas') is not None and len(results['metadatas']) > 0 else {}
+                embedding = results['embeddings'][i] if results.get('embeddings') is not None and len(results['embeddings']) > 0 else None
+                text = results['documents'][i] if results.get('documents') is not None and len(results['documents']) > 0 else ""
+                
+                # Reconstruct document
+                doc_dict = {'text': text}
+                user_metadata = {}  # Collect flattened metadata fields
+                
+                # Parse metadata back to proper types
+                import json
+                for meta_key, meta_value in metadata.items():
+                    if meta_key.startswith('_'):
+                        continue  # Skip internal fields for now
+                    
+                    # Check if this is a flattened metadata field
+                    if meta_key.startswith('metadata.'):
+                        # Extract the actual metadata key
+                        metadata_key = meta_key[len('metadata.'):]
+                        # Try to parse JSON strings back to objects
+                        if isinstance(meta_value, str):
+                            try:
+                                user_metadata[metadata_key] = json.loads(meta_value)
+                            except (json.JSONDecodeError, TypeError):
+                                user_metadata[metadata_key] = meta_value
+                        else:
+                            user_metadata[metadata_key] = meta_value
+                    else:
+                        # Regular field
+                        if isinstance(meta_value, str):
+                            try:
+                                doc_dict[meta_key] = json.loads(meta_value)
+                            except (json.JSONDecodeError, TypeError):
+                                doc_dict[meta_key] = meta_value
+                        else:
+                            doc_dict[meta_key] = meta_value
+                
+                # Add reconstructed user metadata
+                if user_metadata:
+                    doc_dict['metadata'] = user_metadata
+                
+                # Add back essential fields
+                doc_dict['id'] = metadata.get('id', doc_id)
+                if embedding is not None:
+                    doc_dict['embedding'] = embedding
+                
+                # Get document class
+                doc_class_name = metadata.get('_doc_class')
+                doc_class = self._get_doc_class(doc_class_name)
+                
+                # Create document instance
+                doc = doc_class(**doc_dict)
+                output.append(doc)
+        
+        return output
     
     async def insert_nodes(self, documents: List[D], index_id: Optional[str] = None, show_progress: bool = False) -> List[str]:
         """
@@ -504,5 +598,7 @@ class ChromaVectorStore(VectorStore[D]):
             collection_name=config.collection_name,
             embeddings=embeddings,
             document_class=Node,  # Defaults to Node
-            distance=config.distance
+            distance=config.distance,
+            enable_hybrid=config.enable_hybrid,
+            fusion_method=config.fusion_method
         )

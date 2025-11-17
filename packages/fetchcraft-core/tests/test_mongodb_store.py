@@ -34,7 +34,7 @@ async def test_mongodb_store_add_and_get_document():
         # Create a document
         doc = DocumentNode.from_text(
             text="Hello world",
-            metadata={"parsing": "test"}
+            metadata={"parsing": "test", "source": "testfile.txt"}
         )
 
         # Add document
@@ -69,9 +69,9 @@ async def test_mongodb_store_add_multiple_documents():
         )
 
         # Create multiple documents
-        doc1 = DocumentNode.from_text("Document 1", metadata={"index": 1})
-        doc2 = DocumentNode.from_text("Document 2", metadata={"index": 2})
-        doc3 = DocumentNode.from_text("Document 3", metadata={"index": 3})
+        doc1 = DocumentNode.from_text("Document 1", metadata={"index": 1, "source": "testfile.txt"})
+        doc2 = DocumentNode.from_text("Document 2", metadata={"index": 2, "source": "testfile.txt"})
+        doc3 = DocumentNode.from_text("Document 3", metadata={"index": 3, "source": "testfile.txt"})
 
         # Add all documents
         doc_ids = await store.add_documents([doc1, doc2, doc3])
@@ -102,7 +102,7 @@ async def test_mongodb_store_update_document():
         )
 
         # Create and add document
-        doc = DocumentNode.from_text("Original text", metadata={"version": 1})
+        doc = DocumentNode.from_text("Original text", metadata={"version": 1, "source": "testfile.txt"})
         await store.add_document(doc)
 
         # Update document
@@ -136,7 +136,7 @@ async def test_mongodb_store_delete_document():
         )
 
         # Create and add document
-        doc = DocumentNode.from_text("To be deleted")
+        doc = DocumentNode.from_text("To be deleted", metadata={"source": "testfile.txt"})
         await store.add_document(doc)
 
         # Verify it exists
@@ -172,7 +172,7 @@ async def test_mongodb_store_list_documents():
 
         # Add multiple documents
         docs = [
-            DocumentNode.from_text(f"Document {i}", metadata={"index": i})
+            DocumentNode.from_text(f"Document {i}", metadata={"index": i, "source": "testfile.txt"})
             for i in range(10)
         ]
         await store.add_documents(docs)
