@@ -5,15 +5,21 @@ from datetime import datetime
 from typing import Optional, Any, List, Union, Dict, AsyncIterable
 
 from pydantic_ai import AgentStreamEvent, PartStartEvent, PartDeltaEvent, TextPartDelta, \
-    ThinkingPartDelta, ToolCallPartDelta, FunctionToolCallEvent, FunctionToolResultEvent, FinalResultEvent
+    ThinkingPartDelta, ToolCallPartDelta, FunctionToolCallEvent, FunctionToolResultEvent, FinalResultEvent, ModelSettings, ModelMessagesTypeAdapter, ModelMessage
+from pydantic_ai.models.openai import OpenAIChatModel
 
 from .output_formatters import DefaultOutputFormatter
 from .base import BaseAgent
 from .memory import Memory
 from .model import AgentResponse, ChatMessage, CitationContainer
 from .output_formatters import OutputFormatter
+from .utils import to_chat_message, to_pydantic_ai_messages
 from ..base_logging import configure_logging
 from ..mixins import ObjectNodeMixin
+import json
+from pydantic_core import to_jsonable_python
+
+from ..pydantic_ai_utils import openai_history_to_pydantic_ai
 
 try:
     from pydantic_ai import Agent, RunContext, Tool
@@ -26,7 +32,7 @@ except ImportError:
     RunContext = None
     Model = None
 
-from pydantic import ConfigDict, PrivateAttr
+from pydantic import ConfigDict, PrivateAttr, TypeAdapter
 
 configure_logging("root")
 
@@ -45,21 +51,115 @@ configure_logging("root")
 # (The document_number must always be an integer and is the number following 'Document ' in the citations)
 # """
 
-SYSTEM_PROMPT = """You are a helpful AI assistant that uses reasoning and multi-step thinking to answer questions based on retrieved information and conversation history.
-Knowledge cutoff: 31.12.2023
-Today's date: {today}
+# SYSTEM_PROMPT = """You are a helpful AI assistant that uses reasoning and multi-step thinking to answer questions based on retrieved information and conversation history.
+#
+# Lets think Step-By-Step:
+# 1. Break the problem down into manageable steps using the provided tools
+# 2. Read the conversation history and the users query carefully to understand what the user wants
+# 3. Read the provided context and take note of the document numbers
+# 4. Write your answer, using the provided context ONLY.
+# 5. Always add citations to your answer.
+# 6. Always write citations using Markdown format. Example: 'See [<document_title>](<document_number>)'
+#
+# (The document_number must always be an integer and is the number following 'Document ' in the context)
+# """
 
-Lets think Step-By-Step:
-1. Read the conversation history and the users query carefully to understand what the user wants
-2. Break the problem down into manageable steps using the provided tools
-3. Execute the planned steps. Repeat this step until the problem is solved.
+SYSTEM_PROMPT = """You are a helpful AI assistant that answers questions **only** using the retrieved documents (“context”) and the conversation history. You must always include properly formatted citations pointing to the documents you used.
 
-When writing your answer:
-1. Base your answer on the retrieved documents ONLY! Never use prior knowledge!
-2. If the provided documents do not contain the information refine your query and try again.
-3. When reciting facts, always include a citation to the parsing of the information. ALWAYS add citations to your answer using a Markdown link. Example: 'See [<document_title>](<document_number>)'
-(The document_number must always be an integer and is the number following 'Document ' in the citations)
+---
+
+## High-level behavior
+
+- Use reasoning and multi-step thinking **internally** to understand the query and the context.
+- Base your answer **only** on the provided documents and conversation history.  
+  - **Do not** use external knowledge or make up facts.
+- If the documents do not contain enough information to answer, say so explicitly.
+
+---
+
+## Workflow (internal, not shown to the user)
+
+1. **Understand the request**  
+   - Read the entire conversation and the latest user query carefully.
+   - Identify what the user is asking and what type of answer is expected (definition, explanation, summary, comparison, etc.).
+
+2. **Inspect the context**
+   - Read all provided documents.
+   - Identify any information that can be used to enrich the answer.
+   - Note each document’s:
+     - **Document number**: the integer after the word `Document` (e.g., `Document 3` → number = `3`).
+     - **Document title**: the title/text given for that document.
+
+3. **Plan your answer**
+   - Decide which documents are relevant to the question.
+   - Collect the specific parts of those documents that support your answer.
+
+4. **Write the answer**
+   - Answer the user’s question clearly and directly.
+   - Elaborate on your answer if you deem it valuable to the user.
+   - Use your own words to summarize and synthesize the information from the documents.
+   - **Do not** copy large chunks of text verbatim unless absolutely necessary.
+
+5. **Add citations (mandatory)**
+   - Every time you use information from a document, add a citation.
+   - At minimum, **each paragraph that contains factual information must include at least one citation**.
+   - Place citations at the end of the sentence or paragraph they support.
+
+---
+
+## Citation rules (very important)
+
+1. **Citation format (Markdown)**
+   - Always write citations in this exact format (including brackets and parentheses):
+     - `See [<document_title>](<document_number>)`
+   - Example:
+     - `See `  
+   - If you cite multiple documents for the same sentence or paragraph, separate them with spaces or commas:
+     - `See , `
+
+2. **Document number**
+   - Must **always** be an integer.
+   - It is the number that follows the word `Document` in the context.
+     - Example: `Document 7: Installation Manual` → document number is `7`.
+
+3. **Document title**
+   - Use the title given in the context for that document.
+   - If no clear title is provided, use a generic label like `Document 7` as the title:
+     - `See `
+
+4. **No fabricated citations**
+   - Never invent document numbers or titles.
+   - Only cite documents that actually appear in the provided context.
+   - If you cannot find a relevant document to support a claim, **do not make the claim**.
+
+5. **Consistency**
+   - Do not mix other citation styles (such as `[3]`, `(Doc 3)`, etc.).
+   - Always use the Markdown link style described above.
+
+---
+
+## Insufficient information
+
+- If the context does not contain enough information to answer the question:
+  - Say that you cannot fully answer based on the provided documents, and
+  - Optionally summarize any **partially relevant** information you did find, with citations.
+
+- Example:
+  - “I cannot fully answer your question based on the provided documents. They do not discuss X in detail. However, they do mention Y. See ”
+
+---
+
+## Never forget citations
+
+- **Do not provide any final answer without citations.**
+- If you realize an answer has no citations, you must add them before finishing.
+- It is better to give a short answer with correct citations than a long answer without them.
+
+---
+
+Only output the final answer to the user (with citations). Do **not** describe your internal steps unless the user explicitly asks for them.
 """
+
 
 #3. If the information is not in the retrieved documents, say so
 
@@ -100,6 +200,7 @@ class PydanticAgent(BaseAgent, ObjectNodeMixin):
     model: Union[str, Model] = "openai:gpt-4-turbo"
     agent_kwargs: Dict = {}
     _memory: Memory = PrivateAttr(default=None)
+    system_prompt: Optional[str] = SYSTEM_PROMPT
 
     """
     ReAct (Reasoning and Acting) agent that uses a retriever to answer questions.
@@ -150,7 +251,7 @@ class PydanticAgent(BaseAgent, ObjectNodeMixin):
             cls,
             model: Union[str, Any] = "openai:gpt-4",
             tools: List[Tool] | None = None,
-            system_prompt: Optional[str] = None,
+            system_prompt: Optional[str] = SYSTEM_PROMPT,
             output_formatter: Optional[OutputFormatter] = None,
             **agent_kwargs
     ) -> 'PydanticAgent':
@@ -187,34 +288,42 @@ class PydanticAgent(BaseAgent, ObjectNodeMixin):
             :param question:
             :param messages:
         """
-
+        model = OpenAIChatModel(
+            self.model,
+            settings=ModelSettings(
+                temperature=0.8,
+                top_p=0.95,
+                extra_body={"top_k": 20, "min_p": 0}
+            ),
+        )
         agent = Agent(
-            model=self.model,
-            system_prompt=SYSTEM_PROMPT.format(today=datetime.now().strftime("%d.%m.%Y")),
+            # model=self.model,
+            model=model,
+            system_prompt=self.system_prompt.format(today=datetime.now().strftime("%d.%m.%Y")),
             tools=self._tools,
             deps_type=CitationContainer,
             **self.agent_kwargs,
         )
 
 
-        def final_output(ctx: RunContext, answer: str) -> str:
+        def answer(ctx: RunContext, answer: str) -> str:
             """Call this function when to return your final answer.
             The input should be your final answer."""
             return answer
 
-        # if not self._memory:
-        #     self._memory = Memory()
-        self._memory = Memory()
-
         # chat_history = messages if messages else []
         citations = CitationContainer()
+        self._memory = Memory()
 
-        user_query, chat_history = self._memory.get_prompt(question)
+        chat_history = []
+        if messages:
+            message_dicts = [m.model_dump() for m in messages]
+            chat_history = openai_history_to_pydantic_ai(message_dicts)
 
         result = await agent.run(
-            user_prompt=user_query,
+            user_prompt=question,
             message_history=chat_history,
-            output_type=final_output,
+            output_type=answer,
             deps=citations,
             **kwargs
         )

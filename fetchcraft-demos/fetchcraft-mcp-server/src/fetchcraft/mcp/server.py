@@ -159,7 +159,7 @@ def build_mcp_server(settings: MCPServerSettings) -> FastMCP:
         question: str,
         top_k: int = 3,
         include_citations: bool = True
-    ) -> dict:
+    ) -> str:
         """
         Query the RAG agent with a question.
 
@@ -203,13 +203,13 @@ def build_mcp_server(settings: MCPServerSettings) -> FastMCP:
                     })
 
             processing_time = (time.time() - start_time) * 1000  # Convert to ms
-
-            return {
-                "answer": answer,
-                "citations": citations,
-                "processing_time_ms": round(processing_time, 2),
-                "model": settings.llm_model
-            }
+            return answer
+            # return {
+            #     "answer": answer,
+            #     "citations": citations,
+            #     "processing_time_ms": round(processing_time, 2),
+            #     "model": settings.llm_model
+            # }
 
         except Exception as e:
             import traceback

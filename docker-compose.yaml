@@ -172,7 +172,7 @@ services:
 #    networks: [ 'demo-net' ]
 
   librechat:
-    image: librechat-dev-alex
+    image: librechat-dev-alex2
 #    image: ghcr.io/danny-avila/librechat-dev-app:latest
     container_name: librechat
     ports:

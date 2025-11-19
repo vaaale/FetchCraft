@@ -36,14 +36,14 @@ from fetchcraft.vector_store import QdrantVectorStore
 # Configuration
 QDRANT_HOST = "localhost"
 QDRANT_PORT = 6333
-COLLECTION_NAME = "fetchcraft_hybrid"  # Different collection for hybrid search
+COLLECTION_NAME = "fetchcraft_chatbot"  # Different collection for hybrid search
 DOCUMENTS_PATH = Path(os.getenv("DOCUMENTS_PATH", "Documents"))
 
 # Embeddings configuration (adjust based on your setup)
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "bge-m3")
 EMBEDDING_API_KEY = os.getenv("OPENAI_API_KEY", "sk-321")
-EMBEDDING_BASE_URL = os.getenv("OPENAI_BASE_URL", None)  # None = use OpenAI default
-INDEX_ID = "hybrid-demo-index-001"
+EMBEDDING_BASE_URL = os.getenv("EMBEDDING_BASE_URL", None)  # None = use OpenAI default
+INDEX_ID = "docs-index"
 
 # LLM configuration for the agent
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4-turbo")
@@ -227,7 +227,7 @@ async def setup_rag_system():
         vector_store=vector_store,
         index_id=INDEX_ID
     )
-    
+    needs_indexing = False
     # Index documents if needed
     if needs_indexing:
         print(f"\n4️⃣  Indexing documents with hybrid search...")
@@ -254,7 +254,7 @@ async def setup_rag_system():
     retriever_tool = RetrieverTool.from_retriever(retriever)
     tool_func = retriever_tool.get_tool_function()
     tools = [Tool(tool_func, takes_ctx=True, max_retries=3)]
-    
+
     agent = PydanticAgent.create(
         model=LLM_MODEL,
         tools=tools,
@@ -286,16 +286,26 @@ async def repl_loop(agent: PydanticAgent):
     print("\nType 'quit', 'exit', or press Ctrl+C to exit.\n")
     print("="*70 + "\n")
 
+    questions = [
+        "What was Crayon's revenue in 2023?",
+        "What was SoftwareOne's revenue in 2023?",
+        "What was the revenue of both companies in 2023?",
+    ]
+
     memory = []
+    index = 0
     while True:
         # Get user input
-        question = input("\n❓ Your Question: ").strip()
+        question = input(f"\n❓ Your Question: {questions[index % len(questions)]} ").strip()
         
         # Check for exit commands
         if question.lower() in ['quit', 'exit', 'q']:
             print("\n👋 Goodbye!")
             break
-        
+        if question.lower() == '':
+            question = questions[index % len(questions)]
+            index += 1
+
         # Skip empty input
         if not question:
             continue

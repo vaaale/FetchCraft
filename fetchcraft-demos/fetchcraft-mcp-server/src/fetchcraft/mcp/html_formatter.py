@@ -152,7 +152,7 @@ class FindFilesHTMLFormatter:
                 filename = file_data.get("filename", "Unknown")
                 source = file_data.get("source", "Unknown")
                 score = file_data.get("score", 0.0)
-                preview = file_data.get("text_preview", "No preview available")
+                preview = file_data.get("text_preview", "No preview available").strip()
 
                 # Format score as percentage
                 score_percent = round(score * 100, 1)
