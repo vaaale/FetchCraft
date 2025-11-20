@@ -1,6 +1,6 @@
 [project]
 name = "fetchcraft-parsing-docling"
-version = "0.3.0"
+version = "0.4.0"
 description = "Docling file parsing for Fetchcraft"
 requires-python = ">=3.12"
 dependencies = [
