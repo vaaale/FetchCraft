@@ -145,7 +145,7 @@ async def load_and_index_documents(
         logger.info(f"Created {len(all_chunks)} chunks")
     
     logger.info(f"Indexing {len(all_chunks)} chunks with hybrid search...")
-    await vector_index.add_nodes(all_chunks, show_progress=True)
+    await vector_index.add_nodes(DocumentNode, all_chunks, show_progress=True)
     
     logger.info(f"Successfully indexed {len(all_chunks)} chunks!")
     return len(all_chunks)

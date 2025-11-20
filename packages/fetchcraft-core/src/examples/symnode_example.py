@@ -100,11 +100,11 @@ async def basic_symnode_example():
     
     # Step 5: Add parent chunk first (must exist before SymNodes can reference it)
     # Embeddings auto-generated!
-    parent_ids = await index.add_nodes([big_chunk])
+    parent_ids = await index.add_nodes(DocumentNode, [big_chunk])
     print(f"✓ Indexed parent chunk (ID: {parent_ids[0][:8]}...)\n")
     
     # Step 6: Add symbolic nodes to the index (embeddings auto-generated!)
-    sym_ids = await index.add_nodes([sym_node1, sym_node2])
+    sym_ids = await index.add_nodes(DocumentNode, [sym_node1, sym_node2])
     print(f"✓ Indexed {len(sym_ids)} SymNodes (all embeddings auto-generated!)\n")
     
     # Step 7: Search and observe parent resolution
@@ -213,11 +213,11 @@ async def hierarchical_chunking_example():
     print(f"Created {len(all_sym_nodes)} SymNodes\n")
     
     # Index parent chunks first (embeddings auto-generated!)
-    await index.add_nodes(all_parent_chunks)
+    await index.add_nodes(DocumentNode, all_parent_chunks)
     print(f"✓ Indexed {len(all_parent_chunks)} parent chunks")
     
     # Index SymNodes (embeddings auto-generated!)
-    await index.add_nodes(all_sym_nodes)
+    await index.add_nodes(DocumentNode, all_sym_nodes)
     print(f"✓ Indexed {len(all_sym_nodes)} SymNodes (all embeddings auto-generated!)\n")
     
     # Search examples

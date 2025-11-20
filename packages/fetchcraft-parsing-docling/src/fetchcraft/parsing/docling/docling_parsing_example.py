@@ -162,7 +162,7 @@ async def example_indexing_and_search():
 
     # Index nodes
     print("\n4. Indexing chunks...")
-    await index.add_nodes(nodes, show_progress=True)
+    await index.add_nodes(DocumentNode, nodes, show_progress=True)
     print("   ✓ Indexing complete")
 
     # Search

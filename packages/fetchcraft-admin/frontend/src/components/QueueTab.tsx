@@ -1,23 +1,52 @@
-import { useEffect, useState } from 'react'
-import { RefreshCw, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
+import { RefreshCw, ChevronLeft, ChevronRight, AlertCircle, CheckCircle, Loader, Clock } from 'lucide-react'
 import { api, Message, QueueStats } from '../api'
+import { apiV2, Job } from '../api_v2'
 
 const QueueTab = () => {
   const [messages, setMessages] = useState<Message[]>([])
   const [stats, setStats] = useState<QueueStats | null>(null)
+  const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Filters
+  const [selectedJobId, setSelectedJobId] = useState<string>('')
   const [state, setState] = useState<string>('all')
-  const [queue, setQueue] = useState<string>('all')
   const [rowsPerPage, setRowsPerPage] = useState<number>(50)
   const [currentPage, setCurrentPage] = useState<number>(1)
 
   // Pagination
   const [total, setTotal] = useState<number>(0)
 
+  const fetchJobs = async () => {
+    try {
+      const jobsData = await apiV2.listJobs({ limit: 1000 })
+      setJobs(jobsData.jobs)
+      
+      // Auto-select the first processing/running job if none selected
+      if (!selectedJobId && jobsData.jobs.length > 0) {
+        const processingJob = jobsData.jobs.find(
+          job => job.status === 'running' || job.status === 'pending'
+        )
+        if (processingJob) {
+          setSelectedJobId(processingJob.id)
+        } else {
+          // If no processing job, select the first one
+          setSelectedJobId(jobsData.jobs[0].id)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch jobs:', err)
+    }
+  }
+
   const fetchData = async () => {
+    // Don't fetch if no job is selected
+    if (!selectedJobId) {
+      return
+    }
+    
     setLoading(true)
     setError(null)
     try {
@@ -25,7 +54,7 @@ const QueueTab = () => {
       const limit = rowsPerPage === -1 ? 10000 : rowsPerPage // "All" option
 
       const [messagesData, statsData] = await Promise.all([
-        api.getMessages({ state, queue, limit, offset }),
+        api.getMessages({ job_id: selectedJobId, state, limit, offset }),
         api.getStats(),
       ])
 
@@ -40,33 +69,82 @@ const QueueTab = () => {
   }
 
   useEffect(() => {
+    fetchJobs()
+    // Fetch jobs less frequently
+    const jobsInterval = setInterval(fetchJobs, 30000)
+    return () => clearInterval(jobsInterval)
+  }, [])
+
+  useEffect(() => {
     fetchData()
     // Auto-refresh every 5 seconds
     const interval = setInterval(fetchData, 5000)
     return () => clearInterval(interval)
-  }, [state, queue, rowsPerPage, currentPage])
+  }, [state, selectedJobId, rowsPerPage, currentPage])
 
   const totalPages = rowsPerPage === -1 ? 1 : Math.ceil(total / rowsPerPage)
 
-  const getStateBadgeColor = (state: string) => {
-    switch (state) {
-      case 'done':
-        return 'bg-green-100 text-green-800'
-      case 'ready':
-        return 'bg-blue-100 text-blue-800'
-      case 'leased':
-      case 'processing':
-        return 'bg-yellow-100 text-yellow-800'
+  // Get all unique pipeline steps across all messages, maintaining order
+  const allPipelineSteps = React.useMemo(() => {
+    const stepsSet = new Set<string>()
+    const stepsOrder: string[] = []
+    
+    messages.forEach((message) => {
+      message.pipeline_steps.forEach((step) => {
+        if (!stepsSet.has(step)) {
+          stepsSet.add(step)
+          stepsOrder.push(step)
+        }
+      })
+    })
+    
+    return stepsOrder
+  }, [messages])
+
+  const getStepStatusIcon = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return <CheckCircle className="w-4 h-4 text-green-600" />
       case 'failed':
-        return 'bg-red-100 text-red-800'
+        return <AlertCircle className="w-4 h-4 text-red-600" />
+      case 'processing':
+        return <Loader className="w-4 h-4 text-blue-600 animate-spin" />
+      case 'pending':
+        return <Clock className="w-4 h-4 text-gray-400" />
       default:
-        return 'bg-gray-100 text-gray-800'
+        return <div className="w-4 h-4 rounded-full bg-gray-200" />
     }
   }
 
-  const formatStateDisplay = (state: string) => {
-    // Convert "leased" to "Processing" for display
-    return state === 'leased' ? 'Processing' : state
+  const getStepStatusColor = (status: string, isCurrent: boolean) => {
+    if (isCurrent) {
+      return 'bg-blue-100 border-blue-300'
+    }
+    switch (status) {
+      case 'completed':
+        return 'bg-green-50 border-green-200'
+      case 'failed':
+        return 'bg-red-50 border-red-200'
+      case 'processing':
+        return 'bg-blue-50 border-blue-200'
+      case 'pending':
+        return 'bg-gray-50 border-gray-200'
+      default:
+        return 'bg-gray-50 border-gray-200'
+    }
+  }
+
+  const getStepDisplayName = (stepName: string) => {
+    // Convert technical step names to user-friendly display names
+    const displayNames: Record<string, string> = {
+      'ParsingTransformation': 'Parsing',
+      'ExtractKeywords': 'Keywords',
+      'ChunkingTransformation': 'Chunking',
+      'sink:document_store': 'Doc Store',
+      'sink:vector_index': 'Vector Index',
+    }
+    
+    return displayNames[stepName] || stepName.replace('sink:', '')
   }
 
   return (
@@ -106,27 +184,29 @@ const QueueTab = () => {
       {/* Filters */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          {/* Queue Filter */}
+          {/* Job Filter */}
           <div className="flex items-center space-x-2">
-            <label className="text-sm font-medium text-gray-700">Queue:</label>
+            <label className="text-sm font-medium text-gray-700">Job:</label>
             <select
-              value={queue}
+              value={selectedJobId}
               onChange={(e) => {
-                setQueue(e.target.value)
+                setSelectedJobId(e.target.value)
                 setCurrentPage(1)
               }}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-xs"
             >
-              <option value="all">All</option>
-              <option value="ingest.main">Main</option>
-              <option value="ingest.deferred">Deferred</option>
-              <option value="ingest.error">Error</option>
+              {!selectedJobId && <option value="">&lt;Select Job&gt;</option>}
+              {jobs.map((job) => (
+                <option key={job.id} value={job.id}>
+                  {job.name} ({job.status})
+                </option>
+              ))}
             </select>
           </div>
 
           {/* State Filter */}
           <div className="flex items-center space-x-2">
-            <label className="text-sm font-medium text-gray-700">State:</label>
+            <label className="text-sm font-medium text-gray-700">Status:</label>
             <select
               value={state}
               onChange={(e) => {
@@ -136,9 +216,9 @@ const QueueTab = () => {
               className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">All</option>
-              <option value="done">Done</option>
-              <option value="ready">Pending</option>
+              <option value="pending">Pending</option>
               <option value="processing">Processing</option>
+              <option value="completed">Completed</option>
               <option value="failed">Failed</option>
             </select>
           </div>
@@ -191,66 +271,112 @@ const QueueTab = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  ID
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Job
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Queue
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Document
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  State
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Attempts
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Available At
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Body Preview
+                {allPipelineSteps.map((step) => (
+                  <th
+                    key={step}
+                    className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    {getStepDisplayName(step)}
+                  </th>
+                ))}
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {loading && messages.length === 0 ? (
+              {!selectedJobId ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={allPipelineSteps.length + 3} className="px-6 py-12 text-center text-gray-500">
+                    <div className="text-lg font-medium mb-2">Please select a job</div>
+                    <div className="text-sm">Choose a job from the dropdown above to view its documents</div>
+                  </td>
+                </tr>
+              ) : loading && messages.length === 0 ? (
+                <tr>
+                  <td colSpan={allPipelineSteps.length + 3} className="px-6 py-12 text-center text-gray-500">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
                     Loading messages...
                   </td>
                 </tr>
               ) : messages.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={allPipelineSteps.length + 3} className="px-6 py-12 text-center text-gray-500">
                     No messages found
                   </td>
                 </tr>
               ) : (
                 messages.map((message) => (
                   <tr key={message.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
-                      {message.id.substring(0, 8)}...
+                    <td className="px-4 py-3">
+                      <div className="text-sm font-medium text-gray-900">{message.job_name}</div>
+                      <div className="text-xs text-gray-500">ID: {message.job_id.substring(0, 8)}...</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {message.queue}
+                    <td className="px-4 py-3">
+                      <div className="text-sm font-medium text-gray-900">{message.source}</div>
+                      {message.error_message && (
+                        <div className="text-xs text-red-600 mt-1">
+                          Error: {message.error_message}
+                        </div>
+                      )}
+                      {message.retry_count > 0 && (
+                        <div className="text-xs text-orange-600 mt-1">
+                          Retries: {message.retry_count}
+                        </div>
+                      )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    {allPipelineSteps.map((step) => {
+                      const stepStatus = message.step_statuses[step] || 'pending'
+                      const isCurrent = message.current_step === step && message.status === 'processing'
+                      const hasStep = message.pipeline_steps.includes(step)
+                      
+                      return (
+                        <td key={step} className="px-4 py-3">
+                          {hasStep ? (
+                            <div
+                              className={`
+                                flex items-center justify-center gap-1 px-2 py-1 rounded border
+                                ${getStepStatusColor(stepStatus, isCurrent)}
+                              `}
+                            >
+                              {getStepStatusIcon(stepStatus)}
+                              {isCurrent && (
+                                <span className="text-xs font-medium text-blue-700">
+                                  Current
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-center">
+                              <span className="text-gray-300">-</span>
+                            </div>
+                          )}
+                        </td>
+                      )
+                    })}
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <span
-                        className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStateBadgeColor(
-                          message.state
-                        )}`}
+                        className={`
+                          px-2 py-1 text-xs font-medium rounded-full
+                          ${
+                            message.status === 'completed'
+                              ? 'bg-green-100 text-green-800'
+                              : message.status === 'failed'
+                              ? 'bg-red-100 text-red-800'
+                              : message.status === 'processing'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }
+                        `}
                       >
-                        {formatStateDisplay(message.state)}
+                        {message.status}
                       </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {message.attempts}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {message.available_at || '-'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500 max-w-md truncate">
-                      {message.body_preview}
                     </td>
                   </tr>
                 ))

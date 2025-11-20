@@ -1,6 +1,6 @@
 [project]
 name = "fetchcraft-simple"
-version = "0.1.0"
+version = "0.3.0"
 description = "Fetchcraft simple demo"
 requires-python = ">=3.12"
 dependencies = [

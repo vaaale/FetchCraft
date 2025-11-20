@@ -1,6 +1,6 @@
 [project]
 name = "fetchcraft-openai-server"
-version = "0.2.0"
+version = "0.3.0"
 description = "OpenAI-based server for Fetchcraft"
 requires-python = ">=3.12,<3.14"
 dependencies = [

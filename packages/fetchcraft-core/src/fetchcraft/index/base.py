@@ -24,7 +24,7 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
         self._doc_store = doc_store
 
     @abstractmethod
-    def add_nodes(self, documents, show_progress):
+    def add_nodes(self, doc: Optional[D], nodes: List[D], show_progress: bool = False):
         """
         Add documents to the index.
 
@@ -36,6 +36,9 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
 
         Returns:
             List of document IDs that were added
+            :param doc:
+            :param nodes: The nodes to add
+            :param show_progress: show progress
         """
         pass
 

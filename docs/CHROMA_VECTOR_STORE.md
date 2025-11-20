@@ -72,7 +72,7 @@ vector_index = VectorIndex(
 )
 
 # Add documents
-await vector_index.add_nodes(chunks)
+await vector_index.add_nodes(DocumentNode, chunks)
 
 # Search
 results = await vector_index.search_by_text("your query", k=5)
@@ -220,7 +220,7 @@ parser = TextFileDocumentParser(chunker=chunker)
 nodes = parser.parse_directory("docs/", pattern="*.md", recursive=True)
 
 # Index all nodes (parents + children)
-await vector_index.add_nodes(nodes)
+await vector_index.add_nodes(DocumentNode, nodes)
 
 # Search with parent resolution
 retriever = vector_index.as_retriever(top_k=5, resolve_parents=True)

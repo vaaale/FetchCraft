@@ -101,35 +101,54 @@ class AsyncPostgresQueue(AsyncQueueBackend):
             return
         
         async with self._pool.acquire() as conn:
-            await conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS messages
-                (
-                    id           TEXT PRIMARY KEY,
-                    queue        TEXT    NOT NULL,
-                    body         JSONB   NOT NULL,
-                    available_at BIGINT  NOT NULL,
-                    lease_until  BIGINT,
-                    attempts     INTEGER NOT NULL DEFAULT 0,
-                    state        TEXT    NOT NULL DEFAULT 'ready',
-                    created_at   BIGINT  NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+            try:
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS messages
+                    (
+                        id           TEXT PRIMARY KEY,
+                        queue        TEXT    NOT NULL,
+                        body         JSONB   NOT NULL,
+                        available_at BIGINT  NOT NULL,
+                        lease_until  BIGINT,
+                        attempts     INTEGER NOT NULL DEFAULT 0,
+                        state        TEXT    NOT NULL DEFAULT 'ready',
+                        created_at   BIGINT  NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+                    )
+                    """
                 )
-                """
-            )
+            except asyncpg.exceptions.UniqueViolationError as e:
+                # Table and its composite type already exist, this is fine
+                if "pg_type_typname_nsp_index" in str(e):
+                    pass
+                else:
+                    raise
             
             # Create indexes for efficient queries
-            await conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_messages_queue_avail "
-                "ON messages(queue, available_at) WHERE state = 'ready'"
-            )
-            await conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_messages_state "
-                "ON messages(state)"
-            )
-            await conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_messages_lease "
-                "ON messages(lease_until) WHERE state = 'leased'"
-            )
+            # Wrap each in try-except to handle concurrent creation
+            try:
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_messages_queue_avail "
+                    "ON messages(queue, available_at) WHERE state = 'ready'"
+                )
+            except asyncpg.exceptions.UniqueViolationError:
+                pass  # Index already exists from concurrent creation
+            
+            try:
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_messages_state "
+                    "ON messages(state)"
+                )
+            except asyncpg.exceptions.UniqueViolationError:
+                pass  # Index already exists from concurrent creation
+            
+            try:
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_messages_lease "
+                    "ON messages(lease_until) WHERE state = 'leased'"
+                )
+            except asyncpg.exceptions.UniqueViolationError:
+                pass  # Index already exists from concurrent creation
     
     async def enqueue(self, queue_name: str, body: dict, delay_seconds: int = 0) -> str:
         """

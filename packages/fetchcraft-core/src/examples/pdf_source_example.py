@@ -166,7 +166,7 @@ async def example_pdf_indexing():
     
     # Index nodes
     print("\n4. Indexing chunks...")
-    await index.add_nodes(nodes, show_progress=True)
+    await index.add_nodes(DocumentNode, nodes, show_progress=True)
     print("   ✓ Indexing complete")
     
     # Search

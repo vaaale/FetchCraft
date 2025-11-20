@@ -113,7 +113,7 @@ nodes = h_parser.get_nodes(documents)
 
 ```python
 # Add nodes to index (embeddings are auto-generated!)
-doc_ids = await index.add_nodes(chunks, show_progress=True)
+doc_ids = await index.add_nodes(DocumentNode, chunks, show_progress=True)
 print(f"Indexed {len(doc_ids)} chunks")
 ```
 
@@ -384,7 +384,7 @@ from fetchcraft.index.vector_index import VectorIndex
 index = VectorIndex(vector_store=vector_store, index_id="my-index")
 
 # Add documents (embeddings auto-generated)
-ids = await index.add_nodes(chunks)
+ids = await index.add_nodes(DocumentNode, chunks)
 
 # Search by text
 results = await index.search_by_text("query", k=5)
@@ -408,7 +408,7 @@ from fetchcraft.node import SymNode
 
 # Create hierarchical parser
 parser = HierarchicalNodeParser(
-    chunk_size=2048,      # Parent chunk size
+    chunk_size=2048,  # Parent chunk size
     overlap=100,
     child_sizes=[512, 128],  # Create 2 levels of children
     child_overlap=20
@@ -418,7 +418,7 @@ parser = HierarchicalNodeParser(
 nodes = parser.get_nodes(documents)
 
 # Index all nodes (parents and children)
-await index.add_nodes(nodes)
+await index.add_nodes(DocumentNode, nodes)
 
 # Retrieve with parent resolution
 retriever = index.as_retriever(top_k=5, resolve_parents=True)
@@ -482,8 +482,8 @@ support_index = VectorIndex(
 )
 
 # Each index operates independently
-await tech_docs_index.add_nodes(tech_chunks)
-await marketing_index.add_nodes(marketing_chunks)
+await tech_docs_index.add_nodes(DocumentNode, tech_chunks)
+await marketing_index.add_nodes(DocumentNode, marketing_chunks)
 
 # Searches are automatically isolated to each index
 tech_results = await tech_docs_index.search_by_text("query", k=5)
@@ -536,7 +536,7 @@ async def build_rag_index():
     chunks = parser.get_nodes(documents)
 
     # Step 4: Index chunks (embeddings auto-generated!)
-    document_ids = await index.add_nodes(chunks, show_progress=True)
+    document_ids = await index.add_nodes(DocumentNode, chunks, show_progress=True)
 
     print(f"✓ Indexed {len(document_ids)} chunks")
     return index

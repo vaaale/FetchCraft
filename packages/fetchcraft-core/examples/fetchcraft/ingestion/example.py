@@ -58,7 +58,7 @@ class VectorIndexSink(Sink):
             nodes = record.payload.get("chunks", [])
             doc = DocumentNode.model_validate(record.payload["document"])
             await self.vector_index.delete_document_nodes(doc)
-            await self.vector_index.add_nodes(nodes)
+            await self.vector_index.add_nodes(DocumentNode, nodes)
             self.counter += 1
             print(f"{self.index_id} Indexed[{self.counter}]: {record.id}")
 

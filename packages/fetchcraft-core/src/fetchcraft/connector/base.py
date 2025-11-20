@@ -54,5 +54,9 @@ class File(BaseModel, ABC):
 class Connector(ABC):
 
     @abstractmethod
+    def get_name(self) -> str:
+        ...
+
+    @abstractmethod
     async def read(self) -> AsyncIterable['File']:
         ...

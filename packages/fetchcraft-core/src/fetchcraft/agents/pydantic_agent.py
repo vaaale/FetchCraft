@@ -85,7 +85,6 @@ SYSTEM_PROMPT = """You are a helpful AI assistant that answers questions **only*
 
 2. **Inspect the context**
    - Read all provided documents.
-   - Identify any information that can be used to enrich the answer.
    - Note each document’s:
      - **Document number**: the integer after the word `Document` (e.g., `Document 3` → number = `3`).
      - **Document title**: the title/text given for that document.
@@ -96,7 +95,6 @@ SYSTEM_PROMPT = """You are a helpful AI assistant that answers questions **only*
 
 4. **Write the answer**
    - Answer the user’s question clearly and directly.
-   - Elaborate on your answer if you deem it valuable to the user.
    - Use your own words to summarize and synthesize the information from the documents.
    - **Do not** copy large chunks of text verbatim unless absolutely necessary.
 

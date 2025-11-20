@@ -151,7 +151,15 @@ class MongoDBDocumentStore(DocumentStore[Node]):
             if len(existing) > 1:
                 raise ValueError(f"Multiple documents with hash {document.hash} found")
 
-            document.id = existing[0].id
+            existing_doc = existing[0]
+
+            if document.hash != existing_doc.hash:
+                # Document has changed. Replace the old with the new
+                await self.delete_document(existing_doc.id)
+            else:
+                document.doc_id = existing_doc.doc_id
+                document.id = existing_doc.id
+
 
         # Convert document to dict
         doc_dict = document.model_dump()

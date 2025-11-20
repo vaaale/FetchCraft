@@ -103,7 +103,7 @@ async def demo_multiple_indices():
         ),
     ]
     
-    tech_ids = await tech_index.add_nodes(tech_docs)
+    tech_ids = await tech_index.add_nodes(DocumentNode, tech_docs)
     print(f"✓ Added {len(tech_ids)} documents to technical index")
     
     # Add documents to marketing index (no embeddings needed!)
@@ -118,7 +118,7 @@ async def demo_multiple_indices():
         ),
     ]
     
-    marketing_ids = await marketing_index.add_nodes(marketing_docs)
+    marketing_ids = await marketing_index.add_nodes(DocumentNode, marketing_docs)
     print(f"✓ Added {len(marketing_ids)} documents to marketing index")
     
     # Add documents to support index (no embeddings needed!)
@@ -133,7 +133,7 @@ async def demo_multiple_indices():
         ),
     ]
     
-    support_ids = await support_index.add_nodes(support_docs)
+    support_ids = await support_index.add_nodes(DocumentNode, support_docs)
     print(f"✓ Added {len(support_ids)} documents to support index")
     print()
     

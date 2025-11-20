@@ -176,7 +176,7 @@ chunk_nodes = nodes[1:]
 await doc_store.add_document(doc_node)
 
 # 4. Store all nodes (including chunks) in vector store for search
-await index.add_nodes(nodes)
+await index.add_nodes(DocumentNode, nodes)
 
 # 5. Search using vectors
 results = await index.search_by_text("What is the main topic?", k=5)

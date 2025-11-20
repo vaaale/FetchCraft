@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 from fetchcraft.document_store import DocumentStore
 from fetchcraft.index.base import BaseIndex
-from fetchcraft.node import Node, Chunk, ObjectMapper
+from fetchcraft.node import Node, Chunk, ObjectMapper, DocumentNode
 from fetchcraft.retriever import Retriever
 from fetchcraft.vector_store.base import VectorStore
 
@@ -74,14 +74,14 @@ class VectorIndex(BaseIndex[D]):
         Args:
             doc_id: The ID of the document to delete nodes for
         """
-        documents = await self._doc_store.list_documents(filters={"hash": doc.hash})
+        documents = await self._doc_store.list_documents(filters={"id": doc.id})
         if documents:
             document = documents[0]
             children = document.children_ids
             await self.vector_store.delete(children, index_id=self.index_id)
 
 
-    async def add_nodes(self, nodes: List[D], show_progress: bool = False) -> List[str]:
+    async def add_nodes(self, doc: Optional[D], nodes: List[D], show_progress: bool = False) -> List[str]:
         """
         Add documents to the index.
         
@@ -93,23 +93,27 @@ class VectorIndex(BaseIndex[D]):
             
         Returns:
             List of document IDs that were added
+            :param nodes: The nodes to add
+            :param doc: The source document
         """
+        existing_docs = {}
+        if self._doc_store:
+            for node in nodes:
+                _docs = await self._doc_store.list_documents(filters={"metadata.source": node.metadata.get("source")})
+                existing_docs.update({doc.id: doc for doc in _docs})
 
-        # if show_progress:
-        #     nodes = tqdm(nodes, desc="Processing documents")
-        #
-        # insert_ids = []
-        # for node in nodes:
-        #     existing_nodes = await self.vector_store.find('hash_', node.hash)
-        #     if existing_nodes:
-        #         # An identical node exists. Nothing to do
-        #         continue
-        #
-        #     if self._doc_store:
-        #         await self._doc_store.update_document(node)
-        #
-        #     await self.vector_store.insert_nodes([node], index_id=self.index_id, show_progress=False)
-        #     insert_ids.append(node.id)
+        existing_nodes = list(existing_docs.keys()) if len(existing_docs) > 0 else []
+        for existing_id, existing_doc in existing_docs.items():
+            existing_nodes.extend(existing_doc.children_ids)
+
+        if len(existing_nodes) > 0:
+            await self.vector_store.delete(existing_nodes, index_id=self.index_id)
+            if self._doc_store:
+                await self._doc_store.delete_documents(existing_nodes)
+
+        if self._doc_store:
+            await self._doc_store.add_documents([doc] + nodes)
+
         return await self.vector_store.insert_nodes(nodes, index_id=self.index_id, show_progress=show_progress)
 
 

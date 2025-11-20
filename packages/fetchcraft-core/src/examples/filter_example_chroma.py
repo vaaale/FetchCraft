@@ -82,7 +82,7 @@ async def example_chroma_basic_filters():
         ),
     ]
     
-    await index.add_nodes(nodes)
+    await index.add_nodes(DocumentNode, nodes)
     print(f"✓ Indexed {len(nodes)} documents with metadata")
     
     # Example 1: Equality filter

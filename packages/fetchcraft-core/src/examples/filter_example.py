@@ -74,7 +74,7 @@ async def example_basic_filters():
         ),
     ]
     
-    await index.add_nodes(nodes)
+    await index.add_nodes(DocumentNode, nodes)
     print(f"✓ Indexed {len(nodes)} documents with metadata")
     
     # Example 1: Equality filter
@@ -160,7 +160,7 @@ async def example_composite_filters():
         ),
     ]
     
-    await index.add_nodes(nodes)
+    await index.add_nodes(DocumentNode, nodes)
     print(f"✓ Indexed {len(nodes)} documents with metadata")
     
     # Example 1: AND filter
@@ -253,7 +253,7 @@ async def example_retriever_with_filters():
         ),
     ]
     
-    await index.add_nodes(nodes)
+    await index.add_nodes(DocumentNode, nodes)
     print(f"✓ Indexed {len(nodes)} documents with metadata")
     
     # Method 1: Pass filter to retrieve call

@@ -2,12 +2,19 @@
 
 export interface Message {
   id: string
-  queue: string
-  state: string
-  attempts: number
-  available_at: string | null
-  lease_until: string | null
-  body_preview: string
+  job_id: string
+  job_name: string
+  source: string
+  status: string
+  current_step: string | null
+  step_statuses: Record<string, string>
+  pipeline_steps: string[]
+  created_at: string | null
+  started_at: string | null
+  completed_at: string | null
+  error_message: string | null
+  error_step: string | null
+  retry_count: number
 }
 
 export interface MessagesResponse {
@@ -53,14 +60,14 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
 export const api = {
   // Queue Messages
   getMessages: (params: {
+    job_id: string
     state?: string
-    queue?: string
     limit?: number
     offset?: number
   }): Promise<MessagesResponse> => {
     const searchParams = new URLSearchParams()
+    searchParams.append('job_id', params.job_id)
     if (params.state && params.state !== 'all') searchParams.append('state', params.state)
-    if (params.queue && params.queue !== 'all') searchParams.append('queue', params.queue)
     if (params.limit) searchParams.append('limit', params.limit.toString())
     if (params.offset) searchParams.append('offset', params.offset.toString())
 

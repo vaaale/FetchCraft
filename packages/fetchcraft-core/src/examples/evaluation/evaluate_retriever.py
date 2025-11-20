@@ -144,7 +144,7 @@ async def load_and_index_documents(
         
     # Then index chunks to vector store
     print(f"   Indexing {len(all_chunks)} chunks to vector store...")
-    await vector_index.add_nodes(all_chunks, show_progress=True)
+    await vector_index.add_nodes(DocumentNode, all_chunks, show_progress=True)
     
     print(f"   ✓ Successfully indexed {len(all_chunks)} chunks from {len(documents)} documents!")
     return len(all_chunks)

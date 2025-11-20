@@ -78,7 +78,7 @@ async def test_hybrid_search_with_documents():
             Node(text="Machine learning with Python", embedding=[0.3] * 384),
         ]
 
-        doc_ids = await index.add_nodes(documents)
+        doc_ids = await index.add_nodes(DocumentNode, documents)
         assert len(doc_ids) == 3
 
         # Search with text query (required for hybrid)
@@ -166,7 +166,7 @@ async def test_dense_only_search_still_works():
         Node(text="JavaScript coding", embedding=[0.2] * 384),
     ]
 
-    await index.add_nodes(documents)
+    await index.add_nodes(DocumentNode, documents)
 
     # Search should work without query_text
     results = await index.search_by_text("Python", k=2)
@@ -192,7 +192,7 @@ async def test_hybrid_requires_query_text():
         index = VectorIndex(vector_store=vector_store)
 
         # Add a document
-        await index.add_nodes([Node(text="Test", embedding=[0.1] * 384)])
+        await index.add_nodes(DocumentNode, [Node(text="Test", embedding=[0.1] * 384)])
 
         # Direct search without query_text should raise error
         query_embedding = [0.1] * 384

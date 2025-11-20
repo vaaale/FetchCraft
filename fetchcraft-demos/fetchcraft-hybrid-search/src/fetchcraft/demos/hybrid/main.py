@@ -18,7 +18,6 @@ Usage:
 """
 
 import asyncio
-import os
 import sys
 from pathlib import Path
 
@@ -33,31 +32,10 @@ from fetchcraft.parsing.filesystem import FilesystemDocumentParser
 from fetchcraft.node_parser import HierarchicalNodeParser, SimpleNodeParser
 from fetchcraft.vector_store import QdrantVectorStore
 
-# Configuration
-QDRANT_HOST = "localhost"
-QDRANT_PORT = 6333
-COLLECTION_NAME = "fetchcraft_chatbot"  # Different collection for hybrid search
-DOCUMENTS_PATH = Path(os.getenv("DOCUMENTS_PATH", "Documents"))
+from fetchcraft.demos.hybrid.settings import Settings
 
-# Embeddings configuration (adjust based on your setup)
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "bge-m3")
-EMBEDDING_API_KEY = os.getenv("OPENAI_API_KEY", "sk-321")
-EMBEDDING_BASE_URL = os.getenv("EMBEDDING_BASE_URL", None)  # None = use OpenAI default
-INDEX_ID = "docs-index"
-
-# LLM configuration for the agent
-LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4-turbo")
-LLM_API_KEY = os.getenv("OPENAI_API_KEY", "sk-123")
-
-# Chunking configuration
-CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "8192"))
-CHILD_SIZES = [4096, 1024]
-CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
-USE_HIERARCHICAL_CHUNKING = os.getenv("USE_HIERARCHICAL_CHUNKING", "true").lower() == "true"
-
-# 🔥 HYBRID SEARCH CONFIGURATION
-ENABLE_HYBRID = os.getenv("ENABLE_HYBRID", "true").lower() == "true"
-FUSION_METHOD = os.getenv("FUSION_METHOD", "rrf")  # "rrf" or "dbsf"
+# Initialize settings
+settings = Settings()
 
 
 def collection_exists(client: QdrantClient, collection_name: str) -> bool:
@@ -157,7 +135,7 @@ async def load_and_index_documents(
     print(f"     🔍 Sparse vector (keyword matching)")
     
     # Index all chunks (embeddings will be generated automatically)
-    await vector_index.add_nodes(all_chunks, show_progress=True)
+    await vector_index.add_nodes(DocumentNode, all_chunks, show_progress=True)
     
     print(f"✅ Successfully indexed {len(all_chunks)} chunks with hybrid search!")
     return len(all_chunks)
@@ -180,52 +158,40 @@ async def setup_rag_system():
     # Initialize embeddings
     print("\n1️⃣  Initializing embeddings...")
     embeddings = OpenAIEmbeddings(
-        model=EMBEDDING_MODEL,
-        api_key=EMBEDDING_API_KEY,
-        base_url=EMBEDDING_BASE_URL
+        model=settings.embedding_model,
+        api_key=settings.openai_api_key,
+        base_url=settings.embedding_base_url
     )
 
 
     # Connect to Qdrant
-    print(f"\n2️⃣  Connecting to Qdrant at {QDRANT_HOST}:{QDRANT_PORT}...")
-    client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+    print(f"\n2️⃣  Connecting to Qdrant at {settings.qdrant_host}:{settings.qdrant_port}...")
+    client = QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
     client.get_collections()  # Test connection
     print(f"   ✓ Connected to Qdrant")
     
     # Check if collection exists
-    print(f"\n3️⃣  Checking collection '{COLLECTION_NAME}'...")
-    needs_indexing = not collection_exists(client, COLLECTION_NAME)
-    
-    if needs_indexing:
-        print(f"   ⚠️  Collection '{COLLECTION_NAME}' does not exist - will create and index")
-    else:
-        print(f"   ✓ Collection '{COLLECTION_NAME}' already exists - skipping indexing")
+    print(f"\n3️⃣  Checking collection '{settings.collection_name}'...")
+    needs_indexing = not collection_exists(client, settings.collection_name)
     
     # Create vector store with HYBRID SEARCH enabled
     print(f"\n🔥 Creating vector store with HYBRID SEARCH...")
-    print(f"   • Enable Hybrid: {ENABLE_HYBRID}")
-    print(f"   • Fusion Method: {FUSION_METHOD.upper()}")
-    
-    try:
-        vector_store = QdrantVectorStore(
-            client=client,
-            collection_name=COLLECTION_NAME,
-            embeddings=embeddings,
-            distance="Cosine",
-            enable_hybrid=ENABLE_HYBRID,      # 🔥 Enable hybrid search
-            fusion_method=FUSION_METHOD        # Choose RRF or DBSF
-        )
-        print(f"   ✓ Vector store created with hybrid search enabled!")
-    except ImportError as e:
-        print(f"\n❌ Error: {e}")
-        print("\n💡 Hybrid search requires fastembed:")
-        print("   pip install fastembed")
-        sys.exit(1)
-    
+    print(f"   • Enable Hybrid: {settings.enable_hybrid}")
+    print(f"   • Fusion Method: {settings.fusion_method.upper()}")
+
+    vector_store = QdrantVectorStore(
+        client=client,
+        collection_name=settings.collection_name,
+        embeddings=embeddings,
+        distance="Cosine",
+        enable_hybrid=settings.enable_hybrid,  # 🔥 Enable hybrid search
+        fusion_method=settings.fusion_method  # Choose RRF or DBSF
+    )
+
     # Create vector index with a consistent index_id
     vector_index = VectorIndex(
         vector_store=vector_store,
-        index_id=INDEX_ID
+        index_id=settings.index_id
     )
     needs_indexing = False
     # Index documents if needed
@@ -233,11 +199,11 @@ async def setup_rag_system():
         print(f"\n4️⃣  Indexing documents with hybrid search...")
         num_chunks = await load_and_index_documents(
             vector_index=vector_index,
-            documents_path=DOCUMENTS_PATH,
-            chunk_size=CHUNK_SIZE,
-            child_sizes=CHILD_SIZES,
-            overlap=CHUNK_OVERLAP,
-            use_hierarchical=USE_HIERARCHICAL_CHUNKING
+            documents_path=Path(settings.documents_path),
+            chunk_size=settings.chunk_size,
+            child_sizes=settings.child_sizes,
+            overlap=settings.chunk_overlap,
+            use_hierarchical=settings.use_hierarchical_chunking
         )
         if num_chunks == 0:
             print("\n⚠️  Warning: No documents were indexed!")
@@ -256,7 +222,7 @@ async def setup_rag_system():
     tools = [Tool(tool_func, takes_ctx=True, max_retries=3)]
 
     agent = PydanticAgent.create(
-        model=LLM_MODEL,
+        model=settings.llm_model,
         tools=tools,
         retries=3
     )
@@ -331,33 +297,6 @@ async def repl_loop(agent: PydanticAgent):
         print("─" * 70)
 
 
-def print_error_hints(error: Exception):
-    """Print helpful hints based on the error type."""
-    error_msg = str(error).lower()
-    
-    if "fastembed" in error_msg:
-        print("\n💡 FastEmbed Missing:")
-        print("   - Hybrid search requires fastembed")
-        print("   - Install with: pip install fastembed")
-    elif "api key" in error_msg or "authentication" in error_msg:
-        print("\n💡 API Key Issue:")
-        print("   - Set OPENAI_API_KEY environment variable")
-        print("   - Or configure EMBEDDING_BASE_URL for a custom endpoint")
-    elif "connection" in error_msg or "refused" in error_msg or "qdrant" in error_msg:
-        print("\n💡 Connection Issue:")
-        print("   - Make sure Qdrant is running on localhost:6333")
-        print("   - Start with: docker run -p 6333:6333 qdrant/qdrant")
-    elif "not found" in error_msg or "no such file" in error_msg:
-        print("\n💡 File Path Issue:")
-        print(f"   - Check that {DOCUMENTS_PATH} exists")
-        print("   - Make sure it contains .txt files")
-    elif "pydantic" in error_msg or "import" in error_msg:
-        print("\n💡 Dependency Issue:")
-        print("   - Install required packages: pip install pydantic-ai qdrant-client openai fastembed")
-    else:
-        print("\n💡 For more help, check the README.md file")
-
-
 async def main():
     """Main entry point for the hybrid search demo."""
     try:
@@ -371,7 +310,6 @@ async def main():
         print("\n\n👋 Demo interrupted. Goodbye!")
     except Exception as e:
         print(f"\n❌ Error: {e}")
-        print_error_hints(e)
         import traceback
         traceback.print_exc()
         sys.exit(1)

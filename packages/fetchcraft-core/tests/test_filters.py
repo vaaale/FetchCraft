@@ -71,7 +71,7 @@ async def populated_index(index):
         ),
     ]
     
-    await index.add_nodes(nodes)
+    await index.add_nodes(DocumentNode, nodes)
     return index
 
 

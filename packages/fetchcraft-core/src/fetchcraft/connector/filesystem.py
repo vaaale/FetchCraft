@@ -85,6 +85,8 @@ class FilesystemConnector(Connector):
         self.fs =fs
         self.filter = filter
 
+    def get_name(self) -> str:
+        return f"FilesystemConnector"
 
     async def read(self) -> AsyncIterable[LocalFile]:
         print(f"Ingesting files from {self.path}")

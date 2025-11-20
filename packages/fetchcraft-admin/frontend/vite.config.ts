@@ -11,7 +11,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../src/fetchcraft/admin/frontend/dist',
+    outDir: './dist',
     emptyOutDir: true,
   },
   server: {

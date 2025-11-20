@@ -47,7 +47,7 @@ index = VectorIndex(vector_store=vector_store)
 
 # Index documents (automatically generates both dense and sparse vectors)
 nodes = [Node(text="Your document text here")]
-await index.add_nodes(nodes)
+await index.add_nodes(DocumentNode, nodes)
 
 # Search (automatically uses hybrid search)
 results = await index.search_by_text("your query", k=5)
