@@ -1123,7 +1123,7 @@ wheels = [
 
 [[package]]
 name = "fetchcraft"
-version = "0.4.0"
+version = "0.4.1"
 source = { virtual = "." }
 dependencies = [
     { name = "fetchcraft-admin" },
@@ -1150,7 +1150,7 @@ requires-dist = [
 
 [[package]]
 name = "fetchcraft-admin"
-version = "0.4.0"
+version = "0.4.1"
 source = { editable = "packages/fetchcraft-admin" }
 dependencies = [
     { name = "asyncpg" },
@@ -1173,7 +1173,7 @@ requires-dist = [
 
 [[package]]
 name = "fetchcraft-core"
-version = "0.4.0"
+version = "0.4.1"
 source = { editable = "packages/fetchcraft-core" }
 dependencies = [
     { name = "chromadb" },
@@ -1245,7 +1245,7 @@ provides-extras = ["dev", "qdrant", "postgres"]
 
 [[package]]
 name = "fetchcraft-gradio-chatbot"
-version = "0.4.0"
+version = "0.4.1"
 source = { editable = "fetchcraft-demos/fetchcraft-gradio-chatbot" }
 dependencies = [
     { name = "fetchcraft-core" },
@@ -1260,7 +1260,7 @@ requires-dist = [
 
 [[package]]
 name = "fetchcraft-hybrid-search"
-version = "0.4.0"
+version = "0.4.1"
 source = { editable = "fetchcraft-demos/fetchcraft-hybrid-search" }
 dependencies = [
     { name = "fetchcraft-core" },
@@ -1271,7 +1271,7 @@ requires-dist = [{ name = "fetchcraft-core", editable = "packages/fetchcraft-cor
 
 [[package]]
 name = "fetchcraft-mcp-server"
-version = "0.4.0"
+version = "0.4.1"
 source = { editable = "fetchcraft-demos/fetchcraft-mcp-server" }
 dependencies = [
     { name = "fastmcp" },
@@ -1288,7 +1288,7 @@ requires-dist = [
 
 [[package]]
 name = "fetchcraft-openai-server"
-version = "0.4.0"
+version = "0.4.1"
 source = { editable = "fetchcraft-demos/fetchcraft-openai-server" }
 dependencies = [
     { name = "fetchcraft-core" },
@@ -1299,7 +1299,7 @@ requires-dist = [{ name = "fetchcraft-core", editable = "packages/fetchcraft-cor
 
 [[package]]
 name = "fetchcraft-openapi-server"
-version = "0.4.0"
+version = "0.4.1"
 source = { editable = "fetchcraft-demos/fetchcraft-openapi-server" }
 dependencies = [
     { name = "fetchcraft-core" },
@@ -1314,7 +1314,7 @@ requires-dist = [
 
 [[package]]
 name = "fetchcraft-parsing-docling"
-version = "0.4.0"
+version = "0.4.1"
 source = { editable = "packages/fetchcraft-parsing-docling" }
 dependencies = [
     { name = "docling" },

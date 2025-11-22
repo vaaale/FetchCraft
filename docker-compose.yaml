@@ -138,38 +138,12 @@ services:
       - QDRANT_HOST=wingman.akhbar.home
       - QDRANT_PORT=6333
       - OPENAI_API_KEY=sk-321
-      - OPENAI_BASE_URL=http://wingman.akhbar.home:8000/v1
+#      - OPENAI_BASE_URL=http://wingman.akhbar.home:8000/v1
     depends_on:
       - qdrant
     restart: unless-stopped
     networks: [ 'demo-net' ]
 
-#  fetchcraft-ingestion-mcp-server:
-##    build:
-##      context: .
-##      dockerfile: Dockerfile
-#    image: fetchcraft
-#    entrypoint: ["uv", "run", "fetchcraft-ingestion-admin"]
-#    hostname: ingestion-mcp-server
-#    ports:
-#      - "8004:8001"
-#    volumes:
-#      - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
-#      - ./ingestion_queue.db:/app/ingestion_queue.db
-#    env_file:
-#      - ./.env
-#    environment:
-#      - HOST=0.0.0.0
-#      - PORT=8001
-#      - QDRANT_HOST=qdrant
-#      - QDRANT_PORT=6333
-#      - DOCUMENTS_PATH=/app/Documents
-#    depends_on:
-#      - qdrant
-#      - mongodb
-#      - fetchcraft-docling-server
-#    restart: unless-stopped
-#    networks: [ 'demo-net' ]
 
   librechat:
     image: librechat-dev-alex2
@@ -191,6 +165,8 @@ services:
       - MEILI_HOST=http://meilisearch:7700
       - RAG_PORT=${RAG_PORT:-8000}
       - RAG_API_URL=http://rag_api:${RAG_PORT:-8010}
+      - OPENAI_API_KEY=sk-321
+      - OPENAI_BASE_URL=http://wizzo.akhbar.home:8000/v1
     env_file:
       - ./librechat.env
     volumes:

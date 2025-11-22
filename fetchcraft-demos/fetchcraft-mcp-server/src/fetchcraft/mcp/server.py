@@ -257,7 +257,7 @@ def build_mcp_server(settings: MCPServerSettings) -> FastMCP:
             for node in paginated_nodes:
                 # Get filename from metadata
                 source = node.node.metadata.get("source", "Unknown")
-                filename = node.node.metadata.get("filename", "N/A")
+                filename = node.node.metadata.get("filename", Path(source).name)
 
                 files.append({
                     "filename": filename,
