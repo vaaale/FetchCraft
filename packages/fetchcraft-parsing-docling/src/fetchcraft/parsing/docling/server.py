@@ -362,6 +362,9 @@ async def parse_single_file(
     """
     Parse a single file and return DocumentNodes.
     
+    This function runs the CPU-intensive parsing in a thread pool
+    to avoid blocking the event loop.
+    
     Args:
         file: Uploaded file
         temp_dir: Temporary directory for file storage
@@ -369,7 +372,6 @@ async def parse_single_file(
     Returns:
         ParseResponse with parsing results
     """
-    start_time = time.time()
     filename = file.filename or "unknown"
     
     try:
@@ -393,41 +395,26 @@ async def parse_single_file(
             buffer.write(content)
         
         # Use file semaphore to limit concurrent file processing
+        # Run parsing in thread pool to avoid blocking the event loop
         async with app_state.file_semaphore:
-            # Create parser for this file
-            parser = DoclingDocumentParser.from_file(
-                file_path=temp_path,
-                page_chunks=PAGE_CHUNKS,
-                do_ocr=DO_OCR,
-                do_table_structure=DO_TABLE_STRUCTURE
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                app_state.executor,
+                parse_file_sync,
+                temp_path
             )
-            
-            # Parse document and collect nodes
-            nodes = []
-            async for node in parser.get_documents():
-                # Convert node to dictionary for JSON serialization
-                nodes.append(node.model_dump())
-            
-            processing_time = (time.time() - start_time) * 1000
-            
-            return ParseResponse(
-                filename=filename,
-                success=True,
-                nodes=nodes,
-                error=None,
-                num_nodes=len(nodes),
-                processing_time_ms=round(processing_time, 2)
-            )
+            # Yield control back to event loop
+            await asyncio.sleep(0)
+            return result
             
     except Exception as e:
-        processing_time = (time.time() - start_time) * 1000
         return ParseResponse(
             filename=filename,
             success=False,
             nodes=[],
             error=str(e),
             num_nodes=0,
-            processing_time_ms=round(processing_time, 2)
+            processing_time_ms=0
         )
 
 
