@@ -7,11 +7,14 @@ This FastAPI application provides a web interface for:
 - Viewing job and document status
 - Retrying failed documents
 """
+import json
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
+
+from fetchcraft.node import DocumentNode
 
 try:
     import asyncpg
@@ -43,6 +46,8 @@ from fetchcraft.parsing.text_file_parser import TextFileParser
 from fetchcraft.vector_store import QdrantVectorStore
 from fetchcraft.admin.services.ingestion_service import IngestionService
 from fetchcraft.admin.services.pipeline_factory import IngestionPipelineFactory
+from fetchcraft.admin.services.callback_service import CallbackService
+from fetchcraft.admin.api.models import DoclingNodeCallback, DoclingCompletionCallback
 from fetchcraft.admin.config import settings
 
 # Setup logging
@@ -68,6 +73,7 @@ class AppState:
     ingestion_service: Optional[IngestionService] = None
     job_repo: Optional[PostgresJobRepository] = None
     doc_repo: Optional[PostgresDocumentRepository] = None
+    queue_backend: Optional[AsyncPostgresQueue] = None
 
 app_state = AppState()
 
@@ -175,6 +181,23 @@ class IngestionStatusResponse(BaseModel):
     status: str  # "running", "stopped", or "error"
     pid: Optional[int]
 
+class DoclingNodeCallback(BaseModel):
+    """Callback payload from docling server for a single node."""
+    job_id: str
+    filename: str
+    node_index: int
+    total_nodes: int
+    node: Dict[str, Any]
+
+class DoclingCompletionCallback(BaseModel):
+    """Callback payload from docling server for completion."""
+    job_id: str
+    filename: str
+    status: str  # "completed" or "failed"
+    total_nodes: Optional[int] = None
+    processing_time_ms: Optional[float] = None
+    error: Optional[str] = None
+
 # ============================================================================
 # FastAPI Application
 # ============================================================================
@@ -191,14 +214,25 @@ async def lifespan(app: FastAPI):
     logger.info(f"📁 Documents: {settings.documents_path}")
     
     try:
+        # Calculate pool size based on workers
+        # Formula: base connections + (workers * 2) for main+remote queues + overhead
+        # Each worker needs connections for: lease_next, ack/nack, enqueue operations
+        min_pool_size = max(settings.pool_min_size, 5)
+        max_pool_size = max(settings.pool_max_size, settings.num_workers * 3 + 10)
+        
+        logger.info(
+            f"📊 Calculated connection pool size: {min_pool_size}-{max_pool_size} "
+            f"(based on {settings.num_workers} workers)"
+        )
+        
         # Initialize database pool
         app_state.pool = await asyncpg.create_pool(
             settings.postgres_url,
-            min_size=settings.pool_min_size,
-            max_size=settings.pool_max_size,
+            min_size=min_pool_size,
+            max_size=max_pool_size,
             command_timeout=60,
         )
-        logger.info(f"✓ Connected to PostgreSQL (pool: {settings.pool_min_size}-{settings.pool_max_size})")
+        logger.info(f"✓ Connected to PostgreSQL (pool: {min_pool_size}-{max_pool_size})")
         
         # Initialize repositories
         app_state.job_repo = PostgresJobRepository(app_state.pool)
@@ -210,13 +244,15 @@ async def lifespan(app: FastAPI):
         await app_state.doc_repo._ensure_schema()
         logger.info("✓ Database schemas initialized")
         
-        # Initialize queue backend
-        queue_backend = AsyncPostgresQueue(settings.postgres_url)
-        logger.info("✓ Queue backend initialized")
+        # Initialize queue backend - IMPORTANT: Pass the shared pool
+        app_state.queue_backend = AsyncPostgresQueue(pool=app_state.pool)
+        # Initialize the messages table (required when using external pool)
+        await app_state.queue_backend._init_db()
+        logger.info("✓ Queue backend initialized (using shared connection pool)")
         
         # Initialize pipeline factory
         pipeline_factory = IngestionPipelineFactory(
-            queue_backend=queue_backend,
+            queue_backend=app_state.queue_backend,
             job_repo=app_state.job_repo,
             doc_repo=app_state.doc_repo,
             document_root=settings.documents_path,
@@ -320,9 +356,15 @@ def _get_ingestion_dependencies():
         index_id=settings.index_id
     )
     
+    # Build callback URL for docling async parsing
+    callback_url = f"{settings.callback_base_url}/api/callbacks/parsing"
+    
     parser_map = {
         "default": TextFileParser(),
-        "application/pdf": RemoteDoclingParser(docling_url=settings.docling_server)
+        "application/pdf": RemoteDoclingParser(
+            docling_url=settings.docling_server,
+            callback_url=callback_url
+        )
     }
     
     return {
@@ -545,6 +587,48 @@ async def delete_job(
         raise
     except Exception as e:
         logger.error(f"Error deleting job: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/jobs/{job_id}/stop")
+async def stop_job(job_id: str):
+    """
+    Stop a running or pending job.
+    
+    This stops the pipeline workers and marks the job as cancelled.
+    """
+    if not app_state.ingestion_service:
+        raise HTTPException(status_code=503, detail="Service not initialized")
+    
+    try:
+        # Stop the job
+        stopped = await app_state.ingestion_service.stop_job(job_id)
+        
+        if not stopped:
+            # Get job to provide better error message
+            job = await app_state.ingestion_service.get_job(job_id)
+            if not job:
+                raise HTTPException(status_code=404, detail="Job not found")
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Job cannot be stopped. Current status: {job.status.value}"
+                )
+        
+        # Get the updated job
+        job = await app_state.ingestion_service.get_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found after stopping")
+        
+        return {
+            "message": f"Job '{job.name}' stopped successfully",
+            "job_id": job_id,
+            "status": job.status.value
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error stopping job: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/jobs/{job_id}/restart", response_model=JobResponse)
@@ -841,6 +925,93 @@ async def stop_ingestion():
         status_code=400,
         detail="Legacy ingestion stop is not supported in V2. Jobs run to completion or failure."
     )
+
+# ============================================================================
+# Docling Parsing Callbacks
+# ============================================================================
+
+@app.post("/api/callbacks/parsing")
+async def docling_parsing_callback(callback: Dict[str, Any]):
+    """
+    Receive callbacks from the docling parsing server.
+    
+    This endpoint handles two types of callbacks:
+    1. Node callbacks - Each parsed node is sent individually
+    2. Completion callbacks - Final status when all nodes are processed
+    
+    The callback uses job_id as the correlation ID to track which document
+    the nodes belong to.
+    """
+    # Validate required dependencies
+    if not app_state.doc_repo or not app_state.job_repo or not app_state.queue_backend:
+        raise HTTPException(status_code=503, detail="Service not initialized")
+    
+    # Create callback service instance
+    callback_service = CallbackService(
+        doc_repo=app_state.doc_repo,
+        job_repo=app_state.job_repo,
+        queue_backend=app_state.queue_backend
+    )
+    
+    try:
+        # Determine callback type based on presence of 'node' field
+        if "node" in callback:
+            # Node callback - process and enqueue the node
+            node_callback = DoclingNodeCallback(**callback)
+            
+            logger.info(
+                f"Received docling node callback: job_id={node_callback.job_id}, "
+                f"filename={node_callback.filename}, node={node_callback.node_index+1}/{node_callback.total_nodes}"
+            )
+            
+            # Delegate to service
+            doc_id = await callback_service.handle_node_callback(
+                job_id=node_callback.job_id,
+                filename=node_callback.filename,
+                node_index=node_callback.node_index,
+                total_nodes=node_callback.total_nodes,
+                node=node_callback.node
+            )
+            
+            if not doc_id:
+                logger.error(f"Parent document not found for docling_job_id={node_callback.job_id}")
+                raise HTTPException(status_code=404, detail="Parent document not found")
+            
+            return {"status": "success", "document_id": doc_id}
+        
+        elif "status" in callback:
+            # Completion callback - mark parsing as complete
+            completion_callback = DoclingCompletionCallback(**callback)
+            
+            logger.info(
+                f"Received docling completion callback: job_id={completion_callback.job_id}, "
+                f"status={completion_callback.status}, total_nodes={completion_callback.total_nodes}"
+            )
+            
+            # Delegate to service
+            success = await callback_service.handle_completion_callback(
+                job_id=completion_callback.job_id,
+                filename=completion_callback.filename,
+                status=completion_callback.status,
+                total_nodes=completion_callback.total_nodes,
+                error=completion_callback.error
+            )
+            
+            if not success:
+                logger.error(f"Parent document not found for docling_job_id={completion_callback.job_id}")
+                raise HTTPException(status_code=404, detail="Parent document not found")
+            
+            return {"status": "success"}
+        
+        else:
+            logger.warning(f"Unknown callback type: {callback}")
+            raise HTTPException(status_code=400, detail="Unknown callback type")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing docling callback: {e}", exc_info=True)
+        raise
 
 # ============================================================================
 # Static File Serving

@@ -27,8 +27,16 @@ class Settings(BaseSettings):
         default="postgresql://postgres:password@localhost:5432/ingestion",
         description="PostgreSQL connection URL"
     )
-    pool_min_size: int = Field(default=5, ge=1, description="Minimum connection pool size")
-    pool_max_size: int = Field(default=10, ge=1, description="Maximum connection pool size")
+    pool_min_size: int = Field(
+        default=5, 
+        ge=1, 
+        description="Minimum connection pool size (will be auto-calculated based on workers if needed)"
+    )
+    pool_max_size: int = Field(
+        default=20, 
+        ge=1, 
+        description="Maximum connection pool size (recommended: num_workers * 3 + 10)"
+    )
     
     # Server configuration
     host: str = Field(default="0.0.0.0", description="Server host")
@@ -46,6 +54,10 @@ class Settings(BaseSettings):
     docling_server: str = Field(
         default="http://localhost:8001",
         description="Docling parser server URL"
+    )
+    callback_base_url: str = Field(
+        default="http://localhost:8080",
+        description="Base URL for callbacks from external services"
     )
     mongo_uri: str = Field(
         default="mongodb://localhost:27017",

@@ -127,6 +127,12 @@ export const apiV2 = {
     })
   },
 
+  stopJob: (jobId: string): Promise<{ message: string; job_id: string; status: string }> => {
+    return fetchAPI(`/jobs/${jobId}/stop`, {
+      method: 'POST',
+    })
+  },
+
   // Documents
   listJobDocuments: (
     jobId: string,

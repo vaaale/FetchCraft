@@ -137,6 +137,7 @@ Thumbs.db
 Documents/
 pdfs/
 evaluation_results.json
+data/
 
 # Docker
 docker-compose.override.yml

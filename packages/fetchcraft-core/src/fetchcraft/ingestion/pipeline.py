@@ -424,18 +424,36 @@ class TrackedIngestionPipeline:
         poll_interval: float = 0.5,
         grace_seconds: float = 2.0,
     ):
-        """Wait until all queues are empty."""
+        """Wait until all queues are empty and no documents are in PROCESSING status."""
         logger.info("Waiting for pipeline to become idle...")
         iteration = 0
         
         while True:
-            has_work = await self.backend.has_pending(MAIN_QUEUE, REMOTE_QUEUE)
-            if not has_work:
-                logger.info(f"Queues empty after {iteration} checks")
-                break
+            try:
+                has_work = await self.backend.has_pending(MAIN_QUEUE, REMOTE_QUEUE)
+                
+                # Also check for documents still in PROCESSING (e.g., parent docs waiting for children)
+                processing_docs = await self.doc_repo.get_documents_by_status(
+                    self.job.id,
+                    DocumentStatus.PROCESSING
+                )
+                
+                if not has_work and len(processing_docs) == 0:
+                    logger.info(f"Queues empty and no processing documents after {iteration} checks")
+                    break
+                
+                if iteration % 20 == 0:
+                    logger.info(
+                        f"Still processing... (iteration {iteration}, "
+                        f"processing_docs={len(processing_docs)})"
+                    )
             
-            if iteration % 20 == 0:
-                logger.info(f"Still processing... (iteration {iteration})")
+            except Exception as e:
+                # Handle pool closing during shutdown gracefully
+                if "pool is closing" in str(e):
+                    logger.warning("Database pool closing - stopping idle check")
+                    return
+                raise
             
             iteration += 1
             await asyncio.sleep(poll_interval)
@@ -445,10 +463,24 @@ class TrackedIngestionPipeline:
         deadline = asyncio.get_event_loop().time() + grace_seconds
         
         while asyncio.get_event_loop().time() < deadline:
-            has_work = await self.backend.has_pending(MAIN_QUEUE, REMOTE_QUEUE)
-            if has_work:
-                logger.debug("Work appeared during grace period, restarting wait...")
-                return await self._wait_until_idle(poll_interval, grace_seconds)
+            try:
+                has_work = await self.backend.has_pending(MAIN_QUEUE, REMOTE_QUEUE)
+                processing_docs = await self.doc_repo.get_documents_by_status(
+                    self.job.id,
+                    DocumentStatus.PROCESSING
+                )
+                
+                if has_work or len(processing_docs) > 0:
+                    logger.debug("Work appeared during grace period, restarting wait...")
+                    return await self._wait_until_idle(poll_interval, grace_seconds)
+            
+            except Exception as e:
+                # Handle pool closing during shutdown gracefully
+                if "pool is closing" in str(e):
+                    logger.warning("Database pool closing during grace period - stopping idle check")
+                    return
+                raise
+            
             await asyncio.sleep(poll_interval)
         
         logger.info("Pipeline is idle, all processing complete")
@@ -543,6 +575,25 @@ class TrackedIngestionPipeline:
                 # Update step as completed
                 await self.doc_repo.update_step_status(doc_id, step.name, "completed")
                 
+                # Check if this is a parent document for async parsing
+                # If so, mark it as processing and stop here - it will be completed via callback
+                if isinstance(result, DocumentRecord):
+                    if result.metadata.get('is_parent_document') == 'true':
+                        # IMPORTANT: Save the metadata first (includes docling_job_id)
+                        await self.doc_repo.update_document_metadata(doc_id, result.metadata)
+                        
+                        await self.doc_repo.update_document_status(
+                            doc_id,
+                            DocumentStatus.PROCESSING,
+                            current_step="waiting_for_async_parsing"
+                        )
+                        logger.info(
+                            f"Document {doc.source} is parent for async parsing "
+                            f"(job_id={result.metadata.get('docling_job_id')}), "
+                            f"halting pipeline - will be completed via callback"
+                        )
+                        return
+                
                 # Handle fan-out (multiple documents from one)
                 if not isinstance(result, DocumentRecord):
                     logger.debug(f"Step '{step.name}' produced fan-out for {doc.source}")
@@ -576,6 +627,11 @@ class TrackedIngestionPipeline:
                 DocumentStatus.COMPLETED
             )
             logger.info(f"Document {doc.source} completed successfully")
+            
+            # Check if this is a child node from async parsing
+            # If so, check if all siblings are done and mark parent as completed
+            if doc.metadata.get('parent_document_id'):
+                await self._check_parent_completion(doc.metadata['parent_document_id'], doc.metadata.get('total_nodes', 0))
             
         except Exception as e:
             # Mark document as failed
@@ -628,6 +684,67 @@ class TrackedIngestionPipeline:
                 "current_step_idx": step_idx + 1,
             }
         )
+    
+    async def _check_parent_completion(self, parent_doc_id: str, expected_children: int):
+        """
+        Check if all child nodes for a parent document have completed.
+        If so, mark the parent document as completed.
+        """
+        try:
+            # Get all child documents for this parent
+            from fetchcraft.ingestion.repository import PostgresDocumentRepository
+            if not isinstance(self.doc_repo, PostgresDocumentRepository):
+                return  # Can't check without direct DB access
+            
+            # Count completed children
+            async with self.doc_repo.pool.acquire() as conn:
+                completed_count = await conn.fetchval(
+                    """
+                    SELECT COUNT(*) FROM ingestion_documents
+                    WHERE metadata->>'parent_document_id' = $1
+                    AND status = 'completed'
+                    """,
+                    parent_doc_id
+                )
+                
+                total_children = await conn.fetchval(
+                    """
+                    SELECT COUNT(*) FROM ingestion_documents
+                    WHERE metadata->>'parent_document_id' = $1
+                    """,
+                    parent_doc_id
+                )
+                
+                logger.info(
+                    f"Parent {parent_doc_id}: {completed_count}/{total_children} children completed "
+                    f"(expected: {expected_children})"
+                )
+                
+                # Check if all children are done
+                # Note: We check if all actual children are completed, not if count matches expected
+                # The expected count might differ slightly due to parsing edge cases
+                if completed_count == total_children and total_children > 0:
+                    # Verify parent is in PROCESSING state before updating
+                    parent = await self.doc_repo.get_document(parent_doc_id)
+                    if parent and parent.status == DocumentStatus.PROCESSING:
+                        # Mark parent as completed
+                        await self.doc_repo.update_document_status(
+                            parent_doc_id,
+                            DocumentStatus.COMPLETED
+                        )
+                        logger.info(
+                            f"All {total_children} child nodes completed - "
+                            f"marked parent document {parent_doc_id} as COMPLETED"
+                        )
+                    else:
+                        logger.debug(f"Parent {parent_doc_id} already in final state: {parent.status if parent else 'not found'}")
+                elif total_children > 0:
+                    logger.debug(
+                        f"Parent {parent_doc_id} still waiting: {completed_count}/{total_children} children done"
+                    )
+        
+        except Exception as e:
+            logger.error(f"Error checking parent completion for {parent_doc_id}: {e}", exc_info=True)
     
     async def _write_to_sinks(self, doc: DocumentRecord):
         """Write document to all sinks."""

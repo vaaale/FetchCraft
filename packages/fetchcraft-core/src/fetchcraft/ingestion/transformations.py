@@ -160,6 +160,27 @@ class ParsingTransformation(ITransformation):
             # Most files parse to a single document; if multiple, we take the first
             primary_doc = parsed_docs[0]
             
+            # Check if this is an async parsing marker document
+            if primary_doc.metadata.get('async_parsing') == 'true':
+                # This is a parent document for async parsing
+                # Store the marker doc and metadata, then return the record
+                # The parent document should NOT continue through the pipeline
+                # It will be marked as completed when the completion callback arrives
+                record.metadata["document"] = primary_doc.model_dump()
+                record.metadata["file_path"] = file_path
+                record.metadata["mimetype"] = mimetype
+                
+                # Add job tracking metadata
+                record.metadata["docling_job_id"] = primary_doc.metadata.get('docling_job_id')
+                record.metadata["is_parent_document"] = 'true'
+                record.metadata["nodes_received_count"] = 0
+                
+                logger.info(
+                    f"Async parsing initiated for {record.source}, "
+                    f"job_id={primary_doc.metadata.get('docling_job_id')}"
+                )
+                return record
+            
             # If there are multiple documents, log this
             if len(parsed_docs) > 1:
                 logger.info(

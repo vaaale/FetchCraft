@@ -120,7 +120,7 @@ class AsyncDoclingParserClient:
         tasks = [parse_with_semaphore(path) for path in file_paths]
         return await asyncio.gather(*tasks)
 
-    async def submit_job(self, *file_paths) -> Dict[str, Any]:
+    async def submit_job(self, *file_paths, callback_url: str = None) -> Dict[str, Any]:
         """
         Submit files for parsing and return immediately with a job ID.
         
@@ -130,6 +130,7 @@ class AsyncDoclingParserClient:
         
         Args:
             *file_paths: Variable number of file paths (str or Path)
+            callback_url: Optional callback URL to receive nodes as they are parsed
             
         Returns:
             Job submission response with job_id
@@ -141,6 +142,9 @@ class AsyncDoclingParserClient:
             if not path.exists():
                 raise FileNotFoundError(f"File not found: {path}")
             data.add_field('files', open(path, 'rb'), filename=path.name)
+        
+        if callback_url:
+            data.add_field('callback_url', callback_url)
 
         async with aiohttp.ClientSession() as session:
             async with session.post(f"{self.base_url}/submit", data=data) as response:

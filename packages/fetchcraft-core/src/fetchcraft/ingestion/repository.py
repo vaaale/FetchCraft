@@ -215,6 +215,21 @@ class IDocumentRepository(ABC):
         pass
     
     @abstractmethod
+    async def update_document_metadata(
+        self,
+        doc_id: str,
+        metadata: Dict[str, Any]
+    ) -> None:
+        """
+        Update a document's metadata.
+        
+        Args:
+            doc_id: The document ID
+            metadata: New metadata dictionary
+        """
+        pass
+    
+    @abstractmethod
     async def increment_retry_count(self, doc_id: str) -> int:
         """
         Increment document retry count.
@@ -696,6 +711,22 @@ class PostgresDocumentRepository(IDocumentRepository):
                 """,
                 [step_name],
                 json.dumps(step_status),
+                doc_id,
+            )
+    
+    async def update_document_metadata(
+        self,
+        doc_id: str,
+        metadata: Dict[str, Any]
+    ) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE ingestion_documents 
+                SET metadata = $1::jsonb
+                WHERE id = $2
+                """,
+                json.dumps(metadata),
                 doc_id,
             )
     

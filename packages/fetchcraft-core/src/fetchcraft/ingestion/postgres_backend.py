@@ -67,25 +67,33 @@ class AsyncPostgresQueue(AsyncQueueBackend):
     and JSONB for flexible message body storage.
     
     Args:
-        connection_string: PostgreSQL connection string
-        pool_min_size: Minimum number of connections in the pool
-        pool_max_size: Maximum number of connections in the pool
+        connection_string: PostgreSQL connection string (optional if pool provided)
+        pool_min_size: Minimum number of connections in the pool (ignored if pool provided)
+        pool_max_size: Maximum number of connections in the pool (ignored if pool provided)
+        pool: Existing asyncpg Pool to use (recommended for sharing pools)
     """
     
     def __init__(
         self,
-        connection_string: str,
+        connection_string: Optional[str] = None,
         pool_min_size: int = 10,
         pool_max_size: int = 20,
+        pool: Optional[asyncpg.Pool] = None,
     ):
+        if pool is None and connection_string is None:
+            raise ValueError("Either connection_string or pool must be provided")
+        
         self.connection_string = connection_string
         self.pool_min_size = pool_min_size
         self.pool_max_size = pool_max_size
-        self._pool: Optional[asyncpg.Pool] = None
+        self._pool: Optional[asyncpg.Pool] = pool
+        self._owns_pool = pool is None  # Track if we created the pool
     
     async def _ensure_pool(self) -> asyncpg.Pool:
-        """Lazily create connection pool on first use."""
+        """Lazily create connection pool on first use (if not provided)."""
         if self._pool is None:
+            if self.connection_string is None:
+                raise ValueError("Cannot create pool without connection_string")
             self._pool = await asyncpg.create_pool(
                 self.connection_string,
                 min_size=self.pool_min_size,
@@ -443,3 +451,9 @@ class AsyncPostgresQueue(AsyncQueueBackend):
             )
             
             return int(result.split()[-1]) > 0 if result else False
+    
+    async def close(self):
+        """Close the connection pool if we own it."""
+        if self._pool and self._owns_pool:
+            await self._pool.close()
+            self._pool = None

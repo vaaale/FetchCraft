@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Folder, Plus, RefreshCw, CheckCircle, XCircle, Clock, Loader, Trash2, RotateCcw } from 'lucide-react'
+import { Folder, Plus, RefreshCw, CheckCircle, XCircle, Clock, Loader, Trash2, RotateCcw, StopCircle } from 'lucide-react'
 import { apiV2, Job } from '../api_v2'
 import CreateJobModal from './CreateJobModal'
 import JobDetailsModal from './JobDetailsModal'
@@ -42,6 +42,8 @@ export default function JobsTab() {
         return <Loader className="w-5 h-5 text-blue-600 animate-spin" />
       case 'pending':
         return <Clock className="w-5 h-5 text-yellow-600" />
+      case 'cancelled':
+        return <StopCircle className="w-5 h-5 text-orange-600" />
       default:
         return <Clock className="w-5 h-5 text-gray-400" />
     }
@@ -58,6 +60,8 @@ export default function JobsTab() {
         return `${baseClasses} bg-blue-100 text-blue-800`
       case 'pending':
         return `${baseClasses} bg-yellow-100 text-yellow-800`
+      case 'cancelled':
+        return `${baseClasses} bg-orange-100 text-orange-800`
       default:
         return `${baseClasses} bg-gray-100 text-gray-800`
     }
@@ -69,7 +73,11 @@ export default function JobsTab() {
   }
 
   const handleDeleteJob = async (job: Job) => {
-    if (!confirm(`Are you sure you want to delete job "${job.name}"? This will also delete all associated documents.`)) {
+    const documentsNote = job.status === 'cancelled' 
+      ? ' This will also delete all associated documents and any partially processed data.'
+      : ' This will also delete all associated documents.'
+    
+    if (!confirm(`Are you sure you want to delete job "${job.name}"?${documentsNote}`)) {
       return
     }
 
@@ -94,6 +102,19 @@ export default function JobsTab() {
     }
   }
 
+  const handleStopJob = async (job: Job) => {
+    if (!confirm(`Are you sure you want to stop job "${job.name}"? The job will be cancelled and marked as stopped.`)) {
+      return
+    }
+
+    try {
+      await apiV2.stopJob(job.id)
+      fetchJobs()
+    } catch (err) {
+      alert(`Failed to stop job: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Header with Actions */}
@@ -110,6 +131,7 @@ export default function JobsTab() {
             <option value="running">Running</option>
             <option value="completed">Completed</option>
             <option value="failed">Failed</option>
+            <option value="cancelled">Cancelled</option>
           </select>
           <button
             onClick={fetchJobs}
@@ -216,7 +238,16 @@ export default function JobsTab() {
                         >
                           View Details
                         </button>
-                        {(job.status === 'completed' || job.status === 'failed') && (
+                        {(job.status === 'running' || job.status === 'pending') && (
+                          <button
+                            onClick={() => handleStopJob(job)}
+                            className="p-1 text-orange-600 hover:text-orange-900 hover:bg-orange-50 rounded"
+                            title="Stop job"
+                          >
+                            <StopCircle className="w-4 h-4" />
+                          </button>
+                        )}
+                        {(job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') && (
                           <>
                             <button
                               onClick={() => handleRestartJob(job)}
