@@ -1,0 +1,30 @@
+[project]
+name = "fetchcraft-mcp-server"
+version = "0.1.0"
+description = "General purpose MCP server for Fetchcraft"
+requires-python = ">=3.12, <3.14"
+
+dependencies = [
+    "fastapi>=0.121.3",
+    "fastmcp",
+    "uvicorn",
+]
+
+[project.scripts]
+fetchcraft-mcp = "fetchcraft.mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+sources = ["src"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fetchcraft/"]
+
+[tool.uv]
+src-layout = true
+
+[tool.uv.sources]
+fetchcraft-core = { workspace = true }

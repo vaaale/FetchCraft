@@ -351,12 +351,12 @@ services:
       - QDRANT_PORT=6333
       - ENABLE_HYBRID=true
       - FUSION_METHOD=rrf
-      - DOCUMENTS_PATH=/app/Documents
+      - DOCUMENTS_PATH=/api/Documents
       - OPENAI_API_KEY=${OPENAI_API_KEY}
     depends_on:
       - qdrant
     volumes:
-      - ./Documents:/app/Documents
+      - ./Documents:/api/Documents
 
 volumes:
   qdrant_storage:

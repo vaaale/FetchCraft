@@ -12,7 +12,7 @@ Features:
 - 📊 Source document display
 
 Usage:
-    python -m demo.gradio_chatbot.app
+    python -m demo.gradio_chatbot.api
 """
 
 import asyncio
@@ -543,7 +543,7 @@ def create_gradio_interface():
 
 
 async def initialize_system():
-    """Initialize the RAG system before starting the app."""
+    """Initialize the RAG system before starting the api."""
 
     try:
         logger.info("Starting system initialization...")

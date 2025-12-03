@@ -77,7 +77,7 @@ export EMBEDDING_MODEL="bge-m3"
 
 ```bash
 cd /path/to/fetchcraft
-python -m demo.gradio_chatbot.app
+python -m demo.gradio_chatbot.api
 ```
 
 The app will be available at: **http://localhost:7860**
@@ -243,7 +243,7 @@ ls $DOCUMENTS_PATH
 ```bash
 # Delete the collection and restart
 qdrant-cli collection delete fetchcraft_chatbot
-python -m demo.gradio_chatbot.app
+python -m demo.gradio_chatbot.api
 ```
 
 ### Poor Results
@@ -298,7 +298,7 @@ export LLM_MODEL="your-model-name"
 By default, the app binds to `0.0.0.0` (all interfaces):
 
 ```python
-# In app.py, change to localhost only:
+# In api.py, change to localhost only:
 interface.launch(
     server_name="127.0.0.1",  # Localhost only
     server_port=7860
@@ -362,7 +362,7 @@ interface.launch(
 ### Change Theme
 
 ```python
-# In app.py
+# In api.py
 interface = gr.Blocks(
     theme=gr.themes.Glass(),  # Or Soft(), Monochrome(), etc.
     ...
@@ -417,7 +417,7 @@ mkdir test_docs
 echo "Test document content" > test_docs/test.txt
 
 # Run with test configuration
-DOCUMENTS_PATH=test_docs python -m demo.gradio_chatbot.app
+DOCUMENTS_PATH=test_docs python -m demo.gradio_chatbot.api
 ```
 
 ## 📚 Related Documentation

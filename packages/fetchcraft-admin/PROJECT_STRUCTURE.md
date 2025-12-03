@@ -308,7 +308,7 @@ fetchcraft-admin
 or
 
 ```bash
-uvicorn fetchcraft.admin.server:app --host 0.0.0.0 --port 8080
+uvicorn fetchcraft.admin.server:api --host 0.0.0.0 --port 8080
 ```
 
 ### With Process Manager (systemd)

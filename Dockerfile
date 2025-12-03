@@ -16,7 +16,7 @@ COPY . .
 RUN uv sync --frozen
 
 # Create Documents directory
-RUN mkdir -p /app/Documents
+RUN mkdir -p /api/Documents
 
 # Expose the default port
 #EXPOSE 8001

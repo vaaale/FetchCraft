@@ -268,7 +268,7 @@ async def query(request: QueryRequest):
         request: Query request containing the question and optional parameters
 
     Returns:
-        QueryResponse with the answer and optional citations
+        QueryStructuredResponseSchema with the answer and optional citations
 
     Raises:
         HTTPException: If the service is not initialized or an error occurs
@@ -363,7 +363,7 @@ def main():
         print(f"  • {key}: {value}")
 
     uvicorn.run(
-        "fetchcraft.demos.openapi.server:app",
+        "fetchcraft.demos.openapi.server:api",
         host=HOST,
         port=PORT,  # 8001
         reload=True,

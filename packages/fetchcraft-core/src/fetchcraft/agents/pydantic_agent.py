@@ -289,9 +289,10 @@ class PydanticAgent(BaseAgent, ObjectNodeMixin):
         model = OpenAIChatModel(
             self.model,
             settings=ModelSettings(
-                temperature=0.8,
+                temperature=0.6,
                 top_p=0.95,
-                extra_body={"top_k": 20, "min_p": 0}
+                extra_body={"top_k": 20, "min_p": 0},
+                parallel_tool_calls=True
             ),
         )
         agent = Agent(

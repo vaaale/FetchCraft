@@ -90,7 +90,7 @@ To develop the backend with auto-reload:
 
 ```bash
 cd packages/fetchcraft-admin
-uvicorn fetchcraft.admin.server:app --reload --port 8080
+uvicorn fetchcraft.admin.server:api --reload --port 8080
 ```
 
 ### Frontend Development

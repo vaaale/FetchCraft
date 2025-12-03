@@ -7,15 +7,16 @@ from ..model import CitationContainer
 class DefaultOutputFormatter(OutputFormatter):
 
     def format(self, response: str, citations: CitationContainer) -> str:
-        matches = re.finditer(r"\[(?P<title>.*)\]\((?P<citation_id>\d+)\).*", response)
+        matches = re.finditer(r"\[(?P<title>[^\]]+)\]\s*\((?P<citation_id>\d+)\)", response)
         for match in matches:
             citation_id = match.group("citation_id")
             title = match.group("title")
+
             citation = citations.citation(int(citation_id))
             if not citation:
                 continue
 
-            citations.add_cited(citation)
+            citations.add_cited(citation_id, citation)
 
             # Replace
             orig_citation = response[match.start():match.end()]

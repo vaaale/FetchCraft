@@ -538,7 +538,7 @@ def main():
     print("=" * 70 + "\n")
 
     uvicorn.run(
-        "fetchcraft.openai.server:app",
+        "fetchcraft.openai.server:api",
         host=HOST,
         port=PORT,  # 8002
         reload=True,

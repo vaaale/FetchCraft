@@ -298,7 +298,7 @@ async def lifespan(app: FastAPI):
     
     logger.info("👋 Server shutdown complete")
 
-# Create FastAPI app
+# Create FastAPI api
 app = FastAPI(
     title="Fetchcraft Admin V2",
     description="Enhanced administration interface with job and document tracking",
@@ -1084,7 +1084,7 @@ def main():
     logger.info("=" * 70)
     
     uvicorn.run(
-        "fetchcraft.admin.server:app",
+        "fetchcraft.admin.server:api",
         host=settings.host,
         port=settings.port,
         reload=True,

@@ -31,7 +31,8 @@ class RetrieverTool:
         retriever: Retriever,
         name: str = "search_documents",
         description: Optional[str] = None,
-        formatter: Optional[Callable] = None
+        formatter: Optional[Callable] = None,
+        max_chunk_size: int = 4000
     ):
         """
         Initialize the RetrieverTool.
@@ -41,10 +42,12 @@ class RetrieverTool:
             name: Name of the tool (default: "search_documents")
             description: Tool description for the LLM
             formatter: Custom formatter for results (optional)
+            max_chunk_size: Maximum size of a chunk (default: 4000)
         """
         self.retriever = retriever
         self.name = name
         self.formatter = formatter or self._default_formatter
+        self.max_chunk_size = max_chunk_size
         
         # Default description
         if description is None:
@@ -64,7 +67,8 @@ Returns:
         retriever: Retriever,
         name: str = "search_documents",
         description: Optional[str] = None,
-        formatter: Optional[Callable] = None
+        formatter: Optional[Callable] = None,
+        max_chunk_size: int = 4000
     ) -> 'RetrieverTool':
         """
         Create a RetrieverTool from a retriever.
@@ -77,12 +81,14 @@ Returns:
             
         Returns:
             RetrieverTool instance
+            :param max_chunk_size: Maximum size of a chunk (default: 4000)
         """
         return cls(
             retriever=retriever,
             name=name,
             description=description,
-            formatter=formatter
+            formatter=formatter,
+            max_chunk_size=max_chunk_size
         )
     
     def _default_formatter(self, citations: List[Citation]) -> str:
@@ -101,8 +107,10 @@ Returns:
 
         formatted_results = []
         for citation in citations:
+            text = citation.node.text
+            text = text[:self.max_chunk_size]
             formatted_results.append(
-                f"Document {citation.citation_id} (relevance: {citation.node.score:.3f}):\n{citation.node.text}\n"
+                f"Document {citation.citation_id} (relevance: {citation.node.score:.3f}):\n{text}\n"
             )
         
         return "\n".join(formatted_results)
@@ -128,7 +136,7 @@ Returns:
         tool_response = self.formatter(citations)
         logger.info(f"{tool_response}")
         return tool_response
-    
+
     def get_tool_function(self):
         """
         Get the async function to be registered as a tool.

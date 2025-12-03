@@ -53,7 +53,7 @@ fetchcraft-docling-server
 python -m fetchcraft.parsing.docling.server
 
 # Or use uvicorn
-uvicorn fetchcraft.parsing.docling.server:app --host 0.0.0.0 --port 8080
+uvicorn fetchcraft.parsing.docling.server:api --host 0.0.0.0 --port 8080
 ```
 
 ### API Endpoints
@@ -273,7 +273,7 @@ docker run -p 8080:8080 -e MAX_CONCURRENT_FILES=8 docling-parser
 To run the server in development mode with auto-reload:
 
 ```bash
-uvicorn fetchcraft.parsing.docling.server:app --reload --host 0.0.0.0 --port 8080
+uvicorn fetchcraft.parsing.docling.server:api --reload --host 0.0.0.0 --port 8080
 ```
 
 ## License

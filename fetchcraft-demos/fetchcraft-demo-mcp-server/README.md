@@ -2,9 +2,11 @@
 
 An MCP (Model Context Protocol) server that provides tools for document search and retrieval using RAG (Retrieval-Augmented Generation).
 
+**Now includes a beautiful web interface!** The server comes with a modern single-page application for semantic file search with pagination.
+
 ## Features
 
-This MCP server exposes three main tools:
+This MCP server exposes three main tools via MCP protocol and a REST API:
 
 ### 1. `query` - RAG-based Question Answering
 Query the RAG agent with natural language questions. The tool retrieves relevant documents and uses an LLM to generate comprehensive answers.
@@ -51,7 +53,7 @@ Get the full content of a file by name or path.
 ## Installation
 
 ```bash
-cd packages/fetchcraft-mcp-server
+cd packages/fetchcraft-demo-mcp-server
 pip install -e .
 ```
 
@@ -97,7 +99,7 @@ cp .env.example .env
 ### Running the Server
 
 ```bash
-fetchcraft-mcp-server
+fetchcraft-demo-mcp-server
 ```
 
 Or directly with Python:
@@ -105,6 +107,35 @@ Or directly with Python:
 ```bash
 python -m fetchcraft.mcp.server
 ```
+
+The server will start on `http://localhost:8765` by default.
+
+### Web Interface
+
+A modern web interface is available for semantic file search:
+
+1. **Build the frontend** (first time only):
+   ```bash
+   cd frontend
+   npm install
+   npm run build
+   cd ..
+   ```
+
+2. **Start the server**:
+   ```bash
+   fetchcraft-demo-mcp-server
+   ```
+
+3. **Open your browser** to `http://localhost:8765`
+
+The web interface provides:
+- Semantic file search with natural language queries
+- Pagination for large result sets
+- Score-based relevance ranking
+- Clean, modern UI built with React and TailwindCSS
+
+See `frontend/README.md` for detailed frontend documentation.
 
 ### Using with Claude Desktop
 
@@ -114,7 +145,7 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
 {
   "mcpServers": {
     "fetchcraft": {
-      "command": "fetchcraft-mcp-server",
+      "command": "fetchcraft-demo-mcp-server",
       "env": {
         "QDRANT_HOST": "localhost",
         "QDRANT_PORT": "6333",
@@ -149,7 +180,7 @@ The server uses the standard MCP protocol over stdio, so it can be integrated wi
 
 3. **Run the server**:
    ```bash
-   fetchcraft-mcp-server
+   fetchcraft-demo-mcp-server
    ```
 
 4. **First run**: The server will automatically:
@@ -164,9 +195,11 @@ The server uses the standard MCP protocol over stdio, so it can be integrated wi
 
 The server is built on:
 - **MCP (Model Context Protocol)**: Standard protocol for AI tool integration
+- **FastAPI**: REST API for web interface
 - **Fetchcraft Core**: Document processing, indexing, and retrieval
 - **Qdrant**: Vector database for semantic search
 - **Pydantic AI**: Agent framework for RAG
+- **React + TypeScript**: Modern web interface (optional)
 
 ## License
 

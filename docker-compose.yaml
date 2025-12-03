@@ -34,7 +34,7 @@ services:
     ports:
       - "8001:8001"
     volumes:
-      - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
+      - ${DOCUMENTS_PATH:-./Documents}:/api/Documents
     env_file:
       - ./.env
     environment:
@@ -55,7 +55,7 @@ services:
 #    environment:
 #      - DOCLING_SERVE_ENABLE_UI=true
 #      - DOCLING_SERVE_MAX_SYNC_WAIT=1200
-#      - DOCLING_SERVE_ARTIFACTS_PATH=/app/models
+#      - DOCLING_SERVE_ARTIFACTS_PATH=/api/models
 #      - NVIDIA_VISIBLE_DEVICES=all
 ##        NVIDIA_VISIBLE_DEVICES: "all" # https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/docker-specialized.html
 #    deploy:
@@ -79,7 +79,7 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
     volumes:
-      - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
+      - ${DOCUMENTS_PATH:-./Documents}:/api/Documents
     depends_on:
       - qdrant
     restart: unless-stopped
@@ -102,7 +102,7 @@ services:
     ports:
       - "8040:8001"
     volumes:
-      - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
+      - ${DOCUMENTS_PATH:-./Documents}:/api/Documents
     env_file:
       - ./.env
     environment:
@@ -111,7 +111,7 @@ services:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - POSTGRES_URL=postgresql://postgres:password@pgvector:5432/ingestion
-      - DOCUMENTS_PATH=/app/Documents
+      - DOCUMENTS_PATH=/api/Documents
     depends_on:
       - qdrant
       - mongodb
@@ -124,12 +124,12 @@ services:
 #      context: .
 #      dockerfile: Dockerfile
     image: fetchcraft
-    entrypoint: ["uv", "run", "fetchcraft-mcp-server"]
+    entrypoint: ["uv", "run", "fetchcraft-demo-mcp-server"]
     hostname: mcp-server
     ports:
       - "8003:8001"
     volumes:
-      - ${DOCUMENTS_PATH:-./Documents}:/app/Documents
+      - ${DOCUMENTS_PATH:-./Documents}:/api/Documents
     env_file:
       - ./.env
     environment:
@@ -147,7 +147,7 @@ services:
 
   librechat:
     image: librechat-dev-alex2
-#    image: ghcr.io/danny-avila/librechat-dev-app:latest
+#    image: ghcr.io/danny-avila/librechat-dev-api:latest
     container_name: librechat
     ports:
       - "3080:3080"
@@ -170,12 +170,12 @@ services:
     env_file:
       - ./librechat.env
     volumes:
-      - ./librechat.yaml:/app/librechat.yaml
-      - ./librechat.env:/app/.env
+      - ./librechat.yaml:/api/librechat.yaml
+      - ./librechat.env:/api/.env
 
-      - ./images:/app/client/public/images
-      - ./uploads:/app/uploads
-      - ./logs:/app/logs
+      - ./images:/api/client/public/images
+      - ./uploads:/api/uploads
+      - ./logs:/api/logs
     networks: [ 'demo-net' ]
 
   meilisearch:
@@ -216,7 +216,7 @@ services:
 
 #  rag_api:
 #    container_name: rag_api
-#    image: ghcr.io/danny-avila/librechat-rag-app-dev-lite:latest
+#    image: ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest
 #    environment:
 #      - DB_HOST=pgvector
 #      - RAG_PORT=${RAG_PORT:-8020}

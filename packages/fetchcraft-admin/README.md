@@ -117,7 +117,7 @@ The backend is built with **FastAPI**:
 
 ```bash
 cd packages/fetchcraft-admin
-uvicorn fetchcraft.admin.server:app --reload --port 8080
+uvicorn fetchcraft.admin.server:api --reload --port 8080
 ```
 
 Visit `http://localhost:8080/docs` for interactive API documentation.

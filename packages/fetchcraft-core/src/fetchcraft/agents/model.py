@@ -29,10 +29,11 @@ class Citation:
     tool_name: str
     query: str
     node: Node
+    cited_name: str = ""
 
     @property
     def title(self):
-        return self.node.metadata.get('title', self.node.metadata.get("name", f"Document {self.citation_id}"))
+        return self.node.metadata.get('title', self.node.metadata.get("name", f"Document {self.citation_id} - {self.cited_name}"))
 
     @property
     def url(self):
@@ -47,7 +48,7 @@ class Citation:
 class CitationContainer:
     _citations: List[Citation] = field(default_factory=list)
     _id_map: Dict[int, Citation] = field(default_factory=dict)
-    _cited: List[Citation] = field(default_factory=list)
+    _cited: Dict[Any,Citation] = field(default_factory=dict)
 
     def add(self, call_id: str, tool_name: str, query: str, node: Node) -> Citation:
         citation_id = len(self._citations) + 1
@@ -56,16 +57,16 @@ class CitationContainer:
         self._id_map[citation_id] = citation
         return citation
 
-    def add_cited(self, citation: Citation):
-        self._cited.append(citation)
+    def add_cited(self, citation_id: Any, citation: Citation):
+        self._cited[citation_id] = citation
 
     @property
     def citations(self):
         return self._cited
 
     @property
-    def all_citations(self):
-        return self._citations
+    def all_citations(self) -> dict:
+        return {c.citation_id: c for c in self._citations}
 
     def citation(self, citation_id: int) -> Citation:
         return self._id_map.get(citation_id, None)
@@ -75,8 +76,8 @@ class AgentResponse(BaseModel):
     """Agent response with citations"""
     query: ChatMessage = Field(description="Query text", default=None)
     response: ChatMessage = Field(description="Response text", default=None)
-    citations: List[Citation] = Field(description="List of used citations", default=[])
-    all_citations: List[Citation] = Field(description="List of all citations", default=[])
+    citations: Dict[Any, Citation] = Field(description="List of used citations", default=dict)
+    all_citations: Dict[Any, Citation] = Field(description="List of all citations", default=[])
 
     def __str__(self):
         return self.response.content
