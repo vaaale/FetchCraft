@@ -27,6 +27,7 @@ dependencies = [
     "universal-pathlib>=0.3.4",
     "llama-index>=0.14.6",
     "llama-index-llms-openai>=0.6.6",
+    "optimum[onnxruntime-gpu]>=2.0.0",
 ]
 
 [project.optional-dependencies]
