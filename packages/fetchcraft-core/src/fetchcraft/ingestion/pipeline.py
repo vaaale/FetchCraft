@@ -424,7 +424,7 @@ class TrackedIngestionPipeline:
         poll_interval: float = 0.5,
         grace_seconds: float = 2.0,
     ):
-        """Wait until all queues are empty and no documents are in PROCESSING status."""
+        """Wait until all queues are empty and no documents are in PENDING or PROCESSING status."""
         logger.info("Waiting for pipeline to become idle...")
         iteration = 0
         
@@ -432,20 +432,27 @@ class TrackedIngestionPipeline:
             try:
                 has_work = await self.backend.has_pending(MAIN_QUEUE, REMOTE_QUEUE)
                 
-                # Also check for documents still in PROCESSING (e.g., parent docs waiting for children)
+                # Check for documents still in PROCESSING (e.g., parent docs waiting for children)
                 processing_docs = await self.doc_repo.get_documents_by_status(
                     self.job.id,
                     DocumentStatus.PROCESSING
                 )
                 
-                if not has_work and len(processing_docs) == 0:
-                    logger.info(f"Queues empty and no processing documents after {iteration} checks")
+                # Also check for documents in PENDING status (e.g., child docs from async parsing)
+                # These may have been created by callbacks but not yet picked up by workers
+                pending_docs = await self.doc_repo.get_documents_by_status(
+                    self.job.id,
+                    DocumentStatus.PENDING
+                )
+                
+                if not has_work and len(processing_docs) == 0 and len(pending_docs) == 0:
+                    logger.info(f"Queues empty and no pending/processing documents after {iteration} checks")
                     break
                 
                 if iteration % 20 == 0:
                     logger.info(
                         f"Still processing... (iteration {iteration}, "
-                        f"processing_docs={len(processing_docs)})"
+                        f"pending_docs={len(pending_docs)}, processing_docs={len(processing_docs)})"
                     )
             
             except Exception as e:
@@ -469,8 +476,12 @@ class TrackedIngestionPipeline:
                     self.job.id,
                     DocumentStatus.PROCESSING
                 )
+                pending_docs = await self.doc_repo.get_documents_by_status(
+                    self.job.id,
+                    DocumentStatus.PENDING
+                )
                 
-                if has_work or len(processing_docs) > 0:
+                if has_work or len(processing_docs) > 0 or len(pending_docs) > 0:
                     logger.debug("Work appeared during grace period, restarting wait...")
                     return await self._wait_until_idle(poll_interval, grace_seconds)
             

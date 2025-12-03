@@ -254,13 +254,50 @@ class IngestionService:
 
     async def _recover_job(self, pipeline: TrackedIngestionPipeline):
         """
-        Recover a job by starting workers to process existing queued documents.
+        Recover a job by re-enqueuing pending documents and starting workers.
+        
+        This method:
+        1. Finds all PENDING documents for the job in the database
+        2. Re-enqueues them to the message queue (they may have been lost on crash)
+        3. Starts workers to process the documents
+        4. Waits for completion
         
         Args:
             pipeline: The pipeline with job context
         """
         try:
-            logger.info(f"[Recovery] Starting workers for job: {pipeline.job.name}")
+            logger.info(f"[Recovery] Starting recovery for job: {pipeline.job.name}")
+
+            # Re-enqueue PENDING documents that may have been lost from the queue
+            pending_docs = await self.doc_repo.get_documents_by_status(
+                pipeline.job.id,
+                DocumentStatus.PENDING
+            )
+            
+            if pending_docs:
+                logger.info(f"[Recovery] Found {len(pending_docs)} PENDING documents to re-enqueue")
+                
+                # Get pipeline steps to determine correct step index
+                pipeline_steps = pipeline.job.pipeline_steps
+                
+                for doc in pending_docs:
+                    # Determine the next step index based on step_statuses
+                    next_step_idx = self._get_next_step_index(doc, pipeline_steps)
+                    
+                    await self.pipeline_factory.queue_backend.enqueue(
+                        "ingest.main",
+                        body={
+                            "type": "document",
+                            "doc_id": doc.id,
+                            "job_id": pipeline.job.id,
+                            "current_step_idx": next_step_idx,
+                        }
+                    )
+                    logger.debug(f"[Recovery] Re-enqueued document {doc.id} at step index {next_step_idx}")
+                
+                logger.info(f"[Recovery] Re-enqueued {len(pending_docs)} PENDING documents")
+            else:
+                logger.info(f"[Recovery] No PENDING documents found to re-enqueue")
 
             # Start workers
             await pipeline._start_workers()
@@ -288,6 +325,26 @@ class IngestionService:
             logger.info(f"[Recovery] Pipeline shutdown complete for job: {pipeline.job.name}")
             # Remove pipeline from tracking
             self._pipelines.pop(pipeline.job.id, None)
+    
+    def _get_next_step_index(self, doc: DocumentRecord, pipeline_steps: list[str]) -> int:
+        """
+        Determine the next step index for a document based on its step_statuses.
+        
+        Args:
+            doc: The document record
+            pipeline_steps: List of pipeline step names
+            
+        Returns:
+            Index of the next step to process (0 if all pending)
+        """
+        # Find the first step that is still "pending"
+        for idx, step_name in enumerate(pipeline_steps):
+            status = doc.step_statuses.get(step_name, "pending")
+            if status == "pending":
+                return idx
+        
+        # All steps completed - shouldn't happen for PENDING docs, but return 0 as fallback
+        return 0
 
     async def get_job(self, job_id: str) -> Optional[IngestionJob]:
         """
