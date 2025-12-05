@@ -1084,7 +1084,7 @@ def main():
     logger.info("=" * 70)
     
     uvicorn.run(
-        "fetchcraft.admin.server:api",
+        "fetchcraft.admin.server:app",
         host=settings.host,
         port=settings.port,
         reload=True,
