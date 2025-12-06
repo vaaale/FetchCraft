@@ -1,5 +1,4 @@
-"""Request and response models for the Admin API."""
-import time
+"""Request and response models for the Ingestion API."""
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -25,16 +24,11 @@ class JobStatusEnum(str, Enum):
 class CreateJobRequest(BaseModel):
     """Request to create a new ingestion job."""
     name: str
-    source_path: str  # Relative to document root
+    source_path: str
 
 
 class CallbackMessage(BaseModel):
-    """
-    Generic callback message for async transformations.
-    
-    This is the standard format for callbacks from external services
-    (e.g., docling parsing server) to the admin server.
-    """
+    """Generic callback message for async transformations."""
     task_id: str = Field(..., description="Task ID for correlation")
     status: str = Field(..., description="Status: PROCESSING, COMPLETED, or FAILED")
     message: Dict[str, Any] = Field(default_factory=dict, description="Callback payload")
@@ -51,57 +45,6 @@ class CallbackResponse(BaseModel):
 # =============================================================================
 # Response Models
 # =============================================================================
-
-class ParseResponse(BaseModel):
-    """Response model for document parsing."""
-    filename: str = Field(description="Name of the parsed file")
-    success: bool = Field(description="Whether parsing was successful")
-    nodes: List[Dict[str, Any]] = Field(
-        default_factory=list,
-        description="List of DocumentNode objects as dictionaries"
-    )
-    error: Optional[str] = Field(
-        default=None,
-        description="Error message if parsing failed"
-    )
-    num_nodes: int = Field(description="Number of nodes created")
-    processing_time_ms: float = Field(description="Processing time in milliseconds")
-
-
-class BatchParseResponse(BaseModel):
-    """Response model for batch document parsing."""
-    results: List[ParseResponse] = Field(description="Results for each file")
-    total_files: int = Field(description="Total number of files processed")
-    successful: int = Field(description="Number of successfully parsed files")
-    failed: int = Field(description="Number of failed files")
-    total_nodes: int = Field(description="Total number of nodes created")
-    total_processing_time_ms: float = Field(description="Total processing time in milliseconds")
-
-
-class JobSubmitResponse(BaseModel):
-    """Response model for job submission."""
-    job_id: str = Field(description="Unique identifier for the submitted job")
-    status: JobStatusEnum = Field(description="Initial job status")
-    message: str = Field(description="Confirmation message")
-
-
-class JobStatusResponse(BaseModel):
-    """Response model for job status check."""
-    job_id: str = Field(description="Job identifier")
-    status: JobStatusEnum = Field(description="Current job status")
-    submitted_at: float = Field(description="Timestamp when job was submitted")
-    started_at: Optional[float] = Field(default=None, description="Timestamp when processing started")
-    completed_at: Optional[float] = Field(default=None, description="Timestamp when processing completed")
-    error: Optional[str] = Field(default=None, description="Error message if job failed")
-
-
-class JobResultResponse(BaseModel):
-    """Response model for job results."""
-    job_id: str = Field(description="Job identifier")
-    status: JobStatusEnum = Field(description="Job status")
-    results: Optional[BatchParseResponse] = Field(default=None, description="Parsing results if completed")
-    error: Optional[str] = Field(default=None, description="Error message if job failed")
-
 
 class HealthResponse(BaseModel):
     """Response model for health check."""
@@ -208,5 +151,5 @@ class QueueStatsResponse(BaseModel):
 
 class IngestionStatusResponse(BaseModel):
     """Response model for ingestion service status."""
-    status: str  # "running", "stopped", or "error"
+    status: str
     pid: Optional[int]

@@ -11,11 +11,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, TYPE_CHECKING
 
-from fetchcraft.document_store import DocumentStore
 from fetchcraft.index import IndexFactory
-from fetchcraft.index.vector_index import VectorIndex
 from fetchcraft.ingestion import (
     TrackedIngestionPipeline,
     QueueBackend,
@@ -24,13 +22,12 @@ from fetchcraft.ingestion import (
     TaskRepository,
     JobStatus,
     DocumentStatus,
-    TaskStatus,
 )
-from fetchcraft.node import Node
 from fetchcraft.node_parser import NodeParser
 from fetchcraft.parsing.base import DocumentParser
 
-from .pipeline_factory import DefaultIngestionPipelineFactory
+if TYPE_CHECKING:
+    from fetchcraft.admin.ingestion.pipeline_factory import FetchcraftIngestionPipelineFactory
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +50,7 @@ class WorkerManager:
         job_repo: JobRepository,
         doc_repo: DocumentRepository,
         task_repo: TaskRepository,
-        pipeline_factory: DefaultIngestionPipelineFactory,
+        pipeline_factory: "FetchcraftIngestionPipelineFactory",
         callback_base_url: str = "",
     ):
         """
@@ -90,15 +87,9 @@ class WorkerManager:
         """
         Start the WorkerManager and recover any pending jobs.
         
-        This method:
-        1. Finds jobs with status 'running' or 'pending'
-        2. Reconstructs pipelines for those jobs
-        3. Starts workers to resume processing
-        
         Args:
             parser_map: Map of mimetype to parser
             chunker: Node parser for chunking
-            vector_index: Vector index for storing chunks
             index_factory: Index factory for creating vector index
             index_id: Identifier for the vector index
             
@@ -112,7 +103,6 @@ class WorkerManager:
         self._running = True
         logger.info("🚀 Starting WorkerManager...")
         
-        # Find jobs that need recovery
         running_jobs = await self.job_repo.list_jobs(status=JobStatus.RUNNING, limit=1000)
         pending_jobs = await self.job_repo.list_jobs(status=JobStatus.PENDING, limit=1000)
         
@@ -159,7 +149,6 @@ class WorkerManager:
         """Recover a single job by creating pipeline and starting workers."""
         logger.info(f"Recovering job '{job.name}' (ID: {job.id})")
         
-        # Create pipeline (without source since documents are already queued)
         pipeline = await self.pipeline_factory.create_pipeline(
             job=job,
             parser_map=parser_map,
@@ -169,18 +158,14 @@ class WorkerManager:
             include_source=False,
         )
         
-        # Set task repo and callback URL
         pipeline.task_repo = self.task_repo
         pipeline.callback_base_url = self.callback_base_url
         
-        # Track pipeline
         self._pipelines[job.id] = pipeline
         
-        # Mark job as running if it was pending
         if job.status == JobStatus.PENDING:
             await self.job_repo.set_job_started(job.id)
         
-        # Re-enqueue pending documents
         pending_docs = await self.doc_repo.get_documents_by_status(
             job.id,
             DocumentStatus.PENDING
@@ -204,7 +189,6 @@ class WorkerManager:
                 )
                 logger.debug(f"[Recovery] Re-enqueued document {doc.id} at step index {next_step_idx}")
         
-        # Start workers in background
         task = asyncio.create_task(self._run_job_workers(pipeline))
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
@@ -222,15 +206,12 @@ class WorkerManager:
     async def _run_job_workers(self, pipeline: TrackedIngestionPipeline):
         """Run workers for a job until completion."""
         try:
-            # Start workers
             await pipeline._start_workers()
             logger.info(f"[Recovery] Workers started for job: {pipeline.job.name}")
             
-            # Wait until all work is done
             await pipeline._wait_until_idle()
             logger.info(f"[Recovery] All work completed for job: {pipeline.job.name}")
             
-            # Mark job as completed
             await self.job_repo.set_job_completed(pipeline.job.id)
             logger.info(f"[Recovery] ✅ Job '{pipeline.job.name}' completed successfully")
             
@@ -253,7 +234,6 @@ class WorkerManager:
         logger.info("Stopping WorkerManager...")
         self._running = False
         
-        # Stop all pipelines
         for job_id, pipeline in list(self._pipelines.items()):
             try:
                 await pipeline.shutdown()
@@ -262,7 +242,6 @@ class WorkerManager:
         
         self._pipelines.clear()
         
-        # Cancel background tasks
         for task in self._background_tasks:
             task.cancel()
         
@@ -281,26 +260,12 @@ class WorkerManager:
         return list(self._pipelines.keys())
     
     def register_pipeline(self, job_id: str, pipeline: TrackedIngestionPipeline) -> None:
-        """
-        Register a pipeline for callback handling.
-        
-        This allows pipelines created by other services (e.g., IngestionService)
-        to receive callbacks through the WorkerManager.
-        
-        Args:
-            job_id: The job ID
-            pipeline: The pipeline to register
-        """
+        """Register a pipeline for callback handling."""
         self._pipelines[job_id] = pipeline
         logger.debug(f"Registered pipeline for job {job_id}")
     
     def unregister_pipeline(self, job_id: str) -> None:
-        """
-        Unregister a pipeline.
-        
-        Args:
-            job_id: The job ID to unregister
-        """
+        """Unregister a pipeline."""
         if job_id in self._pipelines:
             del self._pipelines[job_id]
             logger.debug(f"Unregistered pipeline for job {job_id}")
@@ -314,9 +279,6 @@ class WorkerManager:
         """
         Handle a callback for an async task.
         
-        This method finds the appropriate pipeline and delegates
-        the callback handling to it.
-        
         Args:
             task_id: The task ID from the callback
             status: Callback status ('PROCESSING', 'COMPLETED', 'FAILED')
@@ -325,17 +287,14 @@ class WorkerManager:
         Returns:
             True if callback was handled successfully
         """
-        # Get task to find the job
         task = await self.task_repo.get_task(task_id)
         if not task:
             logger.error(f"Task {task_id} not found")
             return False
         
-        # Find pipeline for this job
         pipeline = self._pipelines.get(task.job_id)
         if not pipeline:
             logger.error(f"No active pipeline for job {task.job_id}")
             return False
         
-        # Delegate to pipeline
         return await pipeline.handle_task_callback(task_id, status, message)
