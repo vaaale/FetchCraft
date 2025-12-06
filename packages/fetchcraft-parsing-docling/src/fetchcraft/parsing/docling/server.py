@@ -119,6 +119,7 @@ class Job:
     error: Optional[str] = None
     task_id: Optional[str] = None  # Task ID for callback correlation
     callback_url: Optional[str] = None  # URL to send callbacks to
+    metadata: Optional[Dict] = None  # Metadata to include in parsed documents
 
 
 class AppState:
@@ -193,18 +194,24 @@ async def process_jobs():
                     total_nodes_sent = 0
 
                     for file_path in file_paths:
-                        # Run the parsing in a thread pool
+                        # Run the parsing in a thread pool with metadata
                         async with app_state.file_semaphore:
+                            import functools
+                            parse_func = functools.partial(
+                                app_state.parsing_service.parse_file_sync,
+                                file_path,
+                                metadata=job.metadata
+                            )
                             result = await loop.run_in_executor(
                                 app_state.executor,
-                                app_state.parsing_service.parse_file_sync,
-                                file_path
+                                parse_func
                             )
                             results.append(result)
 
                             # Send node callbacks if callback_url is set
                             if job.callback_url and result.success:
                                 for node_idx, node_data in enumerate(result.nodes):
+                                    # Note: metadata is already included in node_data by parse_file_sync
                                     callback_payload = {
                                         "task_id": job.task_id,
                                         "status": "PROCESSING",
@@ -576,6 +583,7 @@ async def submit_job(
     files: List[UploadFile] = File(..., description="One or more files to parse"),
     task_id: Optional[str] = Form(None, description="Task ID for callback correlation"),
     callback_url: Optional[str] = Form(None, description="URL to send callbacks to"),
+    metadata: Optional[str] = Form(None, description="JSON metadata to include in parsed documents"),
 ):
     """
     Submit a parsing job and return immediately with a job ID.
@@ -631,13 +639,26 @@ async def submit_job(
 
         file_data.append((filename, content))
 
-    # Create job with callback info
+    # Parse metadata JSON if provided
+    parsed_metadata = None
+    if metadata:
+        import json
+        try:
+            parsed_metadata = json.loads(metadata)
+        except json.JSONDecodeError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid JSON in metadata field"
+            )
+    
+    # Create job with callback info and metadata
     job = Job(
         job_id=job_id,
         files=file_data,
         status=JobStatusEnum.PENDING,
         task_id=task_id or job_id,  # Use job_id as task_id if not provided
-        callback_url=callback_url
+        callback_url=callback_url,
+        metadata=parsed_metadata
     )
 
     # Store job

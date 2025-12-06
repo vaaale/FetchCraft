@@ -99,7 +99,8 @@ class VectorIndex(BaseIndex[D]):
         existing_docs = {}
         if self._doc_store:
             for node in nodes:
-                _docs = await self._doc_store.list_documents(filters={"metadata.source": node.metadata.get("source")})
+                # _docs = await self._doc_store.list_documents(filters={"metadata.source": node.metadata.get("source")})
+                _docs = await self._doc_store.list_documents(filters={"persistent_key": node.persistent_key})
                 existing_docs.update({doc.id: doc for doc in _docs})
 
         existing_nodes = list(existing_docs.keys()) if len(existing_docs) > 0 else []

@@ -1,10 +1,9 @@
-"""API package for the Admin application."""
-from fetchcraft.admin.api.schema import (
-    # Requests
+"""
+Ingestion API endpoints package.
+"""
+from fetchcraft.admin.ingestion.api.router import create_ingestion_router
+from fetchcraft.admin.ingestion.api.schema import (
     CreateJobRequest,
-    CallbackMessage,
-    CallbackResponse,
-    # Responses
     JobResponse,
     JobListResponse,
     DocumentResponse,
@@ -16,25 +15,14 @@ from fetchcraft.admin.api.schema import (
     MessagesListResponse,
     QueueStatsResponse,
     IngestionStatusResponse,
+    CallbackMessage,
+    CallbackResponse,
     HealthResponse,
-    JobStatusEnum,
-    ParseResponse,
-    BatchParseResponse,
-    JobSubmitResponse,
-    JobStatusResponse,
-    JobResultResponse,
 )
-from fetchcraft.admin.api.endpoints import main_router, ui_router
 
 __all__ = [
-    # Routers
-    "main_router",
-    "ui_router",
-    # Requests
+    "create_ingestion_router",
     "CreateJobRequest",
-    "CallbackMessage",
-    "CallbackResponse",
-    # Responses
     "JobResponse",
     "JobListResponse",
     "DocumentResponse",
@@ -46,11 +34,7 @@ __all__ = [
     "MessagesListResponse",
     "QueueStatsResponse",
     "IngestionStatusResponse",
+    "CallbackMessage",
+    "CallbackResponse",
     "HealthResponse",
-    "JobStatusEnum",
-    "ParseResponse",
-    "BatchParseResponse",
-    "JobSubmitResponse",
-    "JobStatusResponse",
-    "JobResultResponse",
 ]

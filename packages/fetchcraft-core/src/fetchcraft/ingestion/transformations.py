@@ -313,7 +313,7 @@ class AsyncParsingTransformation(AsyncTransformation):
                     "path": str(self.path),
                     "mimetype": self.mimetype,
                     "encoding": self.encoding,
-                    "size": len(self._content)
+                    "size": len(self._content),
                 }
         
         file_adapter = FileAdapter(
@@ -323,19 +323,28 @@ class AsyncParsingTransformation(AsyncTransformation):
             encoding=record.metadata.get("encoding", "utf-8")
         )
         
-        # Initialize task tracking
-        self._task_nodes[task_id] = []
-        self._task_metadata[task_id] = {
+        # Initialize task tracking with record metadata
+        task_metadata = {
+            "persistent_key": record.source,
             "source": record.source,
             "file_path": file_path,
             "mimetype": mimetype,
             "document_id": record.id,
             "job_id": record.job_id,
         }
+        self._task_nodes[task_id] = []
+        self._task_metadata[task_id] = task_metadata
+        
+        # Build metadata to pass to parser (will be included in parsed documents)
+        parser_metadata = {
+            **task_metadata,
+            # Include any additional metadata from the record (excluding large binary data)
+            **{k: v for k, v in record.metadata.items() if k != "file_content_b64"},
+        }
         
         # Submit to parser - this triggers the async job submission
         # The parser will yield a marker node and return
-        async for _ in parser.parse(file_adapter, task_id=task_id):
+        async for _ in parser.parse(file_adapter, metadata=parser_metadata, task_id=task_id):
             pass  # We don't need the marker node here
         
         logger.info(

@@ -716,6 +716,12 @@ class PostgresJobRepository(JobRepository):
     
     async def delete_job(self, job_id: str) -> None:
         async with self.pool.acquire() as conn:
+            # Delete related messages from the queue
+            await conn.execute(
+                "DELETE FROM messages WHERE body->>'job_id' = $1",
+                job_id
+            )
+            # Delete the job itself
             await conn.execute("DELETE FROM ingestion_jobs WHERE id = $1", job_id)
 
 
