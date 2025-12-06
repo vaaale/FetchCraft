@@ -219,6 +219,7 @@ class TrackedIngestionPipeline:
         task_repo: Optional[TaskRepository] = None,
         num_workers: int = 1,
         callback_base_url: Optional[str] = None,
+        context: Optional[dict] = None,
     ):
         """
         Initialize the pipeline.
@@ -238,13 +239,14 @@ class TrackedIngestionPipeline:
         self.doc_repo = doc_repo
         self.task_repo = task_repo
         self.num_workers = max(1, num_workers)  # Ensure at least 1 worker
-        self.callback_base_url = callback_base_url or ""
-        
+        self.callback_base_url = callback_base_url
+
         self._source: Optional[Source] = None
         self._steps: List[PipelineStep] = []
         self._sinks: List[Sink] = []
         
         self._main_workers: List[Worker] = []
+        self._context = context
         
         logger.info(
             f"Initialized pipeline for job '{job.name}' (ID: {job.id}) "
@@ -598,7 +600,7 @@ class TrackedIngestionPipeline:
                     return
                 
                 # Apply synchronous transformation
-                result = await step.transformation.process(doc)
+                result = await step.transformation.process(doc, context=self._context)
                 
                 # Mark task as completed
                 if self.task_repo and task:
@@ -911,7 +913,7 @@ class TrackedIngestionPipeline:
             sink_name = f"sink:{sink.get_name()}"
             try:
                 await self.doc_repo.update_step_status(doc.id, sink_name, "processing")
-                await sink.write(doc)
+                await sink.write(doc, context=self._context)
                 await self.doc_repo.update_step_status(doc.id, sink_name, "completed")
                 logger.debug(f"Document {doc.source} written to sink '{sink.get_name()}'")
             except Exception as e:

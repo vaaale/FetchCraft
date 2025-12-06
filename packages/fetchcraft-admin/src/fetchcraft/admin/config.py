@@ -21,7 +21,11 @@ class Settings(BaseSettings):
         extra="ignore",
         populate_by_name=True,
     )
-    
+
+    # Logging configuration
+    logdir: Path = Field(default=Path("logs"), description="Directory for log files")
+    log_level: str = Field(default="INFO", description="Log level (DEBUG, INFO, WARNING, ERROR)")
+
     # Database configuration
     postgres_url: str = Field(
         default="postgresql://postgres:password@localhost:5432/ingestion",

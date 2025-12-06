@@ -425,7 +425,7 @@ class ConnectorSource(Source):
             self.parser_map["default"] = parser
 
     async def read(self) -> AsyncIterable[Record]:  # async generator
-        async for file in self.connector.read():
+        async for file in self.connector.glob():
             parser = self.parser_map.get(file.mimetype, self.parser_map.get("default"))
             documents = parser.parse(file)
             async for doc in documents:

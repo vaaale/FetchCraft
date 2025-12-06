@@ -56,20 +56,15 @@ Components:
 - **Queue Backends**: AsyncPostgresQueue, AsyncSQLiteQueue
 """
 
-# Core pipeline
-from fetchcraft.ingestion.pipeline import TrackedIngestionPipeline, PipelineStep, Worker
-
-# Data models
-from fetchcraft.ingestion.models import (
-    IngestionJob,
-    DocumentRecord,
-    TaskRecord,
-    JobStatus,
-    DocumentStatus,
-    TaskStatus,
-    utcnow,
+# Legacy support (deprecated - use new pipeline)
+from fetchcraft.ingestion.base import (
+    IngestionPipeline as LegacyIngestionPipeline,
+    Record,
+    Source,
+    Transformation,
+    Sink,
+    ConnectorSource as LegacyConnectorSource,
 )
-
 # Interfaces (new naming without I-prefix)
 from fetchcraft.ingestion.interfaces import (
     Source,
@@ -86,22 +81,20 @@ from fetchcraft.ingestion.interfaces import (
     IConnector,
     IQueueBackend,
 )
-
-# Concrete implementations
-from fetchcraft.ingestion.sources import ConnectorSource
-from fetchcraft.ingestion.transformations import (
-    ParsingTransformation,
-    AsyncParsingTransformation,
-    ChunkingTransformation,
-    DocumentSummarization,
-    ExtractKeywords,
+# Data models
+from fetchcraft.ingestion.models import (
+    IngestionJob,
+    DocumentRecord,
+    TaskRecord,
+    JobStatus,
+    DocumentStatus,
+    TaskStatus,
+    utcnow,
 )
-from fetchcraft.ingestion.sinks import (
-    VectorIndexSink,
-    DocumentStoreSink,
-    LoggingSink,
-)
-
+# Core pipeline
+from fetchcraft.ingestion.pipeline import TrackedIngestionPipeline, PipelineStep, Worker
+# Queue backends
+from fetchcraft.ingestion.postgres_backend import AsyncPostgresQueue
 # Repositories (new naming without I-prefix)
 from fetchcraft.ingestion.repository import (
     JobRepository,
@@ -115,19 +108,18 @@ from fetchcraft.ingestion.repository import (
     IDocumentRepository,
     ITaskRepository,
 )
-
-# Queue backends
-from fetchcraft.ingestion.postgres_backend import AsyncPostgresQueue
+from fetchcraft.ingestion.sinks import (
+    VectorIndexSink,
+)
+# Concrete implementations
+from fetchcraft.ingestion.sources import ConnectorSource
 from fetchcraft.ingestion.sqlite_backend import AsyncSQLiteQueue
-
-# Legacy support (deprecated - use new pipeline)
-from fetchcraft.ingestion.base import (
-    IngestionPipeline as LegacyIngestionPipeline,
-    Record,
-    Source,
-    Transformation,
-    Sink,
-    ConnectorSource as LegacyConnectorSource,
+from fetchcraft.ingestion.transformations import (
+    ParsingTransformation,
+    AsyncParsingTransformation,
+    ChunkingTransformation,
+    DocumentSummarization,
+    ExtractKeywords,
 )
 
 __all__ = [
@@ -167,8 +159,6 @@ __all__ = [
     "ExtractKeywords",
     # Sinks
     "VectorIndexSink",
-    "DocumentStoreSink",
-    "LoggingSink",
     # Repositories (new naming)
     "JobRepository",
     "DocumentRepository",

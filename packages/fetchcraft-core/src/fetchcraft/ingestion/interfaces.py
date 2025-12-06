@@ -104,13 +104,15 @@ class Transformation(ABC):
     @abstractmethod
     async def process(
         self,
-        record: DocumentRecord
+        record: DocumentRecord,
+        context: Optional[dict] = None
     ) -> Optional[DocumentRecord | Iterable[DocumentRecord]]:
         """
         Process a document record synchronously.
         
         Args:
             record: The document record to process
+            context: Optional pipeline context with shared data
             
         Returns:
             - DocumentRecord: A single transformed record
@@ -211,12 +213,14 @@ class Sink(ABC):
     """
     
     @abstractmethod
-    async def write(self, record: DocumentRecord) -> None:
+    async def write(self, record: DocumentRecord, context: Optional[dict] = None) -> None:
         """
         Write a processed document record.
         
         Args:
             record: The processed document record
+            :param record: The document record
+            :param context: Pipeline context
         """
         pass
     

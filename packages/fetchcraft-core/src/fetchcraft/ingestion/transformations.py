@@ -56,13 +56,15 @@ class ParsingTransformation(Transformation):
     
     async def process(
         self,
-        record: DocumentRecord
+        record: DocumentRecord,
+        context: Optional[dict] = None
     ) -> Optional[DocumentRecord | Iterable[DocumentRecord]]:
         """
         Parse file content into documents.
         
         Args:
             record: DocumentRecord containing file metadata and content
+            context: Optional pipeline context
             
         Returns:
             One or more DocumentRecords with parsed document data
@@ -279,18 +281,6 @@ class AsyncParsingTransformation(AsyncTransformation):
                 f"No parser found for file {record.source} with mimetype {mimetype}"
             )
         
-        # Check if parser supports async submission
-        # The parser should have callback_url and task_id attributes
-        if hasattr(parser, 'callback_url') and hasattr(parser, 'task_id'):
-            # Set callback info on parser
-            parser.callback_url = callback_url
-            parser.task_id = task_id
-        else:
-            raise ValueError(
-                f"Parser for {mimetype} does not support async callbacks. "
-                "Use ParsingTransformation for synchronous parsing."
-            )
-        
         # Create file adapter
         from pathlib import Path
         import fsspec
@@ -345,7 +335,7 @@ class AsyncParsingTransformation(AsyncTransformation):
         
         # Submit to parser - this triggers the async job submission
         # The parser will yield a marker node and return
-        async for _ in parser.parse(file_adapter):
+        async for _ in parser.parse(file_adapter, task_id=task_id):
             pass  # We don't need the marker node here
         
         logger.info(
@@ -437,7 +427,8 @@ class ExtractKeywords(Transformation):
     
     async def process(
         self,
-        record: DocumentRecord
+        record: DocumentRecord,
+        context: Optional[dict] = None
     ) -> Optional[DocumentRecord | Iterable[DocumentRecord]]:
         """Extract keywords from document."""
         try:
@@ -486,7 +477,8 @@ class DocumentSummarization(Transformation):
     
     async def process(
         self,
-        record: DocumentRecord
+        record: DocumentRecord,
+        context: Optional[dict] = None
     ) -> Optional[DocumentRecord | Iterable[DocumentRecord]]:
         """Create document summary."""
         try:
@@ -532,7 +524,8 @@ class ChunkingTransformation(Transformation):
     
     async def process(
         self,
-        record: DocumentRecord
+        record: DocumentRecord,
+        context: Optional[dict] = None
     ) -> Optional[DocumentRecord | Iterable[DocumentRecord]]:
         """Chunk the document."""
         try:

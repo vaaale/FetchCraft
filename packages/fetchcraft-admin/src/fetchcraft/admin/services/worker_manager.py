@@ -14,6 +14,7 @@ import logging
 from typing import Dict, Optional, List
 
 from fetchcraft.document_store import DocumentStore
+from fetchcraft.index import IndexFactory
 from fetchcraft.index.vector_index import VectorIndex
 from fetchcraft.ingestion import (
     TrackedIngestionPipeline,
@@ -29,7 +30,7 @@ from fetchcraft.node import Node
 from fetchcraft.node_parser import NodeParser
 from fetchcraft.parsing.base import DocumentParser
 
-from .pipeline_factory import IngestionPipelineFactory
+from .pipeline_factory import DefaultIngestionPipelineFactory
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ class WorkerManager:
         job_repo: JobRepository,
         doc_repo: DocumentRepository,
         task_repo: TaskRepository,
-        pipeline_factory: IngestionPipelineFactory,
+        pipeline_factory: DefaultIngestionPipelineFactory,
         callback_base_url: str = "",
     ):
         """
@@ -83,8 +84,7 @@ class WorkerManager:
         self,
         parser_map: Dict[str, DocumentParser],
         chunker: NodeParser,
-        vector_index: VectorIndex[Node],
-        doc_store: DocumentStore,
+        index_factory: IndexFactory,
         index_id: str = "default",
     ) -> int:
         """
@@ -99,7 +99,7 @@ class WorkerManager:
             parser_map: Map of mimetype to parser
             chunker: Node parser for chunking
             vector_index: Vector index for storing chunks
-            doc_store: Document store for full documents
+            index_factory: Index factory for creating vector index
             index_id: Identifier for the vector index
             
         Returns:
@@ -133,8 +133,7 @@ class WorkerManager:
                     job,
                     parser_map=parser_map,
                     chunker=chunker,
-                    vector_index=vector_index,
-                    doc_store=doc_store,
+                    index_factory=index_factory,
                     index_id=index_id,
                 )
                 recovered += 1
@@ -154,20 +153,18 @@ class WorkerManager:
         job,
         parser_map: Dict[str, DocumentParser],
         chunker: NodeParser,
-        vector_index: VectorIndex[Node],
-        doc_store: DocumentStore,
+        index_factory: IndexFactory,
         index_id: str,
     ):
         """Recover a single job by creating pipeline and starting workers."""
         logger.info(f"Recovering job '{job.name}' (ID: {job.id})")
         
         # Create pipeline (without source since documents are already queued)
-        pipeline = self.pipeline_factory.create_pipeline(
+        pipeline = await self.pipeline_factory.create_pipeline(
             job=job,
             parser_map=parser_map,
             chunker=chunker,
-            vector_index=vector_index,
-            doc_store=doc_store,
+            index_factory=index_factory,
             index_id=index_id,
             include_source=False,
         )

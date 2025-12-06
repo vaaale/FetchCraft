@@ -1,7 +1,8 @@
 """Main API router for jobs, documents, messages, and callbacks."""
 import logging
+import os
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -19,9 +20,9 @@ from fetchcraft.admin.api.schema import (
     MessageResponse,
     MessagesListResponse,
     QueueStatsResponse,
-    RetryResponse,
+    RetryResponse, HealthResponse,
 )
-from fetchcraft.admin.config import settings
+from fetchcraft.admin.config import Settings
 from fetchcraft.ingestion.models import DocumentStatus, JobStatus
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,12 @@ def get_app_state():
     return app_state
 
 
+def get_settings() -> Settings:
+    """Get application settings."""
+    from fetchcraft.admin.config import settings
+    return settings
+
+
 def get_ingestion_dependencies():
     """Get ingestion dependencies. Must be set by server.py."""
     from fetchcraft.admin.server import _get_ingestion_dependencies
@@ -52,20 +59,31 @@ def get_ingestion_dependencies():
 # Health Check
 # =============================================================================
 
-@router.get("/health")
-async def health_check():
-    """Health check endpoint."""
+@router.get("/health", response_model=HealthResponse, tags=["General"])
+async def health():
+    """
+    Health check endpoint.
+
+    Returns the current status of the service and configuration information.
+    """
     app_state = get_app_state()
+    settings = get_settings()
     db_healthy = False
     if app_state.queue_backend:
         try:
             db_healthy = await app_state.queue_backend.check_health()
         except Exception:
             pass
-    return {
-        "status": "healthy" if db_healthy else "degraded",
-        "database_connected": db_healthy
-    }
+
+    status = "healthy" if (app_state.initialized and db_healthy) else "initializing" if not app_state.initialized else "degraded" if not db_healthy else "unknown"
+    health = HealthResponse(
+        status=status,
+        config=settings.model_dump(),
+        environment=dict(os.environ),
+    )
+    logger.info(f"System health:\n\t{health.model_dump_json(indent=2)}")
+
+    return health
 
 
 # =============================================================================
@@ -78,18 +96,19 @@ async def list_directories(
 ):
     """List directories and files in the document root."""
     try:
+        settings = get_settings()
         full_path = settings.documents_path / path if path else settings.documents_path
         full_path = full_path.resolve()
-        
+
         if not str(full_path).startswith(str(settings.documents_path.resolve())):
             raise HTTPException(status_code=400, detail="Path must be within document root")
-        
+
         if not full_path.exists():
             raise HTTPException(status_code=404, detail="Path not found")
-        
+
         if not full_path.is_dir():
             raise HTTPException(status_code=400, detail="Path is not a directory")
-        
+
         items = []
         for item in sorted(full_path.iterdir()):
             try:
@@ -101,12 +120,12 @@ async def list_directories(
                 ))
             except ValueError:
                 continue
-        
+
         return DirectoryListResponse(
             items=items,
             current_path=str(full_path.relative_to(settings.documents_path)) if path else ""
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -122,26 +141,26 @@ async def list_directories(
 async def create_job(request: CreateJobRequest):
     """Create a new ingestion job."""
     app_state = get_app_state()
+    settings = get_settings()
     if not app_state.ingestion_service:
         raise HTTPException(status_code=503, detail="Service not initialized")
-    
+
     try:
         deps = get_ingestion_dependencies()
-        
+
         job_id = await app_state.ingestion_service.create_job(
             name=request.name,
             source_path=request.source_path,
             parser_map=deps["parser_map"],
             chunker=deps["chunker"],
-            vector_index=deps["vector_index"],
-            doc_store=deps["doc_store"],
+            index_factory=deps["index_factory"],
             index_id=settings.index_id,
         )
-        
+
         job = await app_state.ingestion_service.get_job(job_id)
         if not job:
             raise HTTPException(status_code=500, detail="Job created but not found")
-        
+
         return JobResponse(
             id=job.id,
             name=job.name,
@@ -154,7 +173,7 @@ async def create_job(request: CreateJobRequest):
             completed_at=format_datetime(job.completed_at),
             error_message=job.error_message,
         )
-        
+
     except Exception as e:
         logger.error(f"Error creating job: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -170,11 +189,11 @@ async def list_jobs(
     app_state = get_app_state()
     if not app_state.ingestion_service:
         raise HTTPException(status_code=503, detail="Service not initialized")
-    
+
     try:
         job_status = JobStatus(status) if status else None
         jobs = await app_state.ingestion_service.list_jobs(job_status, limit, offset)
-        
+
         job_responses = [
             JobResponse(
                 id=job.id,
@@ -190,9 +209,9 @@ async def list_jobs(
             )
             for job in jobs
         ]
-        
+
         return JobListResponse(jobs=job_responses, total=len(job_responses))
-        
+
     except Exception as e:
         logger.error(f"Error listing jobs: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -204,12 +223,12 @@ async def get_job(job_id: str):
     app_state = get_app_state()
     if not app_state.ingestion_service:
         raise HTTPException(status_code=503, detail="Service not initialized")
-    
+
     try:
         job = await app_state.ingestion_service.get_job(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
-        
+
         return JobResponse(
             id=job.id,
             name=job.name,
@@ -222,7 +241,7 @@ async def get_job(job_id: str):
             completed_at=format_datetime(job.completed_at),
             error_message=job.error_message,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -239,14 +258,14 @@ async def delete_job(
     app_state = get_app_state()
     if not app_state.ingestion_service:
         raise HTTPException(status_code=503, detail="Service not initialized")
-    
+
     try:
         deleted = await app_state.ingestion_service.delete_job(job_id, delete_documents)
         if not deleted:
             raise HTTPException(status_code=404, detail="Job not found")
-        
+
         return {"message": "Job deleted successfully", "job_id": job_id}
-        
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
@@ -262,10 +281,10 @@ async def stop_job(job_id: str):
     app_state = get_app_state()
     if not app_state.ingestion_service:
         raise HTTPException(status_code=503, detail="Service not initialized")
-    
+
     try:
         stopped = await app_state.ingestion_service.stop_job(job_id)
-        
+
         if not stopped:
             job = await app_state.ingestion_service.get_job(job_id)
             if not job:
@@ -275,17 +294,17 @@ async def stop_job(job_id: str):
                     status_code=400,
                     detail=f"Job cannot be stopped. Current status: {job.status.value}"
                 )
-        
+
         job = await app_state.ingestion_service.get_job(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Job not found after stopping")
-        
+
         return {
             "message": f"Job '{job.name}' stopped successfully",
             "job_id": job_id,
             "status": job.status.value
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -297,25 +316,25 @@ async def stop_job(job_id: str):
 async def restart_job(job_id: str):
     """Restart a completed or failed job."""
     app_state = get_app_state()
+    settings = get_settings()
     if not app_state.ingestion_service:
         raise HTTPException(status_code=503, detail="Service not initialized")
-    
+
     try:
         deps = get_ingestion_dependencies()
-        
+
         new_job_id = await app_state.ingestion_service.restart_job(
             job_id=job_id,
             parser_map=deps["parser_map"],
             chunker=deps["chunker"],
-            vector_index=deps["vector_index"],
-            doc_store=deps["doc_store"],
+            index_factory=deps["index_factory"],
             index_id=settings.index_id,
         )
-        
+
         new_job = await app_state.ingestion_service.get_job(new_job_id)
         if not new_job:
             raise HTTPException(status_code=500, detail="Job restarted but not found")
-        
+
         return JobResponse(
             id=new_job.id,
             name=new_job.name,
@@ -328,7 +347,7 @@ async def restart_job(job_id: str):
             completed_at=format_datetime(new_job.completed_at),
             error_message=new_job.error_message,
         )
-        
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
@@ -353,13 +372,13 @@ async def list_job_documents(
     app_state = get_app_state()
     if not app_state.ingestion_service:
         raise HTTPException(status_code=503, detail="Service not initialized")
-    
+
     try:
         doc_status = DocumentStatus(status) if status else None
         docs = await app_state.ingestion_service.get_job_documents(
             job_id, doc_status, limit, offset
         )
-        
+
         doc_responses = [
             DocumentResponse(
                 id=doc.id,
@@ -377,9 +396,9 @@ async def list_job_documents(
             )
             for doc in docs
         ]
-        
+
         return DocumentListResponse(documents=doc_responses, total=len(doc_responses))
-        
+
     except Exception as e:
         logger.error(f"Error listing documents: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -391,11 +410,11 @@ async def retry_failed_documents(job_id: str):
     app_state = get_app_state()
     if not app_state.ingestion_service:
         raise HTTPException(status_code=503, detail="Service not initialized")
-    
+
     try:
         count = await app_state.ingestion_service.retry_failed_documents(job_id)
         return RetryResponse(retried_count=count)
-        
+
     except Exception as e:
         logger.error(f"Error retrying documents: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -416,14 +435,14 @@ async def list_messages(
     app_state = get_app_state()
     if not app_state.ingestion_service:
         raise HTTPException(status_code=503, detail="Service not initialized")
-    
+
     try:
         job = await app_state.ingestion_service.get_job(job_id)
         if not job:
             raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-        
+
         current_pipeline_steps = await app_state.ingestion_service.get_pipeline_steps(job_id)
-        
+
         doc_status = None
         if state and state.lower() != "all":
             status_map = {
@@ -433,14 +452,14 @@ async def list_messages(
                 "failed": DocumentStatus.FAILED,
             }
             doc_status = status_map.get(state.lower())
-        
+
         docs = await app_state.ingestion_service.get_job_documents(
             job_id=job_id,
             status=doc_status,
             limit=limit,
             offset=offset
         )
-        
+
         messages = []
         for doc in docs:
             messages.append(
@@ -461,7 +480,7 @@ async def list_messages(
                     retry_count=doc.retry_count,
                 )
             )
-        
+
         return MessagesListResponse(
             messages=messages,
             total=len(messages),
@@ -469,7 +488,7 @@ async def list_messages(
             offset=offset,
             has_more=False,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -481,18 +500,18 @@ async def list_messages(
 async def get_queue_stats():
     """Get statistics about the ingestion queues."""
     app_state = get_app_state()
-    
+
     if not app_state.queue_backend:
         raise HTTPException(status_code=503, detail="Queue backend not initialized")
-    
+
     try:
         stats = await app_state.queue_backend.get_stats()
-        
+
         # Format oldest_pending timestamp if present
         oldest_pending = None
         if stats.get("oldest_pending"):
             oldest_pending = datetime.fromtimestamp(stats["oldest_pending"]).strftime("%Y-%m-%d %H:%M:%S")
-        
+
         return QueueStatsResponse(
             total_messages=stats.get("total_messages", 0),
             by_state=stats.get("by_state", {}),
@@ -520,7 +539,7 @@ async def get_ingestion_status():
             limit=1,
             offset=0
         )
-        
+
         if running_jobs:
             return IngestionStatusResponse(status="running", pid=None)
         else:
@@ -561,21 +580,21 @@ async def task_callback(callback: CallbackMessage):
     when async tasks complete or fail.
     """
     app_state = get_app_state()
-    
+
     if not app_state.worker_manager:
         raise HTTPException(status_code=503, detail="Worker manager not initialized")
-    
+
     logger.info(
         f"Received task callback: task_id={callback.task_id}, status={callback.status}"
     )
-    
+
     try:
         success = await app_state.worker_manager.handle_task_callback(
             task_id=callback.task_id,
             status=callback.status,
             message=callback.message,
         )
-        
+
         if success:
             return CallbackResponse(
                 success=True,
@@ -588,7 +607,7 @@ async def task_callback(callback: CallbackMessage):
                 message="Failed to process callback",
                 task_id=callback.task_id
             )
-            
+
     except Exception as e:
         logger.error(f"Error processing task callback: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

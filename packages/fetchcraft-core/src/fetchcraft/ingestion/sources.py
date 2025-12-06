@@ -9,12 +9,11 @@ from __future__ import annotations
 import base64
 import logging
 from pathlib import Path
-from typing import AsyncIterable, Dict, Optional
+from typing import AsyncIterable, Optional
 
-from fetchcraft.connector.base import Connector as BaseConnector, File
+from fetchcraft.connector.base import Connector as BaseConnector
 from fetchcraft.ingestion.interfaces import Source, Connector as ConnectorInterface
 from fetchcraft.ingestion.models import DocumentRecord
-from fetchcraft.parsing.base import DocumentParser
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +65,8 @@ class ConnectorSource(Source):
         """
         logger.info("Starting to read files from connector")
         file_count = 0
-        
-        async for file in self.connector.read():
+
+        async for file in self.connector.glob():
             file_count += 1
             logger.debug(f"Processing file: {file.path}")
             

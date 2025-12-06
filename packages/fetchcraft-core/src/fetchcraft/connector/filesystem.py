@@ -88,7 +88,14 @@ class FilesystemConnector(Connector):
     def get_name(self) -> str:
         return f"FilesystemConnector"
 
-    async def read(self) -> AsyncIterable[LocalFile]:
+    async def list_directories(self) -> List[str]:
+        dirs = []
+        for path in self.fs.glob("**/*"):
+            if self.fs.isdir(path):
+                dirs.append(path)
+        return dirs
+
+    async def glob(self) -> AsyncIterable[LocalFile]:
         print(f"Ingesting files from {self.path}")
         for path in self.fs.glob("**/*"):
             if self.fs.isdir(path) or (self.filter and not self.filter(LocalFile(path=path, fs=self.fs))):

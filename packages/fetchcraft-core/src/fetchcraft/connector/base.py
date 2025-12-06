@@ -1,12 +1,11 @@
+import mimetypes
 from abc import ABC, abstractmethod
-from io import BytesIO
 from pathlib import Path
 from typing import *
 from uuid import uuid4
 
 import fsspec
 from pydantic import BaseModel, Field
-import mimetypes
 
 
 class Role(BaseModel):
@@ -58,5 +57,9 @@ class Connector(ABC):
         ...
 
     @abstractmethod
-    async def read(self) -> AsyncIterable['File']:
+    async def list_directories(self) -> List[str]:
+        ...
+
+    @abstractmethod
+    async def glob(self) -> AsyncIterable['File']:
         ...
