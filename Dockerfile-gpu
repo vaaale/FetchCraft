@@ -1,7 +1,7 @@
 FROM pytorch/pytorch:2.6.0-cuda12.6-cudnn9-devel
 #FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
-#RUN apt-get update && apt install python3 install ffmpeg libsm6 libxext6 nvtop -y
+RUN apt-get update && apt install ffmpeg libsm6 libxext6 nvtop wget htop vim -y
 
 # Set working directory
 WORKDIR /app
