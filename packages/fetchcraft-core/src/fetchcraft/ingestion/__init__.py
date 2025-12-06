@@ -63,13 +63,22 @@ from fetchcraft.ingestion.pipeline import TrackedIngestionPipeline, PipelineStep
 from fetchcraft.ingestion.models import (
     IngestionJob,
     DocumentRecord,
+    TaskRecord,
     JobStatus,
     DocumentStatus,
+    TaskStatus,
     utcnow,
 )
 
-# Interfaces
+# Interfaces (new naming without I-prefix)
 from fetchcraft.ingestion.interfaces import (
+    Source,
+    Transformation,
+    AsyncTransformation,
+    Sink,
+    Connector,
+    QueueBackend,
+    # Backwards compatibility aliases
     ISource,
     ITransformation,
     IRemoteTransformation,
@@ -82,6 +91,7 @@ from fetchcraft.ingestion.interfaces import (
 from fetchcraft.ingestion.sources import ConnectorSource
 from fetchcraft.ingestion.transformations import (
     ParsingTransformation,
+    AsyncParsingTransformation,
     ChunkingTransformation,
     DocumentSummarization,
     ExtractKeywords,
@@ -92,12 +102,18 @@ from fetchcraft.ingestion.sinks import (
     LoggingSink,
 )
 
-# Repositories
+# Repositories (new naming without I-prefix)
 from fetchcraft.ingestion.repository import (
-    IJobRepository,
-    IDocumentRepository,
+    JobRepository,
+    DocumentRepository,
+    TaskRepository,
     PostgresJobRepository,
     PostgresDocumentRepository,
+    PostgresTaskRepository,
+    # Backwards compatibility aliases
+    IJobRepository,
+    IDocumentRepository,
+    ITaskRepository,
 )
 
 # Queue backends
@@ -122,10 +138,19 @@ __all__ = [
     # Models
     "IngestionJob",
     "DocumentRecord",
+    "TaskRecord",
     "JobStatus",
     "DocumentStatus",
+    "TaskStatus",
     "utcnow",
-    # Interfaces
+    # Interfaces (new naming)
+    "Source",
+    "Transformation",
+    "AsyncTransformation",
+    "Sink",
+    "Connector",
+    "QueueBackend",
+    # Interfaces (backwards compatibility)
     "ISource",
     "ITransformation",
     "IRemoteTransformation",
@@ -136,6 +161,7 @@ __all__ = [
     "ConnectorSource",
     # Transformations
     "ParsingTransformation",
+    "AsyncParsingTransformation",
     "ChunkingTransformation",
     "DocumentSummarization",
     "ExtractKeywords",
@@ -143,19 +169,22 @@ __all__ = [
     "VectorIndexSink",
     "DocumentStoreSink",
     "LoggingSink",
-    # Repositories
-    "IJobRepository",
-    "IDocumentRepository",
+    # Repositories (new naming)
+    "JobRepository",
+    "DocumentRepository",
+    "TaskRepository",
     "PostgresJobRepository",
     "PostgresDocumentRepository",
+    "PostgresTaskRepository",
+    # Repositories (backwards compatibility)
+    "IJobRepository",
+    "IDocumentRepository",
+    "ITaskRepository",
     # Queue Backends
     "AsyncPostgresQueue",
     "AsyncSQLiteQueue",
     # Legacy (deprecated)
     "LegacyIngestionPipeline",
     "Record",
-    "Source",
-    "Transformation",
-    "Sink",
     "LegacyConnectorSource",
 ]

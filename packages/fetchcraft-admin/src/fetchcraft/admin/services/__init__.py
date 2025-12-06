@@ -1,16 +1,21 @@
 """Services package for Fetchcraft Admin."""
 
 from .ingestion_service import IngestionService
-from .pipeline_factory import IIngestionPipelineFactory, IngestionPipelineFactory
+from .pipeline_factory import (
+    IngestionPipelineFactoryInterface,
+    IngestionPipelineFactory,
+    IIngestionPipelineFactory,  # Backwards compatibility
+)
 from .job_service import JobService
 from .document_service import DocumentService
-from .callback_service import CallbackService
+from .worker_manager import WorkerManager
 
 __all__ = [
     "IngestionService",
-    "IIngestionPipelineFactory",
+    "IngestionPipelineFactoryInterface",
     "IngestionPipelineFactory",
+    "IIngestionPipelineFactory",  # Backwards compatibility
     "JobService",
     "DocumentService",
-    "CallbackService",
+    "WorkerManager",
 ]

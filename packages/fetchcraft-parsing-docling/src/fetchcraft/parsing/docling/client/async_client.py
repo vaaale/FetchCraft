@@ -120,7 +120,12 @@ class AsyncDoclingParserClient:
         tasks = [parse_with_semaphore(path) for path in file_paths]
         return await asyncio.gather(*tasks)
 
-    async def submit_job(self, *file_paths, callback_url: str = None) -> Dict[str, Any]:
+    async def submit_job(
+        self, 
+        *file_paths, 
+        callback_url: str = None,
+        task_id: str = None
+    ) -> Dict[str, Any]:
         """
         Submit files for parsing and return immediately with a job ID.
         
@@ -130,7 +135,8 @@ class AsyncDoclingParserClient:
         
         Args:
             *file_paths: Variable number of file paths (str or Path)
-            callback_url: Optional callback URL to receive nodes as they are parsed
+            callback_url: Optional callback URL to receive callbacks
+            task_id: Optional task ID for callback correlation
             
         Returns:
             Job submission response with job_id
@@ -145,6 +151,9 @@ class AsyncDoclingParserClient:
         
         if callback_url:
             data.add_field('callback_url', callback_url)
+        
+        if task_id:
+            data.add_field('task_id', task_id)
 
         async with aiohttp.ClientSession() as session:
             async with session.post(f"{self.base_url}/submit", data=data) as response:

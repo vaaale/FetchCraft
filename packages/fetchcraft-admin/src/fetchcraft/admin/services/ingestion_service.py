@@ -21,14 +21,18 @@ from fetchcraft.ingestion.models import (
     utcnow,
 )
 from fetchcraft.ingestion.repository import (
-    IJobRepository,
-    IDocumentRepository,
+    JobRepository,
+    DocumentRepository,
 )
 from fetchcraft.node import Node
 from fetchcraft.node_parser import NodeParser
 from fetchcraft.parsing.base import DocumentParser
-from .pipeline_factory import IIngestionPipelineFactory
+from .pipeline_factory import IngestionPipelineFactoryInterface
 from fetchcraft.ingestion import TrackedIngestionPipeline
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .worker_manager import WorkerManager
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +47,11 @@ class IngestionService:
 
     def __init__(
         self,
-        job_repo: IJobRepository,
-        doc_repo: IDocumentRepository,
-        pipeline_factory: IIngestionPipelineFactory,
+        job_repo: JobRepository,
+        doc_repo: DocumentRepository,
+        pipeline_factory: IngestionPipelineFactoryInterface,
         document_root: Path,
+        worker_manager: Optional["WorkerManager"] = None,
     ):
         """
         Initialize the ingestion service.
@@ -56,11 +61,13 @@ class IngestionService:
             doc_repo: Repository for document tracking
             pipeline_factory: Factory for creating configured pipelines
             document_root: Root directory for documents
+            worker_manager: Worker manager for registering pipelines (for callback handling)
         """
         self.job_repo = job_repo
         self.doc_repo = doc_repo
         self.pipeline_factory = pipeline_factory
         self.document_root = document_root
+        self.worker_manager = worker_manager
         self._background_tasks: set[asyncio.Task] = set()  # Track background tasks to prevent GC
         self._pipelines: dict[str, TrackedIngestionPipeline] = {}  # Track pipelines by job_id
 
@@ -141,6 +148,10 @@ class IngestionService:
 
         # Track pipeline for this job
         self._pipelines[job.id] = pipeline
+        
+        # Register with worker manager for callback handling
+        if self.worker_manager:
+            self.worker_manager.register_pipeline(job.id, pipeline)
 
         # Start job in background
         # Track the task to prevent garbage collection
@@ -165,6 +176,9 @@ class IngestionService:
         finally:
             # Remove pipeline from tracking when job completes
             self._pipelines.pop(pipeline.job.id, None)
+            # Unregister from worker manager
+            if self.worker_manager:
+                self.worker_manager.unregister_pipeline(pipeline.job.id)
 
     async def recover_running_jobs(
         self,

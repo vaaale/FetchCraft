@@ -46,7 +46,7 @@ from pathlib import Path
 from typing import List, Optional, Dict
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 
 from fetchcraft.parsing.docling.docling_parser import DoclingDocumentParser
@@ -95,6 +95,8 @@ class Job:
     completed_at: Optional[float] = None
     results: Optional[BatchParseResponse] = None
     error: Optional[str] = None
+    task_id: Optional[str] = None  # Task ID for callback correlation
+    callback_url: Optional[str] = None  # URL to send callbacks to
 
 
 class AppState:
@@ -175,6 +177,18 @@ def parse_file_sync(file_path: Path) -> ParseResponse:
         )
 
 
+async def send_callback(url: str, payload: dict) -> bool:
+    """Send a callback to the specified URL."""
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, json=payload)
+            return 200 <= response.status_code < 300
+    except Exception as e:
+        print(f"⚠️  Callback failed: {url} - {e}")
+        return False
+
+
 async def process_jobs():
     """Background task to process jobs from the queue."""
     print("📋 Job processor started")
@@ -212,6 +226,7 @@ async def process_jobs():
                     # Process files using thread pool to avoid blocking the event loop
                     loop = asyncio.get_event_loop()
                     results = []
+                    total_nodes_sent = 0
                     
                     for file_path in file_paths:
                         # Run the parsing in a thread pool
@@ -222,6 +237,23 @@ async def process_jobs():
                                 file_path
                             )
                             results.append(result)
+                            
+                            # Send node callbacks if callback_url is set
+                            if job.callback_url and result.success:
+                                for node_idx, node_data in enumerate(result.nodes):
+                                    callback_payload = {
+                                        "task_id": job.task_id,
+                                        "status": "PROCESSING",
+                                        "message": {
+                                            "type": "node",
+                                            "node": node_data,
+                                            "node_index": total_nodes_sent + node_idx,
+                                            "filename": result.filename,
+                                        }
+                                    }
+                                    await send_callback(job.callback_url, callback_payload)
+                                total_nodes_sent += result.num_nodes
+                            
                             # Yield control back to event loop periodically
                             await asyncio.sleep(0)
                 
@@ -242,12 +274,42 @@ async def process_jobs():
                     total_processing_time_ms=round(batch_processing_time, 2)
                 )
                 job.status = JobStatusEnum.COMPLETED
-                print(f"✅ Job {job_id} completed: {successful}/{total_files} files successful")
+                print(f"✅ Job {job_id} completed: {successful}/{total_files} files successful, {total_nodes} nodes")
+                
+                # Send completion callback
+                if job.callback_url:
+                    callback_payload = {
+                        "task_id": job.task_id,
+                        "status": "COMPLETED",
+                        "message": {
+                            "type": "completion",
+                            "total_nodes": total_nodes,
+                            "total_files": total_files,
+                            "successful_files": successful,
+                            "failed_files": failed,
+                            "processing_time_ms": round(batch_processing_time, 2),
+                        }
+                    }
+                    await send_callback(job.callback_url, callback_payload)
                 
             except Exception as e:
                 job.status = JobStatusEnum.FAILED
                 job.error = str(e)
                 print(f"❌ Job {job_id} failed: {e}")
+                
+                # Send failure callback
+                if job.callback_url:
+                    processing_time = (time.time() - batch_start_time) * 1000 if 'batch_start_time' in dir() else 0
+                    callback_payload = {
+                        "task_id": job.task_id,
+                        "status": "FAILED",
+                        "message": {
+                            "type": "failure",
+                            "processing_time_ms": round(processing_time, 2),
+                        },
+                        "error": str(e)
+                    }
+                    await send_callback(job.callback_url, callback_payload)
             
             finally:
                 job.completed_at = time.time()
@@ -558,7 +620,9 @@ async def parse_documents(
 
 @app.post("/submit", response_model=JobSubmitResponse, tags=["Async Parsing"])
 async def submit_job(
-    files: List[UploadFile] = File(..., description="One or more files to parse")
+    files: List[UploadFile] = File(..., description="One or more files to parse"),
+    task_id: Optional[str] = Form(None, description="Task ID for callback correlation"),
+    callback_url: Optional[str] = Form(None, description="URL to send callbacks to"),
 ):
     """
     Submit a parsing job and return immediately with a job ID.
@@ -568,8 +632,15 @@ async def submit_job(
     Use the /jobs/{job_id} endpoint to check the status and 
     /jobs/{job_id}/results to retrieve results when complete.
     
+    If callback_url is provided, callbacks will be sent in CallbackMessage format:
+    - task_id: The provided task_id (or job_id if not provided)
+    - status: "PROCESSING" for each node, "COMPLETED" or "FAILED" at the end
+    - message: Contains node data or completion info
+    
     Args:
         files: List of files to parse
+        task_id: Optional task ID for callback correlation
+        callback_url: Optional URL to send callbacks to
         
     Returns:
         JobSubmitResponse with job_id for tracking
@@ -607,11 +678,13 @@ async def submit_job(
         
         file_data.append((filename, content))
     
-    # Create job
+    # Create job with callback info
     job = Job(
         job_id=job_id,
         files=file_data,
-        status=JobStatusEnum.PENDING
+        status=JobStatusEnum.PENDING,
+        task_id=task_id or job_id,  # Use job_id as task_id if not provided
+        callback_url=callback_url
     )
     
     # Store job
@@ -620,7 +693,8 @@ async def submit_job(
     # Queue job for processing
     await app_state.job_queue.put(job_id)
     
-    print(f"📥 Job {job_id} submitted with {len(files)} files")
+    callback_info = f" (callback: {callback_url})" if callback_url else ""
+    print(f"📥 Job {job_id} submitted with {len(files)} files{callback_info}")
     
     return JobSubmitResponse(
         job_id=job_id,
@@ -710,7 +784,7 @@ def main():
         print(f"  • {key}: {value}")
 
     uvicorn.run(
-        "fetchcraft.parsing.docling.server:api",
+        "fetchcraft.parsing.docling.server:app",
         host=HOST,
         port=PORT,
         reload=False,

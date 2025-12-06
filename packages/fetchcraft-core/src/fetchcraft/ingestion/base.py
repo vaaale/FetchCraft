@@ -1,14 +1,14 @@
 """
-Async, durable, pluggable ingestion pipeline for RAG (SQLite-backed, no middleware)
+Legacy ingestion pipeline utilities.
 
-Changes in this revision
-------------------------
-- **target ➜ sinks**: `add_sink(...)` and you can register multiple sinks. (Former `Target` is now `Sink`.)
-- **asyncio everywhere**: async queue backend, async workers, async steps/sources/sinks (with sync fallbacks via `asyncio.to_thread`).
-- Still **no external middleware**: durability via a tiny SQLite WAL queue with leases + retries.
-- Deferred steps run on a separate async worker consuming `ingest.deferred`.
+DEPRECATED: This module contains the legacy IngestionPipeline which is deprecated.
+Use TrackedIngestionPipeline from fetchcraft.ingestion.pipeline instead.
 
-Python 3.10+ recommended.
+This module is kept for backwards compatibility and provides:
+- Queue message utilities (QueueMessage, to_json, from_json)
+- AsyncQueueBackend protocol
+- Legacy Record, Source, Transformation, Sink protocols
+- Legacy IngestionPipeline (deprecated)
 """
 from __future__ import annotations
 

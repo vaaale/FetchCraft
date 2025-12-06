@@ -12,14 +12,14 @@ from typing import Optional
 
 from fetchcraft.document_store import DocumentStore
 from fetchcraft.index.vector_index import VectorIndex
-from fetchcraft.ingestion.interfaces import ISink
+from fetchcraft.ingestion.interfaces import Sink
 from fetchcraft.ingestion.models import DocumentRecord
 from fetchcraft.node import DocumentNode, Node
 
 logger = logging.getLogger(__name__)
 
 
-class VectorIndexSink(ISink):
+class VectorIndexSink(Sink):
     """
     Sink that writes documents to a vector index.
     
@@ -83,7 +83,7 @@ class VectorIndexSink(ISink):
         return self._counter
 
 
-class DocumentStoreSink(ISink):
+class DocumentStoreSink(Sink):
     """
     Sink that writes documents to a document store.
     
@@ -138,7 +138,7 @@ class DocumentStoreSink(ISink):
         return self._counter
 
 
-class LoggingSink(ISink):
+class LoggingSink(Sink):
     """
     Simple logging sink for testing and debugging.
     

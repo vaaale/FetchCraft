@@ -16,19 +16,22 @@ class RemoteDoclingParser(DocumentParser):
     client: AsyncDoclingParserClient
     timeout: int = 60 * 40
     callback_url: Optional[str] = None
+    task_id: Optional[str] = None
 
     def __init__(
         self, 
         docling_url: str = "http://localhost:8080", 
         timeout: int = 60*40,
-        callback_url: Optional[str] = None
+        callback_url: Optional[str] = None,
+        task_id: Optional[str] = None
     ):
         client = AsyncDoclingParserClient(docling_url, timeout)
         super().__init__(
             docling_url=docling_url, 
             client=client, 
             timeout=timeout,
-            callback_url=callback_url
+            callback_url=callback_url,
+            task_id=task_id
         )
 
 
@@ -53,11 +56,15 @@ class RemoteDoclingParser(DocumentParser):
             
             # If callback_url is set, use async mode
             if self.callback_url:
-                # Submit job asynchronously with callback
-                response = await self.client.submit_job(tmp.name, callback_url=self.callback_url)
+                # Submit job asynchronously with callback and task_id
+                response = await self.client.submit_job(
+                    tmp.name, 
+                    callback_url=self.callback_url,
+                    task_id=self.task_id
+                )
                 job_id = response.get('job_id')
                 
-                print(f"Submitted docling parsing job: {job_id} for file {file.path.name}")
+                print(f"Submitted docling parsing job: {job_id} (task_id: {self.task_id}) for file {file.path.name}")
                 
                 # Yield a marker node that indicates async processing
                 # This will be used to create a parent document that tracks the job
@@ -66,6 +73,7 @@ class RemoteDoclingParser(DocumentParser):
                     metadata={
                         **file.metadata(),
                         'docling_job_id': job_id,
+                        'task_id': self.task_id,
                         'is_parent_document': 'true',
                         'async_parsing': 'true',
                         'filename': file.path.name,

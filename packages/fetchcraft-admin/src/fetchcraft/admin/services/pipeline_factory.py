@@ -9,18 +9,20 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Optional
 
 from fetchcraft.connector.filesystem import FilesystemConnector
 from fetchcraft.document_store import DocumentStore
 from fetchcraft.index.vector_index import VectorIndex
-from fetchcraft.ingestion.interfaces import IQueueBackend
+from fetchcraft.ingestion.interfaces import QueueBackend
 from fetchcraft.ingestion.models import IngestionJob
 from fetchcraft.ingestion.pipeline import TrackedIngestionPipeline
-from fetchcraft.ingestion.repository import IJobRepository, IDocumentRepository
+from fetchcraft.ingestion.repository import JobRepository, DocumentRepository, TaskRepository
 from fetchcraft.ingestion.sinks import VectorIndexSink, DocumentStoreSink
 from fetchcraft.ingestion.sources import ConnectorSource
 from fetchcraft.ingestion.transformations import (
     ParsingTransformation,
+    AsyncParsingTransformation,
     ChunkingTransformation,
     ExtractKeywords,
 )
@@ -31,7 +33,7 @@ from fetchcraft.parsing.base import DocumentParser
 logger = logging.getLogger(__name__)
 
 
-class IIngestionPipelineFactory(ABC):
+class IngestionPipelineFactoryInterface(ABC):
     """Interface for creating ingestion pipelines."""
     
     @abstractmethod
@@ -63,7 +65,7 @@ class IIngestionPipelineFactory(ABC):
         pass
 
 
-class IngestionPipelineFactory(IIngestionPipelineFactory):
+class IngestionPipelineFactory(IngestionPipelineFactoryInterface):
     """
     Factory for creating ingestion pipelines with standard configuration.
     
@@ -78,11 +80,13 @@ class IngestionPipelineFactory(IIngestionPipelineFactory):
     
     def __init__(
         self,
-        queue_backend: IQueueBackend,
-        job_repo: IJobRepository,
-        doc_repo: IDocumentRepository,
+        queue_backend: QueueBackend,
+        job_repo: JobRepository,
+        doc_repo: DocumentRepository,
         document_root: Path,
         num_workers: int = 4,
+        task_repo: Optional[TaskRepository] = None,
+        callback_base_url: str = "",
     ):
         """
         Initialize the pipeline factory.
@@ -93,12 +97,16 @@ class IngestionPipelineFactory(IIngestionPipelineFactory):
             doc_repo: Repository for document tracking
             document_root: Root directory for documents
             num_workers: Number of concurrent workers
+            task_repo: Repository for task tracking (required for async transformations)
+            callback_base_url: Base URL for async transformation callbacks
         """
         self.queue_backend = queue_backend
         self.job_repo = job_repo
         self.doc_repo = doc_repo
         self.document_root = document_root
         self.num_workers = num_workers
+        self.task_repo = task_repo
+        self.callback_base_url = callback_base_url
         
         logger.info(
             f"IngestionPipelineFactory initialized with {num_workers} worker(s)"
@@ -137,7 +145,9 @@ class IngestionPipelineFactory(IIngestionPipelineFactory):
             backend=self.queue_backend,
             job_repo=self.job_repo,
             doc_repo=self.doc_repo,
+            task_repo=self.task_repo,
             num_workers=self.num_workers,
+            callback_base_url=self.callback_base_url,
         )
         
         # Configure source if requested (skip for recovery scenarios)
@@ -156,13 +166,29 @@ class IngestionPipelineFactory(IIngestionPipelineFactory):
             
             pipeline.source(source)
         
+        # Check if any parser supports async callbacks
+        has_async_parser = any(
+            hasattr(p, 'callback_url') and p.callback_url
+            for p in parser_map.values()
+        )
+        
         # Add transformations
-        pipeline.add_transformation(ParsingTransformation(parser_map=parser_map))
+        if has_async_parser:
+            # Use async parsing transformation for parsers with callbacks
+            pipeline.add_transformation(AsyncParsingTransformation(parser_map=parser_map))
+        else:
+            # Use synchronous parsing transformation
+            pipeline.add_transformation(ParsingTransformation(parser_map=parser_map))
+        
         pipeline.add_transformation(ExtractKeywords())
         pipeline.add_transformation(ChunkingTransformation(chunker=chunker))
         
         # Add sinks
         pipeline.add_sink(VectorIndexSink(vector_index=vector_index, index_id=index_id))
         
-        logger.info(f"Pipeline configured for job '{job.name}'")
+        logger.info(f"Pipeline configured for job '{job.name}' (async_parsing={has_async_parser})")
         return pipeline
+
+
+# Backwards compatibility alias
+IIngestionPipelineFactory = IngestionPipelineFactoryInterface

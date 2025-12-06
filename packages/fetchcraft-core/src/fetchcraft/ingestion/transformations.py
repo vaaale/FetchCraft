@@ -9,12 +9,13 @@ from __future__ import annotations
 import base64
 import io
 import logging
-from typing import Optional, Iterable, Dict
+import uuid
+from typing import Optional, Iterable, Dict, Any, Literal, List
 
 from pydantic import ConfigDict
 from fetchcraft.connector.base import File
-from fetchcraft.ingestion.interfaces import ITransformation
-from fetchcraft.ingestion.models import DocumentRecord
+from fetchcraft.ingestion.interfaces import Transformation, AsyncTransformation
+from fetchcraft.ingestion.models import DocumentRecord, DocumentStatus
 from fetchcraft.node import DocumentNode
 from fetchcraft.node_parser import NodeParser
 from fetchcraft.parsing.base import DocumentParser
@@ -22,7 +23,7 @@ from fetchcraft.parsing.base import DocumentParser
 logger = logging.getLogger(__name__)
 
 
-class ParsingTransformation(ITransformation):
+class ParsingTransformation(Transformation):
     """
     Parse file content into documents using DocumentParsers.
     
@@ -206,7 +207,217 @@ class ParsingTransformation(ITransformation):
         return "ParsingTransformation"
 
 
-class ExtractKeywords(ITransformation):
+class AsyncParsingTransformation(AsyncTransformation):
+    """
+    Async parsing transformation for remote document parsing services.
+    
+    This transformation submits documents to an external parsing service
+    (e.g., docling) and handles callbacks as nodes are parsed.
+    
+    The callback message format expected:
+    - status: "PROCESSING" with message.type: "node" - contains a parsed node
+    - status: "COMPLETED" with message.type: "completion" - job finished
+    - status: "FAILED" - job failed with error
+    
+    Attributes:
+        parser_map: Map of mimetype -> parser (parsers must support async callbacks)
+    """
+    
+    def __init__(
+        self,
+        parser: Optional[DocumentParser] = None,
+        parser_map: Optional[Dict[str, DocumentParser]] = None,
+    ):
+        """
+        Initialize the async parsing transformation.
+        
+        Args:
+            parser: Default parser (added to parser_map as "default")
+            parser_map: Map of mimetype to parser
+        """
+        self.parser_map = parser_map or {}
+        
+        if parser and "default" not in self.parser_map:
+            self.parser_map["default"] = parser
+        
+        # Track accumulated nodes per task
+        self._task_nodes: Dict[str, List[Dict[str, Any]]] = {}
+        self._task_metadata: Dict[str, Dict[str, Any]] = {}
+        
+        logger.debug(f"AsyncParsingTransformation initialized with {len(self.parser_map)} parsers")
+    
+    async def submit(
+        self,
+        record: DocumentRecord,
+        task_id: str,
+        callback_url: str
+    ) -> None:
+        """
+        Submit document to external parsing service.
+        
+        Args:
+            record: The document record to process
+            task_id: Unique task identifier for correlation
+            callback_url: URL where callbacks should be sent
+        """
+        # Get file metadata
+        mimetype = record.metadata.get("mimetype", "")
+        file_path = record.metadata.get("file_path", "")
+        file_content_b64 = record.metadata.get("file_content_b64")
+        
+        if not file_content_b64:
+            raise ValueError(f"No file content in record for {record.source}")
+        
+        # Decode base64 content
+        file_content = base64.b64decode(file_content_b64)
+        
+        # Select parser based on mimetype
+        parser = self.parser_map.get(mimetype, self.parser_map.get("default"))
+        
+        if not parser:
+            raise ValueError(
+                f"No parser found for file {record.source} with mimetype {mimetype}"
+            )
+        
+        # Check if parser supports async submission
+        # The parser should have callback_url and task_id attributes
+        if hasattr(parser, 'callback_url') and hasattr(parser, 'task_id'):
+            # Set callback info on parser
+            parser.callback_url = callback_url
+            parser.task_id = task_id
+        else:
+            raise ValueError(
+                f"Parser for {mimetype} does not support async callbacks. "
+                "Use ParsingTransformation for synchronous parsing."
+            )
+        
+        # Create file adapter
+        from pathlib import Path
+        import fsspec
+        
+        class FileAdapter(File):
+            """Adapter to provide file interface from content."""
+            model_config = ConfigDict(arbitrary_types_allowed=True)
+            
+            def __init__(self, path_str: str, content: bytes, mimetype: str, encoding: str):
+                fs = fsspec.filesystem('memory')
+                super().__init__(
+                    path=Path(path_str),
+                    fs=fs,
+                    mimetype=mimetype,
+                    encoding=encoding,
+                )
+                self._content = content
+            
+            async def read(self) -> bytes:
+                return self._content
+            
+            def name(self) -> str:
+                return self.path.name
+            
+            def permissions(self) -> list:
+                return []
+            
+            def metadata(self) -> dict:
+                return {
+                    "path": str(self.path),
+                    "mimetype": self.mimetype,
+                    "encoding": self.encoding,
+                    "size": len(self._content)
+                }
+        
+        file_adapter = FileAdapter(
+            path_str=file_path,
+            content=file_content,
+            mimetype=mimetype,
+            encoding=record.metadata.get("encoding", "utf-8")
+        )
+        
+        # Initialize task tracking
+        self._task_nodes[task_id] = []
+        self._task_metadata[task_id] = {
+            "source": record.source,
+            "file_path": file_path,
+            "mimetype": mimetype,
+            "document_id": record.id,
+            "job_id": record.job_id,
+        }
+        
+        # Submit to parser - this triggers the async job submission
+        # The parser will yield a marker node and return
+        async for _ in parser.parse(file_adapter):
+            pass  # We don't need the marker node here
+        
+        logger.info(
+            f"Submitted {record.source} to async parsing service "
+            f"(task_id: {task_id}, callback: {callback_url})"
+        )
+    
+    async def on_message(
+        self,
+        message: Dict[str, Any],
+        status: Literal['PROCESSING', 'COMPLETED', 'FAILED']
+    ) -> Optional[DocumentRecord | Iterable[DocumentRecord]]:
+        """
+        Handle callback message from parsing service.
+        
+        Args:
+            message: Callback payload containing node data or completion info
+            status: Callback status
+            
+        Returns:
+            - If COMPLETED: List of DocumentRecords for each parsed node
+            - If PROCESSING: None (accumulate nodes)
+            - If FAILED: Raises exception
+        """
+        # Extract task_id from the message context
+        # Note: task_id is passed separately to handle_task_callback, 
+        # but we need to track which task this message belongs to
+        msg_type = message.get("type", "")
+        
+        if status == "PROCESSING" and msg_type == "node":
+            # Accumulate node data
+            node_data = message.get("node", {})
+            filename = message.get("filename", "")
+            node_index = message.get("node_index", 0)
+            
+            logger.debug(
+                f"Received node {node_index} from file {filename}"
+            )
+            
+            # We can't easily track by task_id here since it's not in message
+            # The pipeline handles task correlation
+            return None
+        
+        elif status == "COMPLETED" and msg_type == "completion":
+            # Parsing completed
+            total_nodes = message.get("total_nodes", 0)
+            total_files = message.get("total_files", 0)
+            processing_time = message.get("processing_time_ms", 0)
+            
+            logger.info(
+                f"Async parsing completed: {total_nodes} nodes from {total_files} files "
+                f"in {processing_time}ms"
+            )
+            
+            # The actual node documents are created via PROCESSING callbacks
+            # Return None to indicate completion without new documents
+            return None
+        
+        elif status == "FAILED":
+            error = message.get("error", "Unknown parsing error")
+            raise RuntimeError(f"Async parsing failed: {error}")
+        
+        else:
+            logger.warning(f"Unknown message type: {msg_type} with status: {status}")
+            return None
+    
+    def get_name(self) -> str:
+        """Get transformation name."""
+        return "AsyncParsingTransformation"
+
+
+class ExtractKeywords(Transformation):
     """
     Extract keywords from document text.
     
@@ -256,7 +467,7 @@ class ExtractKeywords(ITransformation):
             raise
 
 
-class DocumentSummarization(ITransformation):
+class DocumentSummarization(Transformation):
     """
     Create a simple extractive summary of document text.
     
@@ -302,7 +513,7 @@ class DocumentSummarization(ITransformation):
             raise
 
 
-class ChunkingTransformation(ITransformation):
+class ChunkingTransformation(Transformation):
     """
     Split documents into chunks using a NodeParser.
     
