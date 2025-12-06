@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-fetchcraft-admin = "fetchcraft.admin.server:main"
+fetchcraft-admin = "fetchcraft.admin.main:main"
 
 [build-system]
 requires = ["hatchling"]
