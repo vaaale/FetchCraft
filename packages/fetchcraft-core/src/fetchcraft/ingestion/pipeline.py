@@ -254,7 +254,11 @@ class TrackedIngestionPipeline:
         )
 
     # ========== Builder API ==========
-    
+
+    def context(self, items: dict):
+        self._context.update(items)
+        return self
+
     def source(self, src: Source) -> "TrackedIngestionPipeline":
         """
         Set the pipeline source.

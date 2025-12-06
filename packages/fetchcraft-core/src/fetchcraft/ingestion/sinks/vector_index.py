@@ -55,7 +55,7 @@ class VectorIndexSink(Sink):
                 # Get document and chunks
                 doc = DocumentNode.model_validate(record.metadata["document"])
                 chunk_dicts = record.metadata.get("chunks", [])
-                vector_index = self.vector_index or self.index_factory.create_index(VectorIndex, index_id=self.index_id)
+                vector_index = self.vector_index or self.index_factory.create_index(VectorIndex, index_id=self.index_id, context=context)
 
                 # Add new chunks
                 if chunk_dicts:

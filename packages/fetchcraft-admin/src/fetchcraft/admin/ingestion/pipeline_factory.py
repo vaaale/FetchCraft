@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from fetchcraft.connector.filesystem import FilesystemConnector
 from fetchcraft.index import BaseIndex, IndexFactory, VectorIndex
-from fetchcraft.ingestion.interfaces import QueueBackend
+from fetchcraft.ingestion.interfaces import QueueBackend, Source
 from fetchcraft.ingestion.models import IngestionJob
 from fetchcraft.ingestion.pipeline import TrackedIngestionPipeline
 from fetchcraft.ingestion.repository import JobRepository, DocumentRepository, TaskRepository
@@ -158,7 +158,12 @@ class FetchcraftIngestionPipelineFactory(BaseModel):
         return self._index_id
     
     @abstractmethod
-    def configure_pipeline(self, pipeline: TrackedIngestionPipeline) -> None:
+    async def create_source(self, documents_path: Path) -> Source:
+        """Create a source for the pipeline."""
+        pass
+
+    @abstractmethod
+    async def configure_pipeline(self, pipeline: TrackedIngestionPipeline) -> None:
         """
         Configure the pipeline with transformations and sinks.
         
@@ -219,12 +224,12 @@ class FetchcraftIngestionPipelineFactory(BaseModel):
         self._index_id = index_id
         
         full_source_path = self._document_root / job.source_path
-        connector = FilesystemConnector(
-            path=full_source_path,
-            filter=None
-        )
+        # connector = FilesystemConnector(
+        #     path=full_source_path,
+        #     filter=None
+        # )
         
-        directories = await connector.list_directories()
+        # directories = await connector.list_directories()
         
         # Create base pipeline with system dependencies
         pipeline = TrackedIngestionPipeline(
@@ -235,19 +240,21 @@ class FetchcraftIngestionPipelineFactory(BaseModel):
             task_repo=self.task_repo,
             num_workers=self.num_workers,
             callback_base_url=self.callback_base_url,
-            context={"directories": directories}
+            context={}
+            # context={"directories": directories}
         )
         
         # Configure source if requested (skip for recovery scenarios)
         if include_source:
-            source = ConnectorSource(
-                connector=connector,
-                document_root=self._document_root,
-            )
+            # source = ConnectorSource(
+            #     connector=connector,
+            #     document_root=self._document_root,
+            # )
+            source = await self.create_source(full_source_path)
             pipeline.source(source)
         
         # Call user's configure_pipeline to add transformations and sinks
-        self.configure_pipeline(pipeline)
+        await self.configure_pipeline(pipeline)
         
         # Clear job-specific dependencies
         self._parser_map = None
