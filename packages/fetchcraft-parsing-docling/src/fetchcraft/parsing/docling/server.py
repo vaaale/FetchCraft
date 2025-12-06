@@ -35,7 +35,7 @@ Usage:
 """
 
 import asyncio
-import os
+import logging
 import tempfile
 import time
 import uuid
@@ -45,9 +45,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Dict
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import Field, computed_field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from fetchcraft.parsing.docling.models import (
     ParseResponse,
@@ -59,28 +60,46 @@ from fetchcraft.parsing.docling.models import (
     JobResultResponse
 )
 from fetchcraft.parsing.docling.services.parsing_service import ParsingService
-import logging
 
-load_dotenv()
 logger = logging.getLogger(__name__)
+
 
 # ============================================================================
 # Configuration
 # ============================================================================
 
-HOST = os.getenv("HOST", "0.0.0.0")
-PORT = int(os.getenv("PORT", "8080"))
-MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "10"))
-MAX_CONCURRENT_FILES = int(os.getenv("MAX_CONCURRENT_FILES", "4"))
-MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "100"))
-MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+class Settings(BaseSettings):
+    """Server configuration using pydantic-settings."""
 
-# Docling parser configuration
-PAGE_CHUNKS = os.getenv("PAGE_CHUNKS", "true").lower() == "true"
-DO_OCR = os.getenv("DO_OCR", "true").lower() == "true"
-DO_TABLE_STRUCTURE = os.getenv("DO_TABLE_STRUCTURE", "true").lower() == "true"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
-VERSION = "1.0.0"
+    # Server configuration
+    host: str = Field(default="0.0.0.0", description="Server host")
+    port: int = Field(default=8080, description="Server port")
+    max_concurrent_requests: int = Field(default=10, description="Maximum concurrent requests")
+    max_concurrent_files: int = Field(default=4, description="Maximum concurrent file processing")
+    max_file_size_mb: int = Field(default=100, description="Maximum file size in MB")
+
+    # Docling parser configuration
+    page_chunks: bool = Field(default=True, description="Split documents into pages")
+    do_ocr: bool = Field(default=True, description="Enable OCR for scanned documents")
+    do_table_structure: bool = Field(default=True, description="Extract table structure")
+
+    # Version
+    version: str = Field(default="1.0.0", description="API version")
+
+    @computed_field
+    @property
+    def max_file_size_bytes(self) -> int:
+        """Maximum file size in bytes."""
+        return self.max_file_size_mb * 1024 * 1024
+
+
+settings = Settings()
 
 
 # ============================================================================
@@ -272,27 +291,27 @@ async def lifespan(app: FastAPI):
     print("🚀 Starting Docling Parsing Server")
     print("=" * 70)
     print(f"\nConfiguration:")
-    print(f"  • Host: {HOST}")
-    print(f"  • Port: {PORT}")
-    print(f"  • Max Concurrent Requests: {MAX_CONCURRENT_REQUESTS}")
-    print(f"  • Max Concurrent Files: {MAX_CONCURRENT_FILES}")
-    print(f"  • Max File Size: {MAX_FILE_SIZE_MB} MB")
-    print(f"  • Page Chunks: {PAGE_CHUNKS}")
-    print(f"  • OCR Enabled: {DO_OCR}")
-    print(f"  • Table Structure: {DO_TABLE_STRUCTURE}")
+    print(f"  • Host: {settings.host}")
+    print(f"  • Port: {settings.port}")
+    print(f"  • Max Concurrent Requests: {settings.max_concurrent_requests}")
+    print(f"  • Max Concurrent Files: {settings.max_concurrent_files}")
+    print(f"  • Max File Size: {settings.max_file_size_mb} MB")
+    print(f"  • Page Chunks: {settings.page_chunks}")
+    print(f"  • OCR Enabled: {settings.do_ocr}")
+    print(f"  • Table Structure: {settings.do_table_structure}")
     print("=" * 70)
 
     # Initialize semaphores for concurrency control
-    app_state.request_semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
-    app_state.file_semaphore = asyncio.Semaphore(MAX_CONCURRENT_FILES)
+    app_state.request_semaphore = asyncio.Semaphore(settings.max_concurrent_requests)
+    app_state.file_semaphore = asyncio.Semaphore(settings.max_concurrent_files)
     app_state.job_queue = asyncio.Queue()
-    app_state.executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_FILES)
+    app_state.executor = ThreadPoolExecutor(max_workers=settings.max_concurrent_files)
 
     # Initialize parsing service
     app_state.parsing_service = ParsingService(
-        page_chunks=PAGE_CHUNKS,
-        do_ocr=DO_OCR,
-        do_table_structure=DO_TABLE_STRUCTURE
+        page_chunks=settings.page_chunks,
+        do_ocr=settings.do_ocr,
+        do_table_structure=settings.do_table_structure
     )
 
     app_state.initialized = True
@@ -300,9 +319,9 @@ async def lifespan(app: FastAPI):
     # Start background job processor
     app_state.background_task = asyncio.create_task(process_jobs())
 
-    print(f"\n✅ Server ready at http://{HOST}:{PORT}")
-    print(f"   API docs: http://{HOST}:{PORT}/docs")
-    print(f"   OpenAPI schema: http://{HOST}:{PORT}/openapi.json")
+    print(f"\n✅ Server ready at http://{settings.host}:{settings.port}")
+    print(f"   API docs: http://{settings.host}:{settings.port}/docs")
+    print(f"   OpenAPI schema: http://{settings.host}:{settings.port}/openapi.json")
     print("=" * 70 + "\n")
 
     yield
@@ -332,7 +351,7 @@ app = FastAPI(
         "Parse documents into structured DocumentNodes using Docling. "
         "Supports PDF, DOCX, PPTX, XLSX, HTML, Images, AsciiDoc, and Markdown."
     ),
-    version=VERSION,
+    version=settings.version,
     lifespan=lifespan,
     contact={
         "name": "Docling Parsing API",
@@ -391,12 +410,12 @@ async def parse_single_file(
         content = await file.read()
         file_size = len(content)
 
-        if file_size > MAX_FILE_SIZE_BYTES:
+        if file_size > settings.max_file_size_bytes:
             return ParseResponse(
                 filename=filename,
                 success=False,
                 nodes=[],
-                error=f"File size ({file_size / 1024 / 1024:.2f} MB) exceeds maximum ({MAX_FILE_SIZE_MB} MB)",
+                error=f"File size ({file_size / 1024 / 1024:.2f} MB) exceeds maximum ({settings.max_file_size_mb} MB)",
                 num_nodes=0,
                 processing_time_ms=0
             )
@@ -441,7 +460,7 @@ async def root():
     """
     return {
         "name": "Docling Document Parsing API",
-        "version": VERSION,
+        "version": settings.version,
         "description": "Parse documents into DocumentNodes using Docling",
         "supported_formats": [
             "PDF (.pdf)",
@@ -475,16 +494,15 @@ async def health():
 
     return HealthResponse(
         status="healthy" if app_state.initialized else "initializing",
-        version=VERSION,
+        version=settings.version,
         config={
-            "max_concurrent_requests": MAX_CONCURRENT_REQUESTS,
-            "max_concurrent_files": MAX_CONCURRENT_FILES,
-            "max_file_size_mb": MAX_FILE_SIZE_MB,
-            "page_chunks": PAGE_CHUNKS,
-            "do_ocr": DO_OCR,
-            "do_table_structure": DO_TABLE_STRUCTURE
-        },
-        environment=dict(os.environ)
+            "max_concurrent_requests": settings.max_concurrent_requests,
+            "max_concurrent_files": settings.max_concurrent_files,
+            "max_file_size_mb": settings.max_file_size_mb,
+            "page_chunks": settings.page_chunks,
+            "do_ocr": settings.do_ocr,
+            "do_table_structure": settings.do_table_structure
+        }
     )
 
 
@@ -605,10 +623,10 @@ async def submit_job(
         filename = file.filename or "unknown"
 
         # Check file size
-        if len(content) > MAX_FILE_SIZE_BYTES:
+        if len(content) > settings.max_file_size_bytes:
             raise HTTPException(
                 status_code=413,
-                detail=f"File {filename} size ({len(content) / 1024 / 1024:.2f} MB) exceeds maximum ({MAX_FILE_SIZE_MB} MB)"
+                detail=f"File {filename} size ({len(content) / 1024 / 1024:.2f} MB) exceeds maximum ({settings.max_file_size_mb} MB)"
             )
 
         file_data.append((filename, content))
@@ -714,14 +732,10 @@ def main():
     """Run the FastAPI server."""
     import uvicorn
 
-    print("\nEnvironment Variables:")
-    for key, value in os.environ.items():
-        print(f"  • {key}: {value}")
-
     uvicorn.run(
         "fetchcraft.parsing.docling.server:app",
-        host=HOST,
-        port=PORT,
+        host=settings.host,
+        port=settings.port,
         reload=False,
         log_level="info"
     )
