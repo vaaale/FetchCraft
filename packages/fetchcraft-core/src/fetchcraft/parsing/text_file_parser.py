@@ -8,7 +8,7 @@ from fetchcraft.parsing.base import DocumentParser
 class TextFileParser(DocumentParser):
 
 
-    async def parse(self, file: File, metadata: Optional[Dict[str, Any]] = None) -> AsyncGenerator[DocumentNode, None]:
+    async def parse(self, file: File, metadata: Optional[Dict[str, Any]] = None, **parser_kwargs) -> AsyncGenerator[DocumentNode, None]:
 
         def _decode(data: bytes) -> str:
             for encoding in ["utf-8", "iso-8859-1"]:
@@ -29,5 +29,3 @@ class TextFileParser(DocumentParser):
             metadata=metadata
         )
 
-    async def get_documents(self, metadata: Optional[Dict[str, Any]] = None, **kwargs) -> AsyncGenerator[DocumentNode, None]:
-        raise NotImplemented("Not implemented")

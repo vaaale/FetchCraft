@@ -9,27 +9,32 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from dataclasses import dataclass, field
 from typing import List, Optional, Callable, Awaitable, Any
 
 from fetchcraft.ingestion.interfaces import (
-    ISource,
-    ITransformation,
-    ISink,
-    IQueueBackend,
-    IRemoteTransformation,
+    Source,
+    Transformation,
+    AsyncTransformation,
+    Sink,
+    QueueBackend,
 )
 from fetchcraft.ingestion.models import (
     IngestionJob,
     DocumentRecord,
+    TaskRecord,
     JobStatus,
     DocumentStatus,
+    TaskStatus,
     utcnow,
 )
 from fetchcraft.ingestion.repository import (
-    IJobRepository,
-    IDocumentRepository,
+    JobRepository,
+    DocumentRepository,
+    TaskRepository,
 )
+from fetchcraft.node import DocumentNode
 
 # Queue names
 MAIN_QUEUE = "ingest.main"
@@ -64,16 +69,19 @@ class PipelineStep:
     
     Attributes:
         transformation: The transformation to apply
-        is_remote: Whether this is a remote transformation
         name: Step name (for tracking)
     """
-    transformation: ITransformation
-    is_remote: bool = False
+    transformation: Transformation
     name: str = ""
     
     def __post_init__(self):
         if not self.name:
             self.name = self.transformation.get_name()
+    
+    @property
+    def is_async(self) -> bool:
+        """Whether this step uses async transformation."""
+        return self.transformation.is_async
 
 
 class Worker:
@@ -87,7 +95,7 @@ class Worker:
     def __init__(
         self,
         name: str,
-        backend: IQueueBackend,
+        backend: QueueBackend,
         handler: Callable[[dict], Awaitable[None]],
         config: WorkerConfig,
         error_queue: Optional[str] = None,
@@ -205,10 +213,13 @@ class TrackedIngestionPipeline:
     def __init__(
         self,
         job: IngestionJob,
-        backend: IQueueBackend,
-        job_repo: IJobRepository,
-        doc_repo: IDocumentRepository,
+        backend: QueueBackend,
+        job_repo: JobRepository,
+        doc_repo: DocumentRepository,
+        task_repo: Optional[TaskRepository] = None,
         num_workers: int = 1,
+        callback_base_url: Optional[str] = None,
+        context: Optional[dict] = None,
     ):
         """
         Initialize the pipeline.
@@ -218,20 +229,24 @@ class TrackedIngestionPipeline:
             backend: Queue backend for message passing
             job_repo: Repository for job persistence
             doc_repo: Repository for document tracking
+            task_repo: Repository for task tracking (optional, enables detailed task tracking)
             num_workers: Number of concurrent workers for processing documents (default: 1)
+            callback_base_url: Base URL for async transformation callbacks
         """
         self.job = job
         self.backend = backend
         self.job_repo = job_repo
         self.doc_repo = doc_repo
+        self.task_repo = task_repo
         self.num_workers = max(1, num_workers)  # Ensure at least 1 worker
-        
-        self._source: Optional[ISource] = None
+        self.callback_base_url = callback_base_url
+
+        self._source: Optional[Source] = None
         self._steps: List[PipelineStep] = []
-        self._sinks: List[ISink] = []
+        self._sinks: List[Sink] = []
         
         self._main_workers: List[Worker] = []
-        self._remote_workers: List[Worker] = []
+        self._context = context
         
         logger.info(
             f"Initialized pipeline for job '{job.name}' (ID: {job.id}) "
@@ -240,7 +255,7 @@ class TrackedIngestionPipeline:
 
     # ========== Builder API ==========
     
-    def source(self, src: ISource) -> "TrackedIngestionPipeline":
+    def source(self, src: Source) -> "TrackedIngestionPipeline":
         """
         Set the pipeline source.
         
@@ -256,29 +271,24 @@ class TrackedIngestionPipeline:
     
     def add_transformation(
         self,
-        transformation: ITransformation,
-        is_remote: bool = False,
+        transformation: Transformation,
     ) -> "TrackedIngestionPipeline":
         """
         Add a transformation step to the pipeline.
         
         Args:
             transformation: The transformation to add
-            is_remote: Whether this is a remote/async transformation
             
         Returns:
             Self for chaining
         """
-        step = PipelineStep(
-            transformation=transformation,
-            is_remote=is_remote,
-        )
+        step = PipelineStep(transformation=transformation)
         self._steps.append(step)
         self.job.pipeline_steps.append(step.name)
-        logger.debug(f"Added transformation: {step.name} (remote={is_remote})")
+        logger.debug(f"Added transformation: {step.name} (async={step.is_async})")
         return self
     
-    def add_sink(self, sink: ISink) -> "TrackedIngestionPipeline":
+    def add_sink(self, sink: Sink) -> "TrackedIngestionPipeline":
         """
         Add a sink to the pipeline.
         
@@ -368,25 +378,10 @@ class TrackedIngestionPipeline:
             )
             self._main_workers.append(worker)
         
-        # Start multiple remote workers (same count as main workers)
-        for i in range(self.num_workers):
-            worker = Worker(
-                name=f"remote-{i+1}",
-                backend=self.backend,
-                handler=self._handle_remote_callback,
-                config=WorkerConfig(queue_name=REMOTE_QUEUE),
-                error_queue=ERROR_QUEUE,
-            )
-            self._remote_workers.append(worker)
-        
         # Start all workers concurrently
-        all_workers = self._main_workers + self._remote_workers
-        await asyncio.gather(*[worker.start() for worker in all_workers])
+        await asyncio.gather(*[worker.start() for worker in self._main_workers])
         
-        logger.info(
-            f"Pipeline workers started: {self.num_workers} main worker(s), "
-            f"{self.num_workers} remote worker(s)"
-        )
+        logger.info(f"Pipeline workers started: {self.num_workers} main worker(s)")
     
     async def _enqueue_source_documents(self):
         """Read documents from source and enqueue them."""
@@ -430,7 +425,7 @@ class TrackedIngestionPipeline:
         
         while True:
             try:
-                has_work = await self.backend.has_pending(MAIN_QUEUE, REMOTE_QUEUE)
+                has_work = await self.backend.has_pending(MAIN_QUEUE)
                 
                 # Check for documents still in PROCESSING (e.g., parent docs waiting for children)
                 processing_docs = await self.doc_repo.get_documents_by_status(
@@ -445,14 +440,20 @@ class TrackedIngestionPipeline:
                     DocumentStatus.PENDING
                 )
                 
-                if not has_work and len(processing_docs) == 0 and len(pending_docs) == 0:
+                # Check for pending async tasks
+                pending_tasks = []
+                if self.task_repo:
+                    pending_tasks = await self.task_repo.get_pending_async_tasks(self.job.id)
+                
+                if not has_work and len(processing_docs) == 0 and len(pending_docs) == 0 and len(pending_tasks) == 0:
                     logger.info(f"Queues empty and no pending/processing documents after {iteration} checks")
                     break
                 
                 if iteration % 20 == 0:
                     logger.info(
                         f"Still processing... (iteration {iteration}, "
-                        f"pending_docs={len(pending_docs)}, processing_docs={len(processing_docs)})"
+                        f"pending_docs={len(pending_docs)}, processing_docs={len(processing_docs)}, "
+                        f"pending_tasks={len(pending_tasks)})"
                     )
             
             except Exception as e:
@@ -471,7 +472,7 @@ class TrackedIngestionPipeline:
         
         while asyncio.get_event_loop().time() < deadline:
             try:
-                has_work = await self.backend.has_pending(MAIN_QUEUE, REMOTE_QUEUE)
+                has_work = await self.backend.has_pending(MAIN_QUEUE)
                 processing_docs = await self.doc_repo.get_documents_by_status(
                     self.job.id,
                     DocumentStatus.PROCESSING
@@ -480,8 +481,11 @@ class TrackedIngestionPipeline:
                     self.job.id,
                     DocumentStatus.PENDING
                 )
+                pending_tasks = []
+                if self.task_repo:
+                    pending_tasks = await self.task_repo.get_pending_async_tasks(self.job.id)
                 
-                if has_work or len(processing_docs) > 0 or len(pending_docs) > 0:
+                if has_work or len(processing_docs) > 0 or len(pending_docs) > 0 or len(pending_tasks) > 0:
                     logger.debug("Work appeared during grace period, restarting wait...")
                     return await self._wait_until_idle(poll_interval, grace_seconds)
             
@@ -501,9 +505,8 @@ class TrackedIngestionPipeline:
         logger.info("Shutting down pipeline workers...")
         
         # Stop all workers
-        all_workers = self._main_workers + self._remote_workers
         await asyncio.gather(
-            *[worker.stop() for worker in all_workers],
+            *[worker.stop() for worker in self._main_workers],
             return_exceptions=True
         )
         
@@ -563,19 +566,45 @@ class TrackedIngestionPipeline:
                 )
                 logger.debug(f"Document {doc.source} processing step '{step.name}'")
                 
-                # Handle remote transformations differently
-                if step.is_remote and isinstance(step.transformation, IRemoteTransformation):
-                    # Submit to remote service
-                    tracking_id = await step.transformation.submit(doc)
+                # Create task record for tracking
+                task = None
+                if self.task_repo:
+                    task = TaskRecord(
+                        job_id=job_id,
+                        document_id=doc_id,
+                        transformation_name=step.name,
+                        step_index=current_step_idx,
+                        status=TaskStatus.PENDING,
+                        is_async=step.is_async,
+                    )
+                    await self.task_repo.create_task(task)
+                    await self.task_repo.set_task_started(task.id)
+                
+                # Handle async transformations differently
+                if step.is_async and isinstance(step.transformation, AsyncTransformation):
+                    # Build callback URL
+                    callback_url = f"{self.callback_base_url}/api/tasks/callback"
+                    
+                    # Submit to external service
+                    await step.transformation.submit(doc, task.id if task else doc_id, callback_url)
+                    
+                    # Update task status
+                    if self.task_repo and task:
+                        await self.task_repo.set_task_submitted(task.id)
+                    
                     logger.info(
-                        f"Document {doc.source} submitted to remote service "
-                        f"'{step.name}' (tracking: {tracking_id})"
+                        f"Document {doc.source} submitted to async service "
+                        f"'{step.name}' (task_id: {task.id if task else doc_id})"
                     )
                     # Don't continue - wait for callback
                     return
                 
-                # Apply transformation
-                result = await step.transformation.process(doc)
+                # Apply synchronous transformation
+                result = await step.transformation.process(doc, context=self._context)
+                
+                # Mark task as completed
+                if self.task_repo and task:
+                    await self.task_repo.set_task_completed(task.id)
                 
                 if result is None:
                     # Document filtered out
@@ -662,39 +691,175 @@ class TrackedIngestionPipeline:
             )
             raise
     
-    async def _handle_remote_callback(self, body: dict):
-        """Handle callbacks from remote transformation services."""
-        if body.get("type") != "callback":
-            logger.warning(f"Unknown message type in remote queue: {body.get('type')}")
-            return
+    async def handle_task_callback(
+        self,
+        task_id: str,
+        status: str,
+        message: dict,
+    ) -> bool:
+        """
+        Handle a callback for an async task.
         
-        tracking_id = body["tracking_id"]
-        step_idx = body["step_idx"]
-        result_data = body["result"]
+        This method is called by the callback endpoint when an external service
+        sends a callback. It processes the callback and continues document
+        processing if the task is completed.
         
-        # Find the remote transformation
-        step = self._steps[step_idx]
-        if not isinstance(step.transformation, IRemoteTransformation):
-            logger.error(f"Step {step_idx} is not a remote transformation")
-            return
+        Args:
+            task_id: The task ID from the callback
+            status: Callback status ('PROCESSING', 'COMPLETED', 'FAILED')
+            message: Callback payload
+            
+        Returns:
+            True if callback was handled successfully
+        """
+        # Get task record
+        if not self.task_repo:
+            logger.error("Task repository not configured - cannot handle callback")
+            return False
         
-        # Process the callback
-        doc = await step.transformation.handle_callback(tracking_id, result_data)
+        task = await self.task_repo.get_task(task_id)
+        if not task:
+            logger.error(f"Task {task_id} not found")
+            return False
         
-        # Mark step as completed
-        await self.doc_repo.update_step_status(doc.id, step.name, "completed")
-        logger.info(f"Remote step '{step.name}' completed for document {doc.source}")
+        # Get the transformation
+        if task.step_index >= len(self._steps):
+            logger.error(f"Invalid step index {task.step_index} for task {task_id}")
+            return False
         
-        # Continue processing from next step
-        await self.backend.enqueue(
-            MAIN_QUEUE,
-            body={
-                "type": "document",
-                "doc_id": doc.id,
-                "job_id": doc.job_id,
-                "current_step_idx": step_idx + 1,
-            }
-        )
+        step = self._steps[task.step_index]
+        if not isinstance(step.transformation, AsyncTransformation):
+            logger.error(f"Step {task.step_index} is not an async transformation")
+            return False
+        
+        # Get document
+        doc = await self.doc_repo.get_document(task.document_id)
+        if not doc:
+            logger.error(f"Document {task.document_id} not found for task {task_id}")
+            return False
+        
+        try:
+            # Update task metadata with callback info
+            task_metadata = task.metadata.copy()
+            task_metadata['last_callback_status'] = status
+            task_metadata['callback_count'] = task_metadata.get('callback_count', 0) + 1
+            
+            msg_type = message.get('type', '')
+            
+            if status == 'PROCESSING' and msg_type == 'node':
+                # Node callback - create a child document for this node
+                node_data = message.get('node', {})
+                filename = message.get('filename', '')
+                node_index = message.get('node_index', 0)
+                
+                # Track nodes received
+                task_metadata['nodes_received'] = task_metadata.get('nodes_received', 0) + 1
+                await self.task_repo.update_task_metadata(task_id, task_metadata)
+                
+                # Create DocumentNode from callback data
+                doc_node = DocumentNode(
+                    text=node_data.get('text', ''),
+                    metadata={
+                        **node_data.get('metadata', {}),
+                        'source': doc.source,
+                        'parent_document_id': doc.id,
+                        'node_index': node_index,
+                        'filename': filename,
+                    }
+                )
+                
+                # Create child document record
+                child_doc = DocumentRecord(
+                    id=str(uuid.uuid4()),
+                    job_id=task.job_id,
+                    source=f"{doc.source}#node_{node_index}",
+                    status=DocumentStatus.PENDING,
+                    current_step=step.name,
+                    step_statuses={s: "pending" for s in self.job.pipeline_steps},
+                    metadata={
+                        'document': doc_node.model_dump(),
+                        'parent_document_id': doc.id,
+                        'node_index': node_index,
+                        'filename': filename,
+                        'source': doc.source,
+                    }
+                )
+                
+                # Mark parsing step as completed for child (it's already parsed)
+                child_doc.step_statuses[step.name] = "completed"
+                
+                await self.doc_repo.create_document(child_doc)
+                
+                # Enqueue child from next step (skip parsing since it's done)
+                await self.backend.enqueue(
+                    MAIN_QUEUE,
+                    body={
+                        "type": "document",
+                        "doc_id": child_doc.id,
+                        "job_id": task.job_id,
+                        "current_step_idx": task.step_index + 1,
+                    }
+                )
+                
+                logger.debug(
+                    f"Created child document for node {node_index} from {filename} "
+                    f"(parent: {doc.id})"
+                )
+                return True
+            
+            elif status == 'PROCESSING':
+                # Other processing callbacks - just update status
+                await self.task_repo.update_task_metadata(task_id, task_metadata)
+                await self.task_repo.update_task_status(task_id, TaskStatus.WAITING)
+                logger.debug(f"Task {task_id} still processing")
+                return True
+            
+            elif status == 'FAILED':
+                # Task failed
+                error_msg = message.get('error', 'Unknown error')
+                await self.task_repo.update_task_metadata(task_id, task_metadata)
+                await self.task_repo.update_task_status(task_id, TaskStatus.FAILED, error_msg)
+                await self.doc_repo.update_step_status(task.document_id, step.name, "failed")
+                await self.doc_repo.update_document_status(
+                    task.document_id,
+                    DocumentStatus.FAILED,
+                    error_message=error_msg,
+                    error_step=step.name
+                )
+                logger.error(f"Task {task_id} failed: {error_msg}")
+                return True
+            
+            elif status == 'COMPLETED':
+                # Task completed - mark task and step as completed
+                total_nodes = message.get('total_nodes', 0)
+                task_metadata['total_nodes'] = total_nodes
+                await self.task_repo.update_task_metadata(task_id, task_metadata)
+                
+                await self.task_repo.set_task_completed(task_id)
+                await self.doc_repo.update_step_status(task.document_id, step.name, "completed")
+                
+                # Mark parent document as completed (children continue independently)
+                await self.doc_repo.update_document_status(
+                    task.document_id,
+                    DocumentStatus.COMPLETED
+                )
+                
+                logger.info(
+                    f"Task {task_id} completed for document {doc.source} "
+                    f"({total_nodes} nodes created)"
+                )
+                
+                # Parent document processing stops here - children continue independently
+                return True
+            
+            else:
+                logger.warning(f"Unknown callback status: {status}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error handling callback for task {task_id}: {e}", exc_info=True)
+            await self.task_repo.update_task_status(task_id, TaskStatus.FAILED, str(e))
+            return False
     
     async def _check_parent_completion(self, parent_doc_id: str, expected_children: int):
         """
@@ -702,57 +867,40 @@ class TrackedIngestionPipeline:
         If so, mark the parent document as completed.
         """
         try:
-            # Get all child documents for this parent
-            from fetchcraft.ingestion.repository import PostgresDocumentRepository
-            if not isinstance(self.doc_repo, PostgresDocumentRepository):
-                return  # Can't check without direct DB access
+            # Count completed and total children using repository method
+            completed_count = await self.doc_repo.count_children_by_parent(
+                parent_doc_id,
+                DocumentStatus.COMPLETED
+            )
+            total_children = await self.doc_repo.count_children_by_parent(parent_doc_id)
             
-            # Count completed children
-            async with self.doc_repo.pool.acquire() as conn:
-                completed_count = await conn.fetchval(
-                    """
-                    SELECT COUNT(*) FROM ingestion_documents
-                    WHERE metadata->>'parent_document_id' = $1
-                    AND status = 'completed'
-                    """,
-                    parent_doc_id
-                )
-                
-                total_children = await conn.fetchval(
-                    """
-                    SELECT COUNT(*) FROM ingestion_documents
-                    WHERE metadata->>'parent_document_id' = $1
-                    """,
-                    parent_doc_id
-                )
-                
-                logger.info(
-                    f"Parent {parent_doc_id}: {completed_count}/{total_children} children completed "
-                    f"(expected: {expected_children})"
-                )
-                
-                # Check if all children are done
-                # Note: We check if all actual children are completed, not if count matches expected
-                # The expected count might differ slightly due to parsing edge cases
-                if completed_count == total_children and total_children > 0:
-                    # Verify parent is in PROCESSING state before updating
-                    parent = await self.doc_repo.get_document(parent_doc_id)
-                    if parent and parent.status == DocumentStatus.PROCESSING:
-                        # Mark parent as completed
-                        await self.doc_repo.update_document_status(
-                            parent_doc_id,
-                            DocumentStatus.COMPLETED
-                        )
-                        logger.info(
-                            f"All {total_children} child nodes completed - "
-                            f"marked parent document {parent_doc_id} as COMPLETED"
-                        )
-                    else:
-                        logger.debug(f"Parent {parent_doc_id} already in final state: {parent.status if parent else 'not found'}")
-                elif total_children > 0:
-                    logger.debug(
-                        f"Parent {parent_doc_id} still waiting: {completed_count}/{total_children} children done"
+            logger.info(
+                f"Parent {parent_doc_id}: {completed_count}/{total_children} children completed "
+                f"(expected: {expected_children})"
+            )
+            
+            # Check if all children are done
+            # Note: We check if all actual children are completed, not if count matches expected
+            # The expected count might differ slightly due to parsing edge cases
+            if completed_count == total_children and total_children > 0:
+                # Verify parent is in PROCESSING state before updating
+                parent = await self.doc_repo.get_document(parent_doc_id)
+                if parent and parent.status == DocumentStatus.PROCESSING:
+                    # Mark parent as completed
+                    await self.doc_repo.update_document_status(
+                        parent_doc_id,
+                        DocumentStatus.COMPLETED
                     )
+                    logger.info(
+                        f"All {total_children} child nodes completed - "
+                        f"marked parent document {parent_doc_id} as COMPLETED"
+                    )
+                else:
+                    logger.debug(f"Parent {parent_doc_id} already in final state: {parent.status if parent else 'not found'}")
+            elif total_children > 0:
+                logger.debug(
+                    f"Parent {parent_doc_id} still waiting: {completed_count}/{total_children} children done"
+                )
         
         except Exception as e:
             logger.error(f"Error checking parent completion for {parent_doc_id}: {e}", exc_info=True)
@@ -765,7 +913,7 @@ class TrackedIngestionPipeline:
             sink_name = f"sink:{sink.get_name()}"
             try:
                 await self.doc_repo.update_step_status(doc.id, sink_name, "processing")
-                await sink.write(doc)
+                await sink.write(doc, context=self._context)
                 await self.doc_repo.update_step_status(doc.id, sink_name, "completed")
                 logger.debug(f"Document {doc.source} written to sink '{sink.get_name()}'")
             except Exception as e:

@@ -70,4 +70,3 @@ class HealthResponse(BaseModel):
     status: str = Field(description="Service status")
     version: str = Field(description="API version")
     config: Dict[str, Any] = Field(description="Server configuration")
-    environment: Dict[str, Any] = Field(description="Environment variables")

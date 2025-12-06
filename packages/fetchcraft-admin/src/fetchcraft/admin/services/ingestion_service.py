@@ -10,9 +10,11 @@ import asyncio
 import logging
 from pathlib import Path
 from typing import List, Optional
+from typing import TYPE_CHECKING
 
-from fetchcraft.document_store import DocumentStore
+from fetchcraft.index import IndexFactory
 from fetchcraft.index.vector_index import VectorIndex
+from fetchcraft.ingestion import TrackedIngestionPipeline
 from fetchcraft.ingestion.models import (
     IngestionJob,
     DocumentRecord,
@@ -21,14 +23,16 @@ from fetchcraft.ingestion.models import (
     utcnow,
 )
 from fetchcraft.ingestion.repository import (
-    IJobRepository,
-    IDocumentRepository,
+    JobRepository,
+    DocumentRepository,
 )
 from fetchcraft.node import Node
 from fetchcraft.node_parser import NodeParser
 from fetchcraft.parsing.base import DocumentParser
-from .pipeline_factory import IIngestionPipelineFactory
-from fetchcraft.ingestion import TrackedIngestionPipeline
+from ..interfaces.pipeline import IngestionPipelineFactory
+
+if TYPE_CHECKING:
+    from .worker_manager import WorkerManager
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +47,11 @@ class IngestionService:
 
     def __init__(
         self,
-        job_repo: IJobRepository,
-        doc_repo: IDocumentRepository,
-        pipeline_factory: IIngestionPipelineFactory,
+        job_repo: JobRepository,
+        doc_repo: DocumentRepository,
+        pipeline_factory: IngestionPipelineFactory,
         document_root: Path,
+        worker_manager: Optional["WorkerManager"] = None,
     ):
         """
         Initialize the ingestion service.
@@ -56,11 +61,13 @@ class IngestionService:
             doc_repo: Repository for document tracking
             pipeline_factory: Factory for creating configured pipelines
             document_root: Root directory for documents
+            worker_manager: Worker manager for registering pipelines (for callback handling)
         """
         self.job_repo = job_repo
         self.doc_repo = doc_repo
         self.pipeline_factory = pipeline_factory
         self.document_root = document_root
+        self.worker_manager = worker_manager
         self._background_tasks: set[asyncio.Task] = set()  # Track background tasks to prevent GC
         self._pipelines: dict[str, TrackedIngestionPipeline] = {}  # Track pipelines by job_id
 
@@ -89,8 +96,7 @@ class IngestionService:
         source_path: str | Path,
         parser_map: dict[str, DocumentParser],
         chunker: NodeParser,
-        vector_index: VectorIndex[Node],
-        doc_store: DocumentStore,
+        index_factory: IndexFactory,
         index_id: str = "default",
     ) -> str:
         """
@@ -125,12 +131,11 @@ class IngestionService:
         logger.info(f"Creating job '{job.name}' from {source_path}")
 
         # Build pipeline using factory
-        pipeline = self.pipeline_factory.create_pipeline(
+        pipeline = await self.pipeline_factory.create_pipeline(
             job=job,
             parser_map=parser_map,
             chunker=chunker,
-            vector_index=vector_index,
-            doc_store=doc_store,
+            index_factory=index_factory,
             index_id=index_id,
             include_source=True,
         )
@@ -141,6 +146,10 @@ class IngestionService:
 
         # Track pipeline for this job
         self._pipelines[job.id] = pipeline
+
+        # Register with worker manager for callback handling
+        if self.worker_manager:
+            self.worker_manager.register_pipeline(job.id, pipeline)
 
         # Start job in background
         # Track the task to prevent garbage collection
@@ -165,13 +174,16 @@ class IngestionService:
         finally:
             # Remove pipeline from tracking when job completes
             self._pipelines.pop(pipeline.job.id, None)
+            # Unregister from worker manager
+            if self.worker_manager:
+                self.worker_manager.unregister_pipeline(pipeline.job.id)
 
     async def recover_running_jobs(
         self,
         parser_map: dict[str, DocumentParser],
         chunker: NodeParser,
         vector_index: VectorIndex[Node],
-        doc_store: DocumentStore,
+        index_factory: IndexFactory,
         index_id: str = "default",
     ) -> int:
         """
@@ -187,7 +199,7 @@ class IngestionService:
             parser_map: Map of mimetype to parser
             chunker: Node parser for chunking
             vector_index: Vector index for storing chunks
-            doc_store: Document store for full documents
+            index_factory: Index factory for creating vector index
             index_id: Identifier for the vector index
         
         Returns:
@@ -216,12 +228,12 @@ class IngestionService:
                 # Create pipeline with full configuration using factory
                 # We need transformations and sinks even though documents are already queued
                 # Don't include source since documents are already queued
-                pipeline = self.pipeline_factory.create_pipeline(
+                pipeline = await self.pipeline_factory.create_pipeline(
                     job=job,
                     parser_map=parser_map,
                     chunker=chunker,
                     vector_index=vector_index,
-                    doc_store=doc_store,
+                    index_factory=index_factory,
                     index_id=index_id,
                     include_source=False,
                 )
@@ -273,17 +285,17 @@ class IngestionService:
                 pipeline.job.id,
                 DocumentStatus.PENDING
             )
-            
+
             if pending_docs:
                 logger.info(f"[Recovery] Found {len(pending_docs)} PENDING documents to re-enqueue")
-                
+
                 # Get pipeline steps to determine correct step index
                 pipeline_steps = pipeline.job.pipeline_steps
-                
+
                 for doc in pending_docs:
                     # Determine the next step index based on step_statuses
                     next_step_idx = self._get_next_step_index(doc, pipeline_steps)
-                    
+
                     await self.pipeline_factory.queue_backend.enqueue(
                         "ingest.main",
                         body={
@@ -294,7 +306,7 @@ class IngestionService:
                         }
                     )
                     logger.debug(f"[Recovery] Re-enqueued document {doc.id} at step index {next_step_idx}")
-                
+
                 logger.info(f"[Recovery] Re-enqueued {len(pending_docs)} PENDING documents")
             else:
                 logger.info(f"[Recovery] No PENDING documents found to re-enqueue")
@@ -325,7 +337,7 @@ class IngestionService:
             logger.info(f"[Recovery] Pipeline shutdown complete for job: {pipeline.job.name}")
             # Remove pipeline from tracking
             self._pipelines.pop(pipeline.job.id, None)
-    
+
     def _get_next_step_index(self, doc: DocumentRecord, pipeline_steps: list[str]) -> int:
         """
         Determine the next step index for a document based on its step_statuses.
@@ -342,7 +354,7 @@ class IngestionService:
             status = doc.step_statuses.get(step_name, "pending")
             if status == "pending":
                 return idx
-        
+
         # All steps completed - shouldn't happen for PENDING docs, but return 0 as fallback
         return 0
 
@@ -477,8 +489,7 @@ class IngestionService:
         job_id: str,
         parser_map: dict[str, DocumentParser],
         chunker: NodeParser,
-        vector_index: VectorIndex[Node],
-        doc_store: DocumentStore,
+        index_factory: IndexFactory,
         index_id: str = "default",
     ) -> str:
         """
@@ -491,8 +502,7 @@ class IngestionService:
             job_id: The job ID to restart
             parser_map: Map of mimetype to parser
             chunker: Node parser for chunking
-            vector_index: Vector index for storing chunks
-            doc_store: Document store for full documents
+            index_factory: Index Factory
             index_id: Identifier for the vector index
 
         Returns:
@@ -517,8 +527,7 @@ class IngestionService:
             source_path=job.source_path,
             parser_map=parser_map,
             chunker=chunker,
-            vector_index=vector_index,
-            doc_store=doc_store,
+            index_factory=index_factory,
             index_id=index_id,
         )
 

@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import List, Set, Generic, TypeVar, Optional
+from typing import List, Set, Generic, TypeVar, Optional, Type
 from uuid import uuid4
 
 from pydantic import Field, ConfigDict, BaseModel, PrivateAttr
@@ -205,3 +205,16 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
             :param object_mapper: ObjectMapper to use for object resolution
         """
         pass
+
+
+class IndexFactory(BaseModel):
+    options: dict = Field(default_factory=dict)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.options = kwargs
+
+    @abstractmethod
+    def create_index(self, index_cls: Type[BaseIndex], **kwargs) -> BaseIndex:
+        pass
+

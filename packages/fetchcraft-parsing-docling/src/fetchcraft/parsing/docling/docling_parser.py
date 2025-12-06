@@ -6,6 +6,7 @@ from various document formats using Docling, which offers superior
 document understanding including layout analysis, table extraction, and more.
 """
 import json
+import logging
 import os
 from collections import defaultdict
 from pathlib import Path
@@ -68,42 +69,8 @@ class DoclingDocumentParser(DocumentParser):
     - Images (.png, .jpg, .jpeg, .tiff, .bmp) - with OCR
     - AsciiDoc (.asciidoc, .adoc)
     - Markdown (.md)
-    
-    Example:
-        ```python
-        # Load single PDF file
-        parsing = DoclingDocumentSource.from_file(Path("document.pdf"))
-        
-        # Load all supported documents from directory
-        parsing = DoclingDocumentSource.from_directory(
-            Path("./docs"), 
-            pattern="*",  # Will auto-filter to supported formats
-            recursive=True
-        )
-        
-        # Load only specific format
-        parsing = DoclingDocumentSource.from_directory(
-            Path("./docs"),
-            pattern="*.pdf",
-            recursive=True
-        )
-        
-        # Configure with OCR for scanned documents
-        parsing = DoclingDocumentSource.from_file(
-            Path("scanned.pdf"),
-            do_ocr=True
-        )
-        
-        # Get documents
-        async for doc in parsing.get_documents():
-            print(f"Loaded: {doc.metadata['filename']}")
-            print(f"Tables found: {doc.metadata.get('num_tables', 0)}")
-        ```
-    """
-
-    directory: Path
-    pattern: str = "*"
-    recursive: bool = True
+     """
+    logger: logging.Logger = logging.getLogger(__name__)
     page_chunks: bool = True  # If True, return each page as separate document
     do_ocr: bool = True  # Enable OCR for scanned documents
     do_table_structure: bool = True  # Extract table structure
@@ -123,69 +90,35 @@ class DoclingDocumentParser(DocumentParser):
                 "Install it with: pip install docling"
             )
 
-        # print("Downloading RapidOCR models")
-        # download_path = snapshot_download(repo_id="RapidAI/RapidOCR")
-        #
-        # # Setup RapidOcrOptions for English detection
-        # det_model_path = os.path.join(
-        #     download_path, "onnx", "PP-OCRv5", "det", "ch_PP-OCRv5_server_det.onnx"
-        # )
-        # rec_model_path = os.path.join(
-        #     download_path, "onnx", "PP-OCRv5", "rec", "ch_PP-OCRv5_rec_server_infer.onnx"
-        # )
-        # cls_model_path = os.path.join(
-        #     download_path, "onnx", "PP-OCRv4", "cls", "ch_ppocr_mobile_v2.0_cls_infer.onnx"
-        # )
-        # self.ocr_options = RapidOcrOptions(
-        #     det_model_path=det_model_path,
-        #     rec_model_path=rec_model_path,
-        #     cls_model_path=cls_model_path,
-        # )
 
-    async def parse(self, file: File, metadata: Optional[Dict[str, Any]] = None) -> AsyncGenerator[DocumentNode, None]:
-        raise NotImplementedError("Not implemented")
-
-
-    async def get_documents(
-        self, 
-        metadata: Optional[Dict[str, Any]] = None,
-        **kwargs
-    ) -> AsyncGenerator[DocumentNode, None]:
+    async def parse(self, file: File, metadata: Optional[Dict[str, Any]] = None, **parser_kwargs) -> AsyncGenerator[DocumentNode, None]:
         """
         Read documents from the configured directory.
         
         Args:
+            file: File to parse
             metadata: Additional metadata to add to each document
             **kwargs: Additional arguments passed to Docling converter
             
         Yields:
             DocumentNode objects for each document or page
         """
-        # Get files matching pattern
-        if self.recursive:
-            files = self.directory.rglob(self.pattern)
-        else:
-            files = self.directory.glob(self.pattern)
-        
-        for file_path in files:
-            if not file_path.is_file():
-                continue
-            
-            # Filter by supported extensions if enabled
-            if self.filter_supported_only:
-                file_ext = file_path.suffix.lower()
-                if file_ext not in DOCLING_SUPPORTED_EXTENSIONS:
-                    continue
-            
-            # Yield one or more documents from this file
-            try:
-                async for doc in self._read_document(file_path, metadata, **kwargs):
-                    yield doc
-            except Exception as e:
-                # Log error but continue processing other files
-                print(f"Warning: Failed to process {file_path}: {str(e)}")
-                continue
-    
+        file_path = file.path
+        # Filter by supported extensions if enabled
+        if self.filter_supported_only:
+            file_ext = file_path.suffix.lower()
+            if file_ext not in DOCLING_SUPPORTED_EXTENSIONS:
+                self.logger.warning(f"Unsupported file format: {file_ext}")
+                return
+
+        # Yield one or more documents from this file
+        try:
+            async for doc in self._read_document(file_path, metadata, **parser_kwargs):
+                yield doc
+        except Exception as e:
+            # Log error but continue processing other files
+            self.logger.error(f"Warning: Failed to process {file_path}: {str(e)}")
+
     async def _read_document(
         self, 
         file_path: Path, 
@@ -293,79 +226,3 @@ class DoclingDocumentParser(DocumentParser):
         except Exception as e:
             raise ValueError(f"Failed to parse document {file_path}: {str(e)}") from e
     
-    @classmethod
-    def from_file(
-        cls, 
-        file_path: Path, 
-        page_chunks: bool = True,
-        do_ocr: bool = True,
-        do_table_structure: bool = True
-    ) -> "DoclingDocumentParser":
-        """
-        Create a DoclingDocumentSource for a single document file.
-        
-        Supports all Docling-compatible formats:
-        PDF, DOCX, PPTX, XLSX, HTML, Images (PNG, JPG, etc.), AsciiDoc, Markdown
-        
-        Args:
-            file_path: Path to the document file
-            page_chunks: If True, split into separate documents per page
-            do_ocr: Enable OCR for scanned documents and images
-            do_table_structure: Extract table structure
-            
-        Returns:
-            DoclingDocumentSource instance
-        """
-        return cls(
-            directory=file_path.parent,
-            pattern=file_path.name,
-            recursive=False,
-            page_chunks=page_chunks,
-            do_ocr=do_ocr,
-            do_table_structure=do_table_structure,
-            filter_supported_only=False  # Single file, no filtering needed
-        )
-    
-    @classmethod
-    def from_directory(
-        cls,
-        directory: Path,
-        pattern: str = "*",
-        recursive: bool = True,
-        page_chunks: bool = True,
-        do_ocr: bool = True,
-        do_table_structure: bool = True,
-        filter_supported_only: bool = True
-    ) -> "DoclingDocumentParser":
-        """
-        Create a DoclingDocumentSource for a directory of documents.
-        
-        Automatically processes all Docling-supported file formats:
-        - PDF (.pdf)
-        - Microsoft Office (.docx, .pptx, .xlsx)
-        - HTML (.html, .htm)
-        - Images (.png, .jpg, .jpeg, .tiff, .bmp)
-        - AsciiDoc (.asciidoc, .adoc)
-        - Markdown (.md)
-        
-        Args:
-            directory: Directory containing document files
-            pattern: Glob pattern for matching files (default: "*" for all files)
-            recursive: If True, search subdirectories
-            page_chunks: If True, split documents into separate documents per page
-            do_ocr: Enable OCR for scanned documents and images
-            do_table_structure: Extract table structure
-            filter_supported_only: If True, only process Docling-supported formats (default: True)
-            
-        Returns:
-            DoclingDocumentSource instance
-        """
-        return cls(
-            directory=directory,
-            pattern=pattern,
-            recursive=recursive,
-            page_chunks=page_chunks,
-            do_ocr=do_ocr,
-            do_table_structure=do_table_structure,
-            filter_supported_only=filter_supported_only
-        )

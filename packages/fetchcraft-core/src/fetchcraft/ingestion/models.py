@@ -35,6 +35,16 @@ class DocumentStatus(str, Enum):
     FAILED = "failed"
 
 
+class TaskStatus(str, Enum):
+    """Status of a task (pipeline step execution)."""
+    PENDING = "pending"          # Task created, not yet started
+    PROCESSING = "processing"    # Task is being executed
+    SUBMITTED = "submitted"      # Async task submitted to external service
+    WAITING = "waiting"          # Waiting for callback from external service
+    COMPLETED = "completed"      # Task completed successfully
+    FAILED = "failed"            # Task failed
+
+
 @dataclass
 class IngestionJob:
     """
@@ -138,5 +148,63 @@ class DocumentRecord:
             "error_message": self.error_message,
             "error_step": self.error_step,
             "retry_count": self.retry_count,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class TaskRecord:
+    """
+    Represents a task (pipeline step execution) for a document.
+    
+    Tasks track the execution of individual pipeline steps, enabling:
+    - Fine-grained progress monitoring
+    - Async transformation callback correlation
+    - Debugging and execution tracing
+    
+    Attributes:
+        id: Unique task identifier (used for callback correlation)
+        job_id: ID of the parent ingestion job
+        document_id: ID of the document being processed
+        transformation_name: Name of the transformation being executed
+        step_index: Index of this step in the pipeline
+        status: Current task status
+        is_async: Whether this is an async transformation
+        created_at: Task creation timestamp
+        started_at: Task start timestamp
+        submitted_at: When async task was submitted to external service
+        completed_at: Task completion timestamp
+        error_message: Error message if task failed
+        metadata: Additional task metadata (e.g., external service response)
+    """
+    id: str = field(default_factory=lambda: str(uuid4()))
+    job_id: str = ""
+    document_id: str = ""
+    transformation_name: str = ""
+    step_index: int = 0
+    status: TaskStatus = TaskStatus.PENDING
+    is_async: bool = False
+    created_at: datetime = field(default_factory=utcnow)
+    started_at: Optional[datetime] = None
+    submitted_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    error_message: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "id": self.id,
+            "job_id": self.job_id,
+            "document_id": self.document_id,
+            "transformation_name": self.transformation_name,
+            "step_index": self.step_index,
+            "status": self.status.value,
+            "is_async": self.is_async,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "submitted_at": self.submitted_at.isoformat() if self.submitted_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "error_message": self.error_message,
             "metadata": self.metadata,
         }

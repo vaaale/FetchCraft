@@ -9,17 +9,16 @@ from __future__ import annotations
 import base64
 import logging
 from pathlib import Path
-from typing import AsyncIterable, Dict, Optional
+from typing import AsyncIterable, Optional
 
-from fetchcraft.connector.base import Connector, File
-from fetchcraft.ingestion.interfaces import ISource, IConnector
+from fetchcraft.connector.base import Connector as BaseConnector
+from fetchcraft.ingestion.interfaces import Source, Connector as ConnectorInterface
 from fetchcraft.ingestion.models import DocumentRecord
-from fetchcraft.parsing.base import DocumentParser
 
 logger = logging.getLogger(__name__)
 
 
-class ConnectorSource(ISource):
+class ConnectorSource(Source):
     """
     Source that reads files from a connector.
     
@@ -33,7 +32,7 @@ class ConnectorSource(ISource):
     
     def __init__(
         self,
-        connector: Connector,
+        connector: BaseConnector,
         document_root: Optional[str | Path] = None,
     ):
         """
@@ -66,8 +65,8 @@ class ConnectorSource(ISource):
         """
         logger.info("Starting to read files from connector")
         file_count = 0
-        
-        async for file in self.connector.read():
+
+        async for file in self.connector.glob():
             file_count += 1
             logger.debug(f"Processing file: {file.path}")
             
@@ -103,6 +102,6 @@ class ConnectorSource(ISource):
         
         logger.info(f"Finished reading from connector: {file_count} files")
     
-    def get_connector(self) -> IConnector:
+    def get_connector(self) -> ConnectorInterface:
         """Get the underlying connector."""
         return self.connector  # type: ignore

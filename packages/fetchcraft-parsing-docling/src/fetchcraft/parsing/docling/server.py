@@ -35,7 +35,7 @@ Usage:
 """
 
 import asyncio
-import os
+import logging
 import tempfile
 import time
 import uuid
@@ -45,40 +45,62 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Dict
 
-from dotenv import load_dotenv
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import Field, computed_field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from fetchcraft.parsing.docling.docling_parser import DoclingDocumentParser
 from fetchcraft.parsing.docling.models import (
-    ParseResponse, 
-    BatchParseResponse, 
+    ParseResponse,
+    BatchParseResponse,
     HealthResponse,
     JobStatusEnum,
     JobSubmitResponse,
     JobStatusResponse,
     JobResultResponse
 )
+from fetchcraft.parsing.docling.services.parsing_service import ParsingService
 
-load_dotenv()
+logger = logging.getLogger(__name__)
+
 
 # ============================================================================
 # Configuration
 # ============================================================================
 
-HOST = os.getenv("HOST", "0.0.0.0")
-PORT = int(os.getenv("PORT", "8080"))
-MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "10"))
-MAX_CONCURRENT_FILES = int(os.getenv("MAX_CONCURRENT_FILES", "4"))
-MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "100"))
-MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+class Settings(BaseSettings):
+    """Server configuration using pydantic-settings."""
 
-# Docling parser configuration
-PAGE_CHUNKS = os.getenv("PAGE_CHUNKS", "true").lower() == "true"
-DO_OCR = os.getenv("DO_OCR", "true").lower() == "true"
-DO_TABLE_STRUCTURE = os.getenv("DO_TABLE_STRUCTURE", "true").lower() == "true"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
-VERSION = "1.0.0"
+    # Server configuration
+    host: str = Field(default="0.0.0.0", description="Server host")
+    port: int = Field(default=8080, description="Server port")
+    max_concurrent_requests: int = Field(default=10, description="Maximum concurrent requests")
+    max_concurrent_files: int = Field(default=4, description="Maximum concurrent file processing")
+    max_file_size_mb: int = Field(default=100, description="Maximum file size in MB")
+
+    # Docling parser configuration
+    page_chunks: bool = Field(default=True, description="Split documents into pages")
+    do_ocr: bool = Field(default=True, description="Enable OCR for scanned documents")
+    do_table_structure: bool = Field(default=True, description="Extract table structure")
+
+    # Version
+    version: str = Field(default="1.0.0", description="API version")
+
+    @computed_field
+    @property
+    def max_file_size_bytes(self) -> int:
+        """Maximum file size in bytes."""
+        return self.max_file_size_mb * 1024 * 1024
+
+
+settings = Settings()
+
 
 # ============================================================================
 # Global State
@@ -95,6 +117,8 @@ class Job:
     completed_at: Optional[float] = None
     results: Optional[BatchParseResponse] = None
     error: Optional[str] = None
+    task_id: Optional[str] = None  # Task ID for callback correlation
+    callback_url: Optional[str] = None  # URL to send callbacks to
 
 
 class AppState:
@@ -106,6 +130,7 @@ class AppState:
     job_queue: Optional[asyncio.Queue] = None
     background_task: Optional[asyncio.Task] = None
     executor: Optional[ThreadPoolExecutor] = None
+    parsing_service: Optional[ParsingService] = None
 
 
 app_state = AppState()
@@ -115,92 +140,45 @@ app_state = AppState()
 # FastAPI Lifespan
 # ============================================================================
 
-def parse_file_sync(file_path: Path) -> ParseResponse:
-    """
-    Synchronous function to parse a single file.
-    This runs in a thread pool to avoid blocking the event loop.
-    
-    Args:
-        file_path: Path to the file to parse
-        
-    Returns:
-        ParseResponse with parsing results
-    """
-    start_time = time.time()
-    filename = file_path.name
-    
+async def send_callback(url: str, payload: dict) -> bool:
+    """Send a callback to the specified URL."""
     try:
-        # Create parser - this is CPU-intensive
-        parser = DoclingDocumentParser.from_file(
-            file_path=file_path,
-            page_chunks=PAGE_CHUNKS,
-            do_ocr=DO_OCR,
-            do_table_structure=DO_TABLE_STRUCTURE
-        )
-        
-        # Parse document synchronously
-        nodes = []
-        # Note: get_documents() is async, but we need to run it sync here
-        # We'll use asyncio.run() to run the async generator in this thread
-        import asyncio as async_lib
-        
-        async def collect_nodes():
-            collected = []
-            async for node in parser.get_documents():
-                collected.append(node.model_dump())
-            return collected
-        
-        nodes = async_lib.run(collect_nodes())
-        
-        processing_time = (time.time() - start_time) * 1000
-        
-        return ParseResponse(
-            filename=filename,
-            success=True,
-            nodes=nodes,
-            error=None,
-            num_nodes=len(nodes),
-            processing_time_ms=round(processing_time, 2)
-        )
-        
+        import httpx
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, json=payload)
+            return 200 <= response.status_code < 300
     except Exception as e:
-        processing_time = (time.time() - start_time) * 1000
-        return ParseResponse(
-            filename=filename,
-            success=False,
-            nodes=[],
-            error=str(e),
-            num_nodes=0,
-            processing_time_ms=round(processing_time, 2)
-        )
+        logger.error(f"⚠️  Callback failed: {url} - {e}")
+        return False
 
 
 async def process_jobs():
     """Background task to process jobs from the queue."""
-    print("📋 Job processor started")
+    logger.info("📋 Job processor started")
     while True:
         try:
             # Get next job from queue
             job_id = await app_state.job_queue.get()
             job = app_state.jobs.get(job_id)
-            
+            logger.info(f"Processing job {job_id}")
+
             if not job:
                 continue
-            
+
             # Update job status
             job.status = JobStatusEnum.PROCESSING
             job.started_at = time.time()
-            
-            print(f"⚙️  Processing job {job_id} with {len(job.files)} files")
-            
+
+            logger.info(f"⚙️  Processing job {job_id} with {len(job.files)} files")
+
             # Process the job
             try:
                 batch_start_time = time.time()
-                
+
                 # Create temporary directory for files
                 with tempfile.TemporaryDirectory() as temp_dir:
                     temp_path = Path(temp_dir)
-                    
+
                     # Save all files first
                     file_paths = []
                     for filename, content in job.files:
@@ -208,31 +186,49 @@ async def process_jobs():
                         with open(file_path, "wb") as f:
                             f.write(content)
                         file_paths.append(file_path)
-                    
+
                     # Process files using thread pool to avoid blocking the event loop
                     loop = asyncio.get_event_loop()
                     results = []
-                    
+                    total_nodes_sent = 0
+
                     for file_path in file_paths:
                         # Run the parsing in a thread pool
                         async with app_state.file_semaphore:
                             result = await loop.run_in_executor(
                                 app_state.executor,
-                                parse_file_sync,
+                                app_state.parsing_service.parse_file_sync,
                                 file_path
                             )
                             results.append(result)
+
+                            # Send node callbacks if callback_url is set
+                            if job.callback_url and result.success:
+                                for node_idx, node_data in enumerate(result.nodes):
+                                    callback_payload = {
+                                        "task_id": job.task_id,
+                                        "status": "PROCESSING",
+                                        "message": {
+                                            "type": "node",
+                                            "node": node_data,
+                                            "node_index": total_nodes_sent + node_idx,
+                                            "filename": result.filename,
+                                        }
+                                    }
+                                    await send_callback(job.callback_url, callback_payload)
+                                total_nodes_sent += result.num_nodes
+
                             # Yield control back to event loop periodically
                             await asyncio.sleep(0)
-                
+
                 batch_processing_time = (time.time() - batch_start_time) * 1000
-                
+
                 # Aggregate statistics
                 total_files = len(results)
                 successful = sum(1 for r in results if r.success)
                 failed = total_files - successful
                 total_nodes = sum(r.num_nodes for r in results)
-                
+
                 job.results = BatchParseResponse(
                     results=results,
                     total_files=total_files,
@@ -242,17 +238,47 @@ async def process_jobs():
                     total_processing_time_ms=round(batch_processing_time, 2)
                 )
                 job.status = JobStatusEnum.COMPLETED
-                print(f"✅ Job {job_id} completed: {successful}/{total_files} files successful")
-                
+                print(f"✅ Job {job_id} completed: {successful}/{total_files} files successful, {total_nodes} nodes")
+
+                # Send completion callback
+                if job.callback_url:
+                    callback_payload = {
+                        "task_id": job.task_id,
+                        "status": "COMPLETED",
+                        "message": {
+                            "type": "completion",
+                            "total_nodes": total_nodes,
+                            "total_files": total_files,
+                            "successful_files": successful,
+                            "failed_files": failed,
+                            "processing_time_ms": round(batch_processing_time, 2),
+                        }
+                    }
+                    await send_callback(job.callback_url, callback_payload)
+
             except Exception as e:
                 job.status = JobStatusEnum.FAILED
                 job.error = str(e)
                 print(f"❌ Job {job_id} failed: {e}")
-            
+
+                # Send failure callback
+                if job.callback_url:
+                    processing_time = (time.time() - batch_start_time) * 1000 if 'batch_start_time' in dir() else 0
+                    callback_payload = {
+                        "task_id": job.task_id,
+                        "status": "FAILED",
+                        "message": {
+                            "type": "failure",
+                            "processing_time_ms": round(processing_time, 2),
+                        },
+                        "error": str(e)
+                    }
+                    await send_callback(job.callback_url, callback_payload)
+
             finally:
                 job.completed_at = time.time()
                 app_state.job_queue.task_done()
-                
+
         except Exception as e:
             print(f"⚠️  Error in job processor: {e}")
             await asyncio.sleep(1)
@@ -265,33 +291,41 @@ async def lifespan(app: FastAPI):
     print("🚀 Starting Docling Parsing Server")
     print("=" * 70)
     print(f"\nConfiguration:")
-    print(f"  • Host: {HOST}")
-    print(f"  • Port: {PORT}")
-    print(f"  • Max Concurrent Requests: {MAX_CONCURRENT_REQUESTS}")
-    print(f"  • Max Concurrent Files: {MAX_CONCURRENT_FILES}")
-    print(f"  • Max File Size: {MAX_FILE_SIZE_MB} MB")
-    print(f"  • Page Chunks: {PAGE_CHUNKS}")
-    print(f"  • OCR Enabled: {DO_OCR}")
-    print(f"  • Table Structure: {DO_TABLE_STRUCTURE}")
+    print(f"  • Host: {settings.host}")
+    print(f"  • Port: {settings.port}")
+    print(f"  • Max Concurrent Requests: {settings.max_concurrent_requests}")
+    print(f"  • Max Concurrent Files: {settings.max_concurrent_files}")
+    print(f"  • Max File Size: {settings.max_file_size_mb} MB")
+    print(f"  • Page Chunks: {settings.page_chunks}")
+    print(f"  • OCR Enabled: {settings.do_ocr}")
+    print(f"  • Table Structure: {settings.do_table_structure}")
     print("=" * 70)
-    
+
     # Initialize semaphores for concurrency control
-    app_state.request_semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
-    app_state.file_semaphore = asyncio.Semaphore(MAX_CONCURRENT_FILES)
+    app_state.request_semaphore = asyncio.Semaphore(settings.max_concurrent_requests)
+    app_state.file_semaphore = asyncio.Semaphore(settings.max_concurrent_files)
     app_state.job_queue = asyncio.Queue()
-    app_state.executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_FILES)
+    app_state.executor = ThreadPoolExecutor(max_workers=settings.max_concurrent_files)
+
+    # Initialize parsing service
+    app_state.parsing_service = ParsingService(
+        page_chunks=settings.page_chunks,
+        do_ocr=settings.do_ocr,
+        do_table_structure=settings.do_table_structure
+    )
+
     app_state.initialized = True
-    
+
     # Start background job processor
     app_state.background_task = asyncio.create_task(process_jobs())
-    
-    print(f"\n✅ Server ready at http://{HOST}:{PORT}")
-    print(f"   API docs: http://{HOST}:{PORT}/docs")
-    print(f"   OpenAPI schema: http://{HOST}:{PORT}/openapi.json")
+
+    print(f"\n✅ Server ready at http://{settings.host}:{settings.port}")
+    print(f"   API docs: http://{settings.host}:{settings.port}/docs")
+    print(f"   OpenAPI schema: http://{settings.host}:{settings.port}/openapi.json")
     print("=" * 70 + "\n")
-    
+
     yield
-    
+
     print("\n👋 Shutting down server...")
     # Cancel background task
     if app_state.background_task:
@@ -300,7 +334,7 @@ async def lifespan(app: FastAPI):
             await app_state.background_task
         except asyncio.CancelledError:
             pass
-    
+
     # Shutdown thread pool executor
     if app_state.executor:
         app_state.executor.shutdown(wait=True)
@@ -317,7 +351,7 @@ app = FastAPI(
         "Parse documents into structured DocumentNodes using Docling. "
         "Supports PDF, DOCX, PPTX, XLSX, HTML, Images, AsciiDoc, and Markdown."
     ),
-    version=VERSION,
+    version=settings.version,
     lifespan=lifespan,
     contact={
         "name": "Docling Parsing API",
@@ -369,65 +403,47 @@ async def parse_single_file(
     Returns:
         ParseResponse with parsing results
     """
-    start_time = time.time()
     filename = file.filename or "unknown"
-    
+
     try:
         # Check file size
         content = await file.read()
         file_size = len(content)
-        
-        if file_size > MAX_FILE_SIZE_BYTES:
+
+        if file_size > settings.max_file_size_bytes:
             return ParseResponse(
                 filename=filename,
                 success=False,
                 nodes=[],
-                error=f"File size ({file_size / 1024 / 1024:.2f} MB) exceeds maximum ({MAX_FILE_SIZE_MB} MB)",
+                error=f"File size ({file_size / 1024 / 1024:.2f} MB) exceeds maximum ({settings.max_file_size_mb} MB)",
                 num_nodes=0,
                 processing_time_ms=0
             )
-        
+
         # Save file temporarily
         temp_path = temp_dir / filename
         with open(temp_path, "wb") as buffer:
             buffer.write(content)
-        
+
         # Use file semaphore to limit concurrent file processing
         async with app_state.file_semaphore:
-            # Create parser for this file
-            parser = DoclingDocumentParser.from_file(
-                file_path=temp_path,
-                page_chunks=PAGE_CHUNKS,
-                do_ocr=DO_OCR,
-                do_table_structure=DO_TABLE_STRUCTURE
+            # Run parsing in thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                app_state.executor,
+                app_state.parsing_service.parse_file_sync,
+                temp_path
             )
-            
-            # Parse document and collect nodes
-            nodes = []
-            async for node in parser.get_documents():
-                # Convert node to dictionary for JSON serialization
-                nodes.append(node.model_dump())
-            
-            processing_time = (time.time() - start_time) * 1000
-            
-            return ParseResponse(
-                filename=filename,
-                success=True,
-                nodes=nodes,
-                error=None,
-                num_nodes=len(nodes),
-                processing_time_ms=round(processing_time, 2)
-            )
-            
+            return result
+
     except Exception as e:
-        processing_time = (time.time() - start_time) * 1000
         return ParseResponse(
             filename=filename,
             success=False,
             nodes=[],
             error=str(e),
             num_nodes=0,
-            processing_time_ms=round(processing_time, 2)
+            processing_time_ms=0
         )
 
 
@@ -444,7 +460,7 @@ async def root():
     """
     return {
         "name": "Docling Document Parsing API",
-        "version": VERSION,
+        "version": settings.version,
         "description": "Parse documents into DocumentNodes using Docling",
         "supported_formats": [
             "PDF (.pdf)",
@@ -478,16 +494,15 @@ async def health():
 
     return HealthResponse(
         status="healthy" if app_state.initialized else "initializing",
-        version=VERSION,
+        version=settings.version,
         config={
-            "max_concurrent_requests": MAX_CONCURRENT_REQUESTS,
-            "max_concurrent_files": MAX_CONCURRENT_FILES,
-            "max_file_size_mb": MAX_FILE_SIZE_MB,
-            "page_chunks": PAGE_CHUNKS,
-            "do_ocr": DO_OCR,
-            "do_table_structure": DO_TABLE_STRUCTURE
-        },
-        environment=dict(os.environ)
+            "max_concurrent_requests": settings.max_concurrent_requests,
+            "max_concurrent_files": settings.max_concurrent_files,
+            "max_file_size_mb": settings.max_file_size_mb,
+            "page_chunks": settings.page_chunks,
+            "do_ocr": settings.do_ocr,
+            "do_table_structure": settings.do_table_structure
+        }
     )
 
 
@@ -516,36 +531,36 @@ async def parse_documents(
             status_code=503,
             detail="Service not initialized. Please try again in a moment."
         )
-    
+
     if not files:
         raise HTTPException(
             status_code=400,
             detail="No files provided"
         )
-    
+
     # Use request semaphore to limit concurrent requests
     async with app_state.request_semaphore:
         batch_start_time = time.time()
-        
+
         # Create temporary directory for files
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            
+
             # Process all files concurrently
             tasks = [
                 parse_single_file(file, temp_path)
                 for file in files
             ]
             results = await asyncio.gather(*tasks)
-        
+
         batch_processing_time = (time.time() - batch_start_time) * 1000
-        
+
         # Aggregate statistics
         total_files = len(results)
         successful = sum(1 for r in results if r.success)
         failed = total_files - successful
         total_nodes = sum(r.num_nodes for r in results)
-        
+
         return BatchParseResponse(
             results=results,
             total_files=total_files,
@@ -558,7 +573,9 @@ async def parse_documents(
 
 @app.post("/submit", response_model=JobSubmitResponse, tags=["Async Parsing"])
 async def submit_job(
-    files: List[UploadFile] = File(..., description="One or more files to parse")
+    files: List[UploadFile] = File(..., description="One or more files to parse"),
+    task_id: Optional[str] = Form(None, description="Task ID for callback correlation"),
+    callback_url: Optional[str] = Form(None, description="URL to send callbacks to"),
 ):
     """
     Submit a parsing job and return immediately with a job ID.
@@ -568,8 +585,15 @@ async def submit_job(
     Use the /jobs/{job_id} endpoint to check the status and 
     /jobs/{job_id}/results to retrieve results when complete.
     
+    If callback_url is provided, callbacks will be sent in CallbackMessage format:
+    - task_id: The provided task_id (or job_id if not provided)
+    - status: "PROCESSING" for each node, "COMPLETED" or "FAILED" at the end
+    - message: Contains node data or completion info
+    
     Args:
         files: List of files to parse
+        task_id: Optional task ID for callback correlation
+        callback_url: Optional URL to send callbacks to
         
     Returns:
         JobSubmitResponse with job_id for tracking
@@ -582,46 +606,49 @@ async def submit_job(
             status_code=503,
             detail="Service not initialized. Please try again in a moment."
         )
-    
+
     if not files:
         raise HTTPException(
             status_code=400,
             detail="No files provided"
         )
-    
+
     # Generate unique job ID
     job_id = str(uuid.uuid4())
-    
+
     # Read file contents and store
     file_data = []
     for file in files:
         content = await file.read()
         filename = file.filename or "unknown"
-        
+
         # Check file size
-        if len(content) > MAX_FILE_SIZE_BYTES:
+        if len(content) > settings.max_file_size_bytes:
             raise HTTPException(
                 status_code=413,
-                detail=f"File {filename} size ({len(content) / 1024 / 1024:.2f} MB) exceeds maximum ({MAX_FILE_SIZE_MB} MB)"
+                detail=f"File {filename} size ({len(content) / 1024 / 1024:.2f} MB) exceeds maximum ({settings.max_file_size_mb} MB)"
             )
-        
+
         file_data.append((filename, content))
-    
-    # Create job
+
+    # Create job with callback info
     job = Job(
         job_id=job_id,
         files=file_data,
-        status=JobStatusEnum.PENDING
+        status=JobStatusEnum.PENDING,
+        task_id=task_id or job_id,  # Use job_id as task_id if not provided
+        callback_url=callback_url
     )
-    
+
     # Store job
     app_state.jobs[job_id] = job
-    
+
     # Queue job for processing
     await app_state.job_queue.put(job_id)
-    
-    print(f"📥 Job {job_id} submitted with {len(files)} files")
-    
+
+    callback_info = f" (callback: {callback_url})" if callback_url else ""
+    print(f"📥 Job {job_id} submitted with {len(files)} files{callback_info}")
+
     return JobSubmitResponse(
         job_id=job_id,
         status=JobStatusEnum.PENDING,
@@ -647,13 +674,13 @@ async def get_job_status(job_id: str):
         HTTPException: If job_id is not found
     """
     job = app_state.jobs.get(job_id)
-    
+
     if not job:
         raise HTTPException(
             status_code=404,
             detail=f"Job {job_id} not found"
         )
-    
+
     return JobStatusResponse(
         job_id=job.job_id,
         status=job.status,
@@ -682,13 +709,13 @@ async def get_job_results(job_id: str):
         HTTPException: If job_id is not found
     """
     job = app_state.jobs.get(job_id)
-    
+
     if not job:
         raise HTTPException(
             status_code=404,
             detail=f"Job {job_id} not found"
         )
-    
+
     return JobResultResponse(
         job_id=job.job_id,
         status=job.status,
@@ -705,14 +732,10 @@ def main():
     """Run the FastAPI server."""
     import uvicorn
 
-    print("\nEnvironment Variables:")
-    for key, value in os.environ.items():
-        print(f"  • {key}: {value}")
-
     uvicorn.run(
-        "fetchcraft.parsing.docling.server:api",
-        host=HOST,
-        port=PORT,
+        "fetchcraft.parsing.docling.server:app",
+        host=settings.host,
+        port=settings.port,
         reload=False,
         log_level="info"
     )

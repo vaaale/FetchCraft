@@ -3,16 +3,20 @@ Interface definitions for ingestion pipeline components.
 
 This module defines the core interfaces that pipeline components must implement.
 All interfaces use ABC (Abstract Base Class) to enforce contracts.
+
+Naming Convention:
+- Interfaces do NOT use 'I' prefix (e.g., Source, Transformation, Sink)
+- Concrete implementations use descriptive names (e.g., ConnectorSource, ParsingTransformation)
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import AsyncIterable, Iterable, Optional
+from typing import AsyncIterable, Iterable, Optional, Any, Dict, Literal
 
 from fetchcraft.ingestion.models import DocumentRecord
 
 
-class IConnector(ABC):
+class Connector(ABC):
     """
     Interface for data source connectors.
     
@@ -31,7 +35,7 @@ class IConnector(ABC):
         pass
 
 
-class ISource(ABC):
+class Source(ABC):
     """
     Interface for pipeline sources.
     
@@ -60,7 +64,7 @@ class ISource(ABC):
         pass
     
     @abstractmethod
-    def get_connector(self) -> IConnector:
+    def get_connector(self) -> Connector:
         """
         Get the underlying connector.
         
@@ -70,7 +74,7 @@ class ISource(ABC):
         pass
 
 
-class ITransformation(ABC):
+class Transformation(ABC):
     """
     Interface for pipeline transformations.
     
@@ -79,19 +83,36 @@ class ITransformation(ABC):
     - Returns multiple DocumentRecords (1:N fan-out)
     - Returns None (filter out the document)
     
-    Transformations can be synchronous or asynchronous.
+    Transformations can be synchronous or asynchronous (callback-based).
+    Set is_async=True for transformations that use external services with callbacks.
     """
+    
+    @property
+    def is_async(self) -> bool:
+        """
+        Whether this transformation executes asynchronously via callbacks.
+        
+        Async transformations submit work to external services and receive
+        results via callbacks. The pipeline will pause document processing
+        until the callback is received.
+        
+        Returns:
+            True if async, False for synchronous execution
+        """
+        return False
     
     @abstractmethod
     async def process(
         self,
-        record: DocumentRecord
+        record: DocumentRecord,
+        context: Optional[dict] = None
     ) -> Optional[DocumentRecord | Iterable[DocumentRecord]]:
         """
-        Process a document record.
+        Process a document record synchronously.
         
         Args:
             record: The document record to process
+            context: Optional pipeline context with shared data
             
         Returns:
             - DocumentRecord: A single transformed record
@@ -110,58 +131,80 @@ class ITransformation(ABC):
         return self.__class__.__name__
 
 
-class IRemoteTransformation(ITransformation):
+class AsyncTransformation(Transformation):
     """
-    Interface for remote/async transformations with callbacks.
+    Interface for async transformations that use callbacks.
     
-    Remote transformations delegate processing to external services and
-    use callbacks to receive results. They maintain persistent state
-    to survive restarts.
+    Async transformations submit work to external services and receive
+    results via callbacks. The pipeline pauses document processing until
+    the callback is received with status COMPLETED.
+    
+    Lifecycle:
+    1. Pipeline calls submit() with document and task_id
+    2. Transformation sends work to external service with callback_url
+    3. External service sends callbacks to callback_url
+    4. Pipeline calls on_message() for each callback
+    5. When status is COMPLETED, pipeline continues with returned document
     """
+    
+    @property
+    def is_async(self) -> bool:
+        """Async transformations always return True."""
+        return True
+    
+    async def process(
+        self,
+        record: DocumentRecord
+    ) -> Optional[DocumentRecord | Iterable[DocumentRecord]]:
+        """
+        Not used for async transformations - raises error if called.
+        
+        Use submit() and on_message() instead.
+        """
+        raise NotImplementedError(
+            "AsyncTransformation does not support process(). "
+            "Use submit() and on_message() instead."
+        )
     
     @abstractmethod
-    async def submit(self, record: DocumentRecord) -> str:
+    async def submit(
+        self,
+        record: DocumentRecord,
+        task_id: str,
+        callback_url: str
+    ) -> None:
         """
-        Submit a document for remote processing.
+        Submit work to external service.
         
         Args:
             record: The document record to process
-            
-        Returns:
-            A tracking ID for the submitted work
+            task_id: Unique task identifier for correlation
+            callback_url: URL where callbacks should be sent
         """
         pass
     
     @abstractmethod
-    async def handle_callback(
+    async def on_message(
         self,
-        tracking_id: str,
-        result: dict
-    ) -> DocumentRecord:
+        message: Dict[str, Any],
+        status: Literal['PROCESSING', 'COMPLETED', 'FAILED']
+    ) -> Optional[DocumentRecord | Iterable[DocumentRecord]]:
         """
-        Handle a callback from the remote service.
+        Handle callback message from external service.
         
         Args:
-            tracking_id: The tracking ID from submit()
-            result: The processing result from the remote service
+            message: Callback payload from external service
+            status: Callback status
             
         Returns:
-            The processed document record
-        """
-        pass
-    
-    @abstractmethod
-    async def get_pending_count(self) -> int:
-        """
-        Get the count of pending remote operations.
-        
-        Returns:
-            Number of documents awaiting callback
+            - If status is COMPLETED: Processed DocumentRecord(s)
+            - If status is PROCESSING: None (continue waiting)
+            - If status is FAILED: Should raise an exception
         """
         pass
 
 
-class ISink(ABC):
+class Sink(ABC):
     """
     Interface for pipeline sinks.
     
@@ -170,12 +213,14 @@ class ISink(ABC):
     """
     
     @abstractmethod
-    async def write(self, record: DocumentRecord) -> None:
+    async def write(self, record: DocumentRecord, context: Optional[dict] = None) -> None:
         """
         Write a processed document record.
         
         Args:
             record: The processed document record
+            :param record: The document record
+            :param context: Pipeline context
         """
         pass
     
@@ -189,7 +234,7 @@ class ISink(ABC):
         return self.__class__.__name__
 
 
-class IQueueBackend(ABC):
+class QueueBackend(ABC):
     """
     Interface for async queue backends.
     
@@ -275,3 +320,37 @@ class IQueueBackend(ABC):
             True if any queue has pending messages
         """
         pass
+    
+    @abstractmethod
+    async def get_stats(self) -> dict:
+        """
+        Get queue statistics.
+        
+        Returns:
+            Dictionary with:
+            - total_messages: Total message count
+            - by_state: Dict of state -> count
+            - by_queue: Dict of queue -> count
+            - failed_messages: Count of failed messages
+            - oldest_pending: Timestamp of oldest pending message (or None)
+        """
+        pass
+    
+    @abstractmethod
+    async def check_health(self) -> bool:
+        """
+        Check if the queue backend is healthy.
+        
+        Returns:
+            True if healthy, False otherwise
+        """
+        pass
+
+
+# Backwards compatibility aliases (deprecated - will be removed in future version)
+IConnector = Connector
+ISource = Source
+ITransformation = Transformation
+IRemoteTransformation = AsyncTransformation
+ISink = Sink
+IQueueBackend = QueueBackend

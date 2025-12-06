@@ -3,7 +3,7 @@ import logging
 from typing import List, Optional
 
 from fetchcraft.ingestion.models import DocumentRecord, DocumentStatus
-from fetchcraft.ingestion.repository import IDocumentRepository
+from fetchcraft.ingestion.repository import DocumentRepository
 from fetchcraft.admin.services.ingestion_service import IngestionService
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ class DocumentService:
     
     def __init__(
         self,
-        doc_repo: IDocumentRepository,
+        doc_repo: DocumentRepository,
         ingestion_service: IngestionService
     ):
         """

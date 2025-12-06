@@ -6,12 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "fetchcraft-core",
-    "fetchcraft-openai-server",
-    "fetchcraft-openapi-server",
-    "fetchcraft-demo-mcp-server",
     "fetchcraft-parsing-docling",
-    "fetchcraft-gradio-chatbot",
-    "fetchcraft-hybrid-search",
     "fetchcraft-admin",
     "fetchcraft-mcp-server",
 ]
@@ -22,11 +17,6 @@ dependencies = [
 members = [
     "packages/fetchcraft-core",
     "packages/fetchcraft-parsing-docling",
-    "fetchcraft-demos/fetchcraft-openapi-server",
-    "fetchcraft-demos/fetchcraft-gradio-chatbot",
-    "fetchcraft-demos/fetchcraft-hybrid-search",
-    "fetchcraft-demos/fetchcraft-openai-server",
-    "fetchcraft-demos/fetchcraft-demo-mcp-server",
     "packages/fetchcraft-admin",
     "packages/fetchcraft-mcp-server",
 ]
@@ -34,11 +24,6 @@ members = [
 [tool.uv.sources]
 fetchcraft-core = { workspace = true }
 fetchcraft-parsing-docling = { workspace = true }
-fetchcraft-openapi-server = { workspace = true }
-fetchcraft-openai-server = { workspace = true }
-fetchcraft-gradio-chatbot = { workspace = true }
-fetchcraft-hybrid-search = { workspace = true }
 fetchcraft-admin = { workspace = true }
-fetchcraft-demo-mcp-server = { workspace = true }
 fetchcraft-mcp-server = { workspace = true }
 

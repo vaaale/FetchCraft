@@ -191,3 +191,132 @@ class CallbackService:
         }
         
         return await self.send_callback(url, payload)
+    
+    # =========================================================================
+    # New CallbackMessage format methods (for async transformation support)
+    # =========================================================================
+    
+    async def send_task_callback(
+        self,
+        url: str,
+        task_id: str,
+        status: str,
+        message: Dict[str, Any],
+        error: Optional[str] = None
+    ) -> bool:
+        """
+        Send a callback in the new CallbackMessage format.
+        
+        This is the standard format for async transformation callbacks.
+        
+        Args:
+            url: The callback URL
+            task_id: Task identifier for correlation
+            status: Status ('PROCESSING', 'COMPLETED', 'FAILED')
+            message: Callback payload (e.g., parsed node data)
+            error: Error message if status is FAILED
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        payload = {
+            "task_id": task_id,
+            "status": status,
+            "message": message,
+        }
+        if error:
+            payload["error"] = error
+        
+        return await self.send_callback(url, payload)
+    
+    async def send_task_node_callback(
+        self,
+        url: str,
+        task_id: str,
+        node_data: Dict[str, Any],
+        node_index: int,
+        total_nodes: int,
+        filename: str
+    ) -> bool:
+        """
+        Send a node callback in CallbackMessage format.
+        
+        Args:
+            url: The callback URL
+            task_id: Task identifier
+            node_data: The parsed node data
+            node_index: Index of this node (0-based)
+            total_nodes: Total number of nodes
+            filename: Source filename
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        message = {
+            "type": "node",
+            "node": node_data,
+            "node_index": node_index,
+            "total_nodes": total_nodes,
+            "filename": filename,
+        }
+        
+        return await self.send_task_callback(url, task_id, "PROCESSING", message)
+    
+    async def send_task_completion_callback(
+        self,
+        url: str,
+        task_id: str,
+        total_nodes: int,
+        filename: str,
+        processing_time_ms: float
+    ) -> bool:
+        """
+        Send a completion callback in CallbackMessage format.
+        
+        Args:
+            url: The callback URL
+            task_id: Task identifier
+            total_nodes: Total number of nodes parsed
+            filename: Source filename
+            processing_time_ms: Processing time in milliseconds
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        message = {
+            "type": "completion",
+            "total_nodes": total_nodes,
+            "filename": filename,
+            "processing_time_ms": processing_time_ms,
+        }
+        
+        return await self.send_task_callback(url, task_id, "COMPLETED", message)
+    
+    async def send_task_failure_callback(
+        self,
+        url: str,
+        task_id: str,
+        error: str,
+        filename: str,
+        processing_time_ms: float
+    ) -> bool:
+        """
+        Send a failure callback in CallbackMessage format.
+        
+        Args:
+            url: The callback URL
+            task_id: Task identifier
+            error: Error message
+            filename: Source filename
+            processing_time_ms: Processing time before failure
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        message = {
+            "type": "failure",
+            "filename": filename,
+            "processing_time_ms": processing_time_ms,
+        }
+        
+        return await self.send_task_callback(url, task_id, "FAILED", message, error=error)

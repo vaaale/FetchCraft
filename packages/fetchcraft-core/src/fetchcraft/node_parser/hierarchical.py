@@ -68,6 +68,7 @@ class HierarchicalNodeParser(NodeParser):
             parent_chunks = self._create_parent_chunks(document, text, metadata)
             
             # Step 2: For each parent chunk, create child SymNodes
+            self.child_sizes.sort() # Ascending order
             for parent_chunk in parent_chunks:
                 document_nodes.append(parent_chunk)
                 
@@ -77,6 +78,12 @@ class HierarchicalNodeParser(NodeParser):
                     document_nodes.extend(child_nodes)
                     for cn in child_nodes:
                         document.add_child(cn.id)
+
+                    # If the node fit the whole document, skip the remaining child sizes
+                    last_node = document_nodes[-1]
+                    last_node_size = len(last_node.text)
+                    if last_node_size >= len(text):
+                        break
 
             node_ids = list(set([n.id for n in document_nodes] + document.children_ids))
             document.children_ids = node_ids

@@ -3,6 +3,10 @@ Repository interfaces and implementations for ingestion tracking.
 
 This module follows a repository pattern with interface definitions and
 concrete implementations for different storage backends.
+
+Naming Convention:
+- Interfaces do NOT use 'I' prefix (e.g., JobRepository, DocumentRepository)
+- Concrete implementations use descriptive prefixes (e.g., PostgresJobRepository)
 """
 from __future__ import annotations
 
@@ -11,7 +15,14 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
-from fetchcraft.ingestion.models import IngestionJob, DocumentRecord, JobStatus, DocumentStatus
+from fetchcraft.ingestion.models import (
+    IngestionJob,
+    DocumentRecord,
+    TaskRecord,
+    JobStatus,
+    DocumentStatus,
+    TaskStatus,
+)
 
 
 def _sanitize_for_postgres(obj: Any) -> Any:
@@ -33,7 +44,7 @@ def _sanitize_for_postgres(obj: Any) -> Any:
         return obj
 
 
-class IJobRepository(ABC):
+class JobRepository(ABC):
     """
     Interface for ingestion job persistence.
     
@@ -120,7 +131,7 @@ class IJobRepository(ABC):
         pass
 
 
-class IDocumentRepository(ABC):
+class DocumentRepository(ABC):
     """
     Interface for document tracking persistence.
     
@@ -289,9 +300,232 @@ class IDocumentRepository(ABC):
             doc_id: The document ID to delete
         """
         pass
+    
+    @abstractmethod
+    async def find_document_by_metadata(
+        self,
+        key: str,
+        value: str,
+        additional_filters: Optional[Dict[str, str]] = None
+    ) -> Optional[DocumentRecord]:
+        """
+        Find a document by metadata key-value pair.
+        
+        Args:
+            key: Metadata key to search
+            value: Value to match
+            additional_filters: Optional additional metadata filters
+            
+        Returns:
+            The document if found, None otherwise
+        """
+        pass
+    
+    @abstractmethod
+    async def get_job_pipeline_steps(self, job_id: str) -> Optional[List[str]]:
+        """
+        Get pipeline steps for a job.
+        
+        Args:
+            job_id: The job ID
+            
+        Returns:
+            List of pipeline step names or None if job not found
+        """
+        pass
+    
+    @abstractmethod
+    async def count_children_by_parent(
+        self,
+        parent_doc_id: str,
+        status: Optional[DocumentStatus] = None
+    ) -> int:
+        """
+        Count child documents for a parent document.
+        
+        Args:
+            parent_doc_id: The parent document ID
+            status: Optional status filter
+            
+        Returns:
+            Count of child documents
+        """
+        pass
 
 
-class PostgresJobRepository(IJobRepository):
+class TaskRepository(ABC):
+    """
+    Interface for task tracking persistence.
+    
+    Tasks represent individual pipeline step executions for documents.
+    This enables fine-grained tracking and async callback correlation.
+    """
+    
+    @abstractmethod
+    async def create_task(self, task: TaskRecord) -> str:
+        """
+        Create a new task record.
+        
+        Args:
+            task: The task record to create
+            
+        Returns:
+            The created task ID
+        """
+        pass
+    
+    @abstractmethod
+    async def get_task(self, task_id: str) -> Optional[TaskRecord]:
+        """
+        Retrieve a task by ID.
+        
+        Args:
+            task_id: The task ID
+            
+        Returns:
+            The task if found, None otherwise
+        """
+        pass
+    
+    @abstractmethod
+    async def get_task_by_job_and_document(
+        self,
+        job_id: str,
+        document_id: str,
+        transformation_name: str
+    ) -> Optional[TaskRecord]:
+        """
+        Find a task by job, document, and transformation.
+        
+        Args:
+            job_id: The job ID
+            document_id: The document ID
+            transformation_name: Name of the transformation
+            
+        Returns:
+            The task if found, None otherwise
+        """
+        pass
+    
+    @abstractmethod
+    async def list_tasks_for_document(
+        self,
+        document_id: str
+    ) -> List[TaskRecord]:
+        """
+        List all tasks for a document.
+        
+        Args:
+            document_id: The document ID
+            
+        Returns:
+            List of tasks ordered by step_index
+        """
+        pass
+    
+    @abstractmethod
+    async def list_tasks_for_job(
+        self,
+        job_id: str,
+        status: Optional[TaskStatus] = None
+    ) -> List[TaskRecord]:
+        """
+        List all tasks for a job with optional status filter.
+        
+        Args:
+            job_id: The job ID
+            status: Optional status filter
+            
+        Returns:
+            List of tasks
+        """
+        pass
+    
+    @abstractmethod
+    async def update_task_status(
+        self,
+        task_id: str,
+        status: TaskStatus,
+        error_message: Optional[str] = None
+    ) -> None:
+        """
+        Update a task's status.
+        
+        Args:
+            task_id: The task ID
+            status: New status
+            error_message: Optional error message
+        """
+        pass
+    
+    @abstractmethod
+    async def set_task_started(self, task_id: str) -> None:
+        """Mark task as started with timestamp."""
+        pass
+    
+    @abstractmethod
+    async def set_task_submitted(self, task_id: str) -> None:
+        """Mark async task as submitted with timestamp."""
+        pass
+    
+    @abstractmethod
+    async def set_task_completed(self, task_id: str) -> None:
+        """Mark task as completed with timestamp."""
+        pass
+    
+    @abstractmethod
+    async def update_task_metadata(
+        self,
+        task_id: str,
+        metadata: Dict[str, Any]
+    ) -> None:
+        """
+        Update a task's metadata.
+        
+        Args:
+            task_id: The task ID
+            metadata: New metadata dictionary
+        """
+        pass
+    
+    @abstractmethod
+    async def get_pending_async_tasks(
+        self,
+        job_id: Optional[str] = None
+    ) -> List[TaskRecord]:
+        """
+        Get all async tasks that are waiting for callbacks.
+        
+        Args:
+            job_id: Optional job ID filter
+            
+        Returns:
+            List of tasks with status SUBMITTED or WAITING
+        """
+        pass
+    
+    @abstractmethod
+    async def delete_tasks_for_document(self, document_id: str) -> None:
+        """
+        Delete all tasks for a document.
+        
+        Args:
+            document_id: The document ID
+        """
+        pass
+    
+    @abstractmethod
+    async def delete_tasks_for_job(self, job_id: str) -> None:
+        """
+        Delete all tasks for a job.
+        
+        Args:
+            job_id: The job ID
+        """
+        pass
+
+
+class PostgresJobRepository(JobRepository):
     """PostgreSQL implementation of job repository."""
     
     def __init__(self, pool):
@@ -485,7 +719,7 @@ class PostgresJobRepository(IJobRepository):
             await conn.execute("DELETE FROM ingestion_jobs WHERE id = $1", job_id)
 
 
-class PostgresDocumentRepository(IDocumentRepository):
+class PostgresDocumentRepository(DocumentRepository):
     """PostgreSQL implementation of document repository."""
     
     def __init__(self, pool):
@@ -806,3 +1040,391 @@ class PostgresDocumentRepository(IDocumentRepository):
         """Delete a document."""
         async with self.pool.acquire() as conn:
             await conn.execute("DELETE FROM ingestion_documents WHERE id = $1", doc_id)
+    
+    async def find_document_by_metadata(
+        self,
+        key: str,
+        value: str,
+        additional_filters: Optional[Dict[str, str]] = None
+    ) -> Optional[DocumentRecord]:
+        """Find a document by metadata key-value pair."""
+        async with self.pool.acquire() as conn:
+            # Build query with additional filters
+            query = """
+                SELECT * FROM ingestion_documents
+                WHERE metadata->>$1 = $2
+            """
+            params = [key, value]
+            param_idx = 3
+            
+            if additional_filters:
+                for filter_key, filter_value in additional_filters.items():
+                    query += f" AND metadata->>${param_idx} = ${param_idx + 1}"
+                    params.extend([filter_key, filter_value])
+                    param_idx += 2
+            
+            query += " ORDER BY created_at DESC LIMIT 1"
+            
+            row = await conn.fetchrow(query, *params)
+            
+            if not row:
+                return None
+            
+            return DocumentRecord(
+                id=row["id"],
+                job_id=row["job_id"],
+                source=row["source"],
+                status=DocumentStatus(row["status"]),
+                current_step=row["current_step"],
+                step_statuses=json.loads(row["step_statuses"]) if isinstance(row["step_statuses"], str) else row["step_statuses"],
+                created_at=row["created_at"],
+                started_at=row["started_at"],
+                completed_at=row["completed_at"],
+                error_message=row["error_message"],
+                error_step=row["error_step"],
+                retry_count=row["retry_count"],
+                metadata=json.loads(row["metadata"]) if isinstance(row["metadata"], str) else row["metadata"],
+            )
+    
+    async def get_job_pipeline_steps(self, job_id: str) -> Optional[List[str]]:
+        """Get pipeline steps for a job."""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT pipeline_steps FROM ingestion_jobs WHERE id = $1",
+                job_id
+            )
+            if not row:
+                return None
+            
+            pipeline_steps = row['pipeline_steps']
+            if isinstance(pipeline_steps, str):
+                return json.loads(pipeline_steps)
+            return pipeline_steps
+    
+    async def count_children_by_parent(
+        self,
+        parent_doc_id: str,
+        status: Optional[DocumentStatus] = None
+    ) -> int:
+        """Count child documents for a parent document."""
+        async with self.pool.acquire() as conn:
+            if status:
+                count = await conn.fetchval(
+                    """
+                    SELECT COUNT(*) FROM ingestion_documents
+                    WHERE metadata->>'parent_document_id' = $1
+                    AND status = $2
+                    """,
+                    parent_doc_id,
+                    status.value
+                )
+            else:
+                count = await conn.fetchval(
+                    """
+                    SELECT COUNT(*) FROM ingestion_documents
+                    WHERE metadata->>'parent_document_id' = $1
+                    """,
+                    parent_doc_id
+                )
+            return count or 0
+
+
+class PostgresTaskRepository(TaskRepository):
+    """PostgreSQL implementation of task repository."""
+    
+    def __init__(self, pool):
+        """
+        Initialize repository with database pool.
+        
+        Args:
+            pool: asyncpg connection pool
+        """
+        self.pool = pool
+    
+    async def _ensure_schema(self):
+        """Create tables if they don't exist."""
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS ingestion_tasks (
+                    id TEXT PRIMARY KEY,
+                    job_id TEXT NOT NULL,
+                    document_id TEXT NOT NULL,
+                    transformation_name TEXT NOT NULL,
+                    step_index INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    is_async BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMPTZ NOT NULL,
+                    started_at TIMESTAMPTZ,
+                    submitted_at TIMESTAMPTZ,
+                    completed_at TIMESTAMPTZ,
+                    error_message TEXT,
+                    metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+                )
+                """
+            )
+            # Create indexes
+            try:
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_tasks_job_id ON ingestion_tasks(job_id)"
+                )
+            except Exception:
+                pass
+            
+            try:
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_tasks_document_id ON ingestion_tasks(document_id)"
+                )
+            except Exception:
+                pass
+            
+            try:
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_tasks_status ON ingestion_tasks(status)"
+                )
+            except Exception:
+                pass
+            
+            try:
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_tasks_job_doc_transform ON ingestion_tasks(job_id, document_id, transformation_name)"
+                )
+            except Exception:
+                pass
+    
+    async def create_task(self, task: TaskRecord) -> str:
+        await self._ensure_schema()
+        
+        sanitized_metadata = _sanitize_for_postgres(task.metadata)
+        
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO ingestion_tasks 
+                (id, job_id, document_id, transformation_name, step_index, status,
+                 is_async, created_at, started_at, submitted_at, completed_at, 
+                 error_message, metadata)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                """,
+                task.id,
+                task.job_id,
+                task.document_id,
+                _sanitize_for_postgres(task.transformation_name),
+                task.step_index,
+                task.status.value,
+                task.is_async,
+                task.created_at,
+                task.started_at,
+                task.submitted_at,
+                task.completed_at,
+                _sanitize_for_postgres(task.error_message),
+                json.dumps(sanitized_metadata),
+            )
+        return task.id
+    
+    def _row_to_task(self, row) -> TaskRecord:
+        """Convert database row to TaskRecord."""
+        return TaskRecord(
+            id=row["id"],
+            job_id=row["job_id"],
+            document_id=row["document_id"],
+            transformation_name=row["transformation_name"],
+            step_index=row["step_index"],
+            status=TaskStatus(row["status"]),
+            is_async=row["is_async"],
+            created_at=row["created_at"],
+            started_at=row["started_at"],
+            submitted_at=row["submitted_at"],
+            completed_at=row["completed_at"],
+            error_message=row["error_message"],
+            metadata=json.loads(row["metadata"]) if isinstance(row["metadata"], str) else row["metadata"],
+        )
+    
+    async def get_task(self, task_id: str) -> Optional[TaskRecord]:
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM ingestion_tasks WHERE id = $1", task_id
+            )
+            if not row:
+                return None
+            return self._row_to_task(row)
+    
+    async def get_task_by_job_and_document(
+        self,
+        job_id: str,
+        document_id: str,
+        transformation_name: str
+    ) -> Optional[TaskRecord]:
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT * FROM ingestion_tasks 
+                WHERE job_id = $1 AND document_id = $2 AND transformation_name = $3
+                """,
+                job_id,
+                document_id,
+                transformation_name,
+            )
+            if not row:
+                return None
+            return self._row_to_task(row)
+    
+    async def list_tasks_for_document(self, document_id: str) -> List[TaskRecord]:
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM ingestion_tasks 
+                WHERE document_id = $1 
+                ORDER BY step_index ASC
+                """,
+                document_id,
+            )
+            return [self._row_to_task(row) for row in rows]
+    
+    async def list_tasks_for_job(
+        self,
+        job_id: str,
+        status: Optional[TaskStatus] = None
+    ) -> List[TaskRecord]:
+        async with self.pool.acquire() as conn:
+            if status:
+                rows = await conn.fetch(
+                    """
+                    SELECT * FROM ingestion_tasks 
+                    WHERE job_id = $1 AND status = $2 
+                    ORDER BY created_at ASC
+                    """,
+                    job_id,
+                    status.value,
+                )
+            else:
+                rows = await conn.fetch(
+                    """
+                    SELECT * FROM ingestion_tasks 
+                    WHERE job_id = $1 
+                    ORDER BY created_at ASC
+                    """,
+                    job_id,
+                )
+            return [self._row_to_task(row) for row in rows]
+    
+    async def update_task_status(
+        self,
+        task_id: str,
+        status: TaskStatus,
+        error_message: Optional[str] = None
+    ) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE ingestion_tasks 
+                SET status = $1, error_message = $2 
+                WHERE id = $3
+                """,
+                status.value,
+                _sanitize_for_postgres(error_message),
+                task_id,
+            )
+    
+    async def set_task_started(self, task_id: str) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE ingestion_tasks 
+                SET status = $1, started_at = NOW() 
+                WHERE id = $2
+                """,
+                TaskStatus.PROCESSING.value,
+                task_id,
+            )
+    
+    async def set_task_submitted(self, task_id: str) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE ingestion_tasks 
+                SET status = $1, submitted_at = NOW() 
+                WHERE id = $2
+                """,
+                TaskStatus.SUBMITTED.value,
+                task_id,
+            )
+    
+    async def set_task_completed(self, task_id: str) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE ingestion_tasks 
+                SET status = $1, completed_at = NOW() 
+                WHERE id = $2
+                """,
+                TaskStatus.COMPLETED.value,
+                task_id,
+            )
+    
+    async def update_task_metadata(
+        self,
+        task_id: str,
+        metadata: Dict[str, Any]
+    ) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE ingestion_tasks 
+                SET metadata = $1::jsonb
+                WHERE id = $2
+                """,
+                json.dumps(_sanitize_for_postgres(metadata)),
+                task_id,
+            )
+    
+    async def get_pending_async_tasks(
+        self,
+        job_id: Optional[str] = None
+    ) -> List[TaskRecord]:
+        async with self.pool.acquire() as conn:
+            if job_id:
+                rows = await conn.fetch(
+                    """
+                    SELECT * FROM ingestion_tasks 
+                    WHERE job_id = $1 
+                    AND is_async = TRUE 
+                    AND status IN ($2, $3)
+                    ORDER BY created_at ASC
+                    """,
+                    job_id,
+                    TaskStatus.SUBMITTED.value,
+                    TaskStatus.WAITING.value,
+                )
+            else:
+                rows = await conn.fetch(
+                    """
+                    SELECT * FROM ingestion_tasks 
+                    WHERE is_async = TRUE 
+                    AND status IN ($1, $2)
+                    ORDER BY created_at ASC
+                    """,
+                    TaskStatus.SUBMITTED.value,
+                    TaskStatus.WAITING.value,
+                )
+            return [self._row_to_task(row) for row in rows]
+    
+    async def delete_tasks_for_document(self, document_id: str) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM ingestion_tasks WHERE document_id = $1",
+                document_id,
+            )
+    
+    async def delete_tasks_for_job(self, job_id: str) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM ingestion_tasks WHERE job_id = $1",
+                job_id,
+            )
+
+
+# Backwards compatibility aliases (deprecated - will be removed in future version)
+IJobRepository = JobRepository
+IDocumentRepository = DocumentRepository
+ITaskRepository = TaskRepository

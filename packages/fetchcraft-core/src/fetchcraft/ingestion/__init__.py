@@ -56,54 +56,6 @@ Components:
 - **Queue Backends**: AsyncPostgresQueue, AsyncSQLiteQueue
 """
 
-# Core pipeline
-from fetchcraft.ingestion.pipeline import TrackedIngestionPipeline, PipelineStep, Worker
-
-# Data models
-from fetchcraft.ingestion.models import (
-    IngestionJob,
-    DocumentRecord,
-    JobStatus,
-    DocumentStatus,
-    utcnow,
-)
-
-# Interfaces
-from fetchcraft.ingestion.interfaces import (
-    ISource,
-    ITransformation,
-    IRemoteTransformation,
-    ISink,
-    IConnector,
-    IQueueBackend,
-)
-
-# Concrete implementations
-from fetchcraft.ingestion.sources import ConnectorSource
-from fetchcraft.ingestion.transformations import (
-    ParsingTransformation,
-    ChunkingTransformation,
-    DocumentSummarization,
-    ExtractKeywords,
-)
-from fetchcraft.ingestion.sinks import (
-    VectorIndexSink,
-    DocumentStoreSink,
-    LoggingSink,
-)
-
-# Repositories
-from fetchcraft.ingestion.repository import (
-    IJobRepository,
-    IDocumentRepository,
-    PostgresJobRepository,
-    PostgresDocumentRepository,
-)
-
-# Queue backends
-from fetchcraft.ingestion.postgres_backend import AsyncPostgresQueue
-from fetchcraft.ingestion.sqlite_backend import AsyncSQLiteQueue
-
 # Legacy support (deprecated - use new pipeline)
 from fetchcraft.ingestion.base import (
     IngestionPipeline as LegacyIngestionPipeline,
@@ -112,6 +64,62 @@ from fetchcraft.ingestion.base import (
     Transformation,
     Sink,
     ConnectorSource as LegacyConnectorSource,
+)
+# Interfaces (new naming without I-prefix)
+from fetchcraft.ingestion.interfaces import (
+    Source,
+    Transformation,
+    AsyncTransformation,
+    Sink,
+    Connector,
+    QueueBackend,
+    # Backwards compatibility aliases
+    ISource,
+    ITransformation,
+    IRemoteTransformation,
+    ISink,
+    IConnector,
+    IQueueBackend,
+)
+# Data models
+from fetchcraft.ingestion.models import (
+    IngestionJob,
+    DocumentRecord,
+    TaskRecord,
+    JobStatus,
+    DocumentStatus,
+    TaskStatus,
+    utcnow,
+)
+# Core pipeline
+from fetchcraft.ingestion.pipeline import TrackedIngestionPipeline, PipelineStep, Worker
+# Queue backends
+from fetchcraft.ingestion.postgres_backend import AsyncPostgresQueue
+# Repositories (new naming without I-prefix)
+from fetchcraft.ingestion.repository import (
+    JobRepository,
+    DocumentRepository,
+    TaskRepository,
+    PostgresJobRepository,
+    PostgresDocumentRepository,
+    PostgresTaskRepository,
+    # Backwards compatibility aliases
+    IJobRepository,
+    IDocumentRepository,
+    ITaskRepository,
+)
+from fetchcraft.ingestion.sinks import (
+    VectorIndexSink,
+)
+# Concrete implementations
+from fetchcraft.ingestion.sources import ConnectorSource
+from fetchcraft.ingestion.sqlite_backend import AsyncSQLiteQueue
+from fetchcraft.ingestion.transformations import (
+    ParsingTransformation,
+    AsyncParsingTransformation,
+    ChunkingTransformation,
+    DocumentSummarization,
+    ExtractKeywords,
 )
 
 __all__ = [
@@ -122,10 +130,19 @@ __all__ = [
     # Models
     "IngestionJob",
     "DocumentRecord",
+    "TaskRecord",
     "JobStatus",
     "DocumentStatus",
+    "TaskStatus",
     "utcnow",
-    # Interfaces
+    # Interfaces (new naming)
+    "Source",
+    "Transformation",
+    "AsyncTransformation",
+    "Sink",
+    "Connector",
+    "QueueBackend",
+    # Interfaces (backwards compatibility)
     "ISource",
     "ITransformation",
     "IRemoteTransformation",
@@ -136,26 +153,28 @@ __all__ = [
     "ConnectorSource",
     # Transformations
     "ParsingTransformation",
+    "AsyncParsingTransformation",
     "ChunkingTransformation",
     "DocumentSummarization",
     "ExtractKeywords",
     # Sinks
     "VectorIndexSink",
-    "DocumentStoreSink",
-    "LoggingSink",
-    # Repositories
-    "IJobRepository",
-    "IDocumentRepository",
+    # Repositories (new naming)
+    "JobRepository",
+    "DocumentRepository",
+    "TaskRepository",
     "PostgresJobRepository",
     "PostgresDocumentRepository",
+    "PostgresTaskRepository",
+    # Repositories (backwards compatibility)
+    "IJobRepository",
+    "IDocumentRepository",
+    "ITaskRepository",
     # Queue Backends
     "AsyncPostgresQueue",
     "AsyncSQLiteQueue",
     # Legacy (deprecated)
     "LegacyIngestionPipeline",
     "Record",
-    "Source",
-    "Transformation",
-    "Sink",
     "LegacyConnectorSource",
 ]

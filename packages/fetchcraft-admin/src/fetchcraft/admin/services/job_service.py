@@ -3,9 +3,9 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from fetchcraft.admin.api.models.responses import Job
+from fetchcraft.admin.models.models import Job
 from fetchcraft.ingestion.models import JobStatus
-from fetchcraft.ingestion.repository import IJobRepository, IDocumentRepository
+from fetchcraft.ingestion.repository import JobRepository, DocumentRepository
 from fetchcraft.admin.services.ingestion_service import IngestionService
 
 logger = logging.getLogger(__name__)
@@ -21,8 +21,8 @@ class JobService:
     
     def __init__(
         self,
-        job_repo: IJobRepository,
-        doc_repo: IDocumentRepository,
+        job_repo: JobRepository,
+        doc_repo: DocumentRepository,
         ingestion_service: IngestionService,
         document_root: Path
     ):

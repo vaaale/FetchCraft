@@ -391,12 +391,34 @@ class AsyncPostgresQueue(AsyncQueueBackend):
                 "SELECT COUNT(*) FROM messages WHERE attempts >= 3"
             )
             
+            # Oldest pending message
+            oldest_row = await conn.fetchrow(
+                "SELECT MIN(available_at) as oldest FROM messages WHERE state = 'ready'"
+            )
+            oldest_pending = oldest_row["oldest"] if oldest_row and oldest_row["oldest"] else None
+            
             return {
-                "total_messages": total,
+                "total_messages": total or 0,
                 "by_state": by_state,
                 "by_queue": by_queue,
-                "failed_messages": failed,
+                "failed_messages": failed or 0,
+                "oldest_pending": oldest_pending,
             }
+    
+    async def check_health(self) -> bool:
+        """
+        Check if the queue backend is healthy.
+        
+        Returns:
+            True if healthy, False otherwise
+        """
+        try:
+            pool = await self._ensure_pool()
+            async with pool.acquire() as conn:
+                await conn.fetchval("SELECT 1")
+                return True
+        except Exception:
+            return False
     
     async def close(self):
         """Close the connection pool."""
