@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from typing import List
 
+from fetchcraft.connector.filesystem import LocalFile
 from ..docling_parser import DoclingDocumentParser
 from ..models import ParseResponse
 
@@ -60,12 +61,13 @@ class ParsingService:
         
         try:
             # Create parser - this is CPU-intensive
-            parser = DoclingDocumentParser.from_file(
-                file_path=file_path,
-                page_chunks=self.page_chunks,
-                do_ocr=self.do_ocr,
-                do_table_structure=self.do_table_structure
-            )
+            parser = DoclingDocumentParser(page_chunks=self.page_chunks, do_ocr=self.do_ocr, do_table_structure=self.do_table_structure)
+            # parser = DoclingDocumentParser.from_file(
+            #     file_path=file_path,
+            #     page_chunks=self.page_chunks,
+            #     do_ocr=self.do_ocr,
+            #     do_table_structure=self.do_table_structure
+            # )
             
             # Parse document synchronously
             # Note: get_documents() is async, but we need to run it sync here
@@ -75,8 +77,8 @@ class ParsingService:
             async def collect_nodes():
                 collected = []
                 node_index = 0
-                
-                async for node in parser.get_documents():
+                file = LocalFile.from_path(file_path)
+                async for node in parser.parse(file, metadata={}):
                     node_dict = node.model_dump()
                     collected.append(node_dict)
                     

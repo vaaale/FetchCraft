@@ -19,6 +19,10 @@ class LocalFile(File):
             fs = fsspec.filesystem("file")
         super().__init__(fs=fs, path=path)
 
+    @classmethod
+    def from_path(cls, path: Path, fs: Optional[fsspec.AbstractFileSystem] = None):
+        return cls(path=path, fs=fs)
+
 
     async def read(self) -> bytes:
         return self.fs.open(str(self.path), "rb").read()
