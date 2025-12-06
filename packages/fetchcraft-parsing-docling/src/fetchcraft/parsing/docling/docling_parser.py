@@ -7,12 +7,8 @@ document understanding including layout analysis, table extraction, and more.
 """
 import json
 import logging
-import os
-from collections import defaultdict
 from pathlib import Path
-from typing import AsyncGenerator, Optional, Dict, Any, List
-
-from huggingface_hub import snapshot_download
+from typing import AsyncGenerator, Optional, Dict, Any
 
 from fetchcraft.connector import File
 
@@ -193,7 +189,8 @@ class DoclingDocumentParser(DocumentParser):
                             "total_pages": len(pages),
                             "total_length": len(page_text),
                             "tables_json": table_json,
-                            "tables_md": table_list_md
+                            "tables_md": table_list_md,
+                            "__keys": ["source", "page_number"]
                         }
 
                         # Add page-specific metadata

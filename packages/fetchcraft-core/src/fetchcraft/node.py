@@ -2,7 +2,7 @@ import hashlib
 import json
 from abc import abstractmethod, ABC
 from enum import Enum
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Set
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, PrivateAttr, computed_field
@@ -21,6 +21,9 @@ class NodeType(str, Enum):
 
 
 class Node(BaseModel):
+    model_config = {
+        "arbitrary_types_allowed": True,
+    }
     """
     Base class for representing nodes in a document hierarchy.
     
@@ -53,9 +56,6 @@ class Node(BaseModel):
     next_id: Optional[str] = None
     previous_id: Optional[str] = None
 
-    model_config = {
-        "arbitrary_types_allowed": True,
-    }
 
     @computed_field
     @property
@@ -64,6 +64,18 @@ class Node(BaseModel):
         if self.hash_ is None:
             self.hash_ = self.get_hash()
         return self.hash_
+
+    @computed_field
+    @property
+    def persistent_key(self) -> Optional[str]:
+        """Get the hash of the node."""
+        if "__keys" not in self.metadata:
+            self.metadata["__keys"] = ["source"]
+        keys = self.metadata.get("__keys")
+
+        keys = [str(self.metadata.get(key, "")) for key in sorted(keys)]
+
+        return "_".join(keys)
 
 
     @property

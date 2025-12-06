@@ -124,7 +124,8 @@ class AsyncDoclingParserClient:
         self, 
         *file_paths, 
         callback_url: str = None,
-        task_id: str = None
+        task_id: str = None,
+        metadata: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """
         Submit files for parsing and return immediately with a job ID.
@@ -137,10 +138,12 @@ class AsyncDoclingParserClient:
             *file_paths: Variable number of file paths (str or Path)
             callback_url: Optional callback URL to receive callbacks
             task_id: Optional task ID for callback correlation
+            metadata: Optional metadata to include in parsed documents
             
         Returns:
             Job submission response with job_id
         """
+        import json
         data = aiohttp.FormData()
 
         for path in file_paths:
@@ -154,6 +157,9 @@ class AsyncDoclingParserClient:
         
         if task_id:
             data.add_field('task_id', task_id)
+        
+        if metadata:
+            data.add_field('metadata', json.dumps(metadata))
 
         async with aiohttp.ClientSession() as session:
             async with session.post(f"{self.base_url}/submit", data=data) as response:

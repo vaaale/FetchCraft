@@ -38,6 +38,7 @@ class ParsingService:
     def parse_file_sync(
         self,
         file_path: Path,
+        metadata: dict = None,
         callback_handler=None,
         callback_metadata: dict = None,
         completion_callback_handler=None
@@ -49,6 +50,7 @@ class ParsingService:
         
         Args:
             file_path: Path to the file to parse
+            metadata: Optional metadata to include in parsed documents
             callback_handler: Optional async function to call for each node
             callback_metadata: Optional metadata to pass to callback handler
             completion_callback_handler: Optional async function to call on completion/failure
@@ -78,7 +80,7 @@ class ParsingService:
                 collected = []
                 node_index = 0
                 file = LocalFile.from_path(file_path)
-                async for node in parser.parse(file, metadata={}):
+                async for node in parser.parse(file, metadata=metadata or {}):
                     node_dict = node.model_dump()
                     collected.append(node_dict)
                     

@@ -52,11 +52,18 @@ class RemoteDoclingParser(DocumentParser):
 
             # If callback_url is set, use async mode
             if self.callback_url:
-                # Submit job asynchronously with callback and task_id
+                # Build metadata to pass to docling server
+                submit_metadata = {
+                    **(metadata or {}),
+                    **file.metadata(),
+                }
+                
+                # Submit job asynchronously with callback, task_id, and metadata
                 response = await self.client.submit_job(
                     tmp.name,
                     callback_url=self.callback_url,
-                    task_id=task_id
+                    task_id=task_id,
+                    metadata=submit_metadata
                 )
                 job_id = response.get('job_id')
 
