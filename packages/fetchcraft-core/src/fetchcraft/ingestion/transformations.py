@@ -7,15 +7,22 @@ common document processing tasks.
 from __future__ import annotations
 
 import base64
-import io
 import logging
-import uuid
-from typing import Optional, Iterable, Dict, Any, Literal, List
+from pathlib import Path
+from typing import Optional, Dict, Any, AsyncGenerator, Union, Iterable
 
+import fsspec
 from pydantic import ConfigDict
+
 from fetchcraft.connector.base import File
-from fetchcraft.ingestion.interfaces import Transformation, AsyncTransformation
-from fetchcraft.ingestion.models import DocumentRecord, DocumentStatus
+from fetchcraft.ingestion.interfaces import (
+    Transformation,
+    Record,
+    AsyncRemote,
+    AsyncDeferred,
+    TransformationResult,
+    PostProcessResult,
+)
 from fetchcraft.node import DocumentNode
 from fetchcraft.node_parser import NodeParser
 from fetchcraft.parsing.base import DocumentParser
@@ -23,13 +30,52 @@ from fetchcraft.parsing.base import DocumentParser
 logger = logging.getLogger(__name__)
 
 
+# ============================================================================
+# File Adapter for Parsers
+# ============================================================================
+
+class FileAdapter(File):
+    """Adapter to provide file interface from in-memory content."""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    def __init__(self, path_str: str, content: bytes, mimetype: str, encoding: str):
+        fs = fsspec.filesystem('memory')
+        super().__init__(
+            path=Path(path_str),
+            fs=fs,
+            mimetype=mimetype,
+            encoding=encoding,
+        )
+        self._content = content
+    
+    async def read(self) -> bytes:
+        return self._content
+    
+    def name(self) -> str:
+        return self.path.name
+    
+    def permissions(self) -> list:
+        return []
+    
+    def metadata(self) -> dict:
+        return {
+            "path": str(self.path),
+            "mimetype": self.mimetype,
+            "encoding": self.encoding,
+            "size": len(self._content),
+        }
+
+
 class ParsingTransformation(Transformation):
     """
-    Parse file content into documents using DocumentParsers.
+    Unified parsing transformation that handles both local and remote parsers.
     
-    This transformation takes DocumentRecords containing file metadata
-    and content, and parses them into structured documents using the
-    appropriate parser for each file type.
+    This transformation takes Records containing file metadata and content,
+    and parses them into structured documents. The behavior (sync vs async)
+    is determined by the parser's is_remote property.
+    
+    For local parsers: Yields Record objects for each parsed document.
+    For remote parsers: Returns AsyncRemote to await callback.
     
     Attributes:
         parser_map: Map of mimetype -> parser (use "default" for fallback)
@@ -56,364 +102,130 @@ class ParsingTransformation(Transformation):
     
     async def process(
         self,
-        record: DocumentRecord,
-        context: Optional[dict] = None
-    ) -> Optional[DocumentRecord | Iterable[DocumentRecord]]:
+        record: Record,
+        correlation_id: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> TransformationResult:
         """
         Parse file content into documents.
         
         Args:
-            record: DocumentRecord containing file metadata and content
+            record: Record containing file metadata and content
+            correlation_id: Unique identifier for callback correlation
             context: Optional pipeline context
             
         Returns:
-            One or more DocumentRecords with parsed document data
+            - AsyncRemote for remote parsers (callback-based)
+            - AsyncGenerator[Record] for local parsers (yields parsed documents)
+            - None if no content or parser found
         """
         # Get file metadata
-        mimetype = record.metadata.get("mimetype", "")
-        file_path = record.metadata.get("file_path", "")
-        file_content_b64 = record.metadata.get("file_content_b64")
+        mimetype = record.get("mimetype", "")
+        file_path = record.get("file_path", "")
+        file_content_b64 = record.get("file_content_b64")
+        source = record.get("source", file_path)
         
         if not file_content_b64:
-            logger.warning(f"No file content in record for {record.source}, skipping")
-            return None
-        
-        # Decode base64 content
-        try:
-            file_content = base64.b64decode(file_content_b64)
-        except Exception as e:
-            logger.error(f"Error decoding file content for {record.source}: {e}", exc_info=True)
-            return None
-        
-        # Select parser based on mimetype
-        parser = self.parser_map.get(mimetype, self.parser_map.get("default"))
-        
-        if not parser:
-            logger.warning(
-                f"No parser found for file {record.source} "
-                f"with mimetype {mimetype}, skipping"
-            )
-            return None
-        
-        try:
-            # Create a temporary file-like object for the parser
-            # Most parsers expect a File object
-            from pathlib import Path
-            import fsspec
-            
-            # Parse the content
-            # Note: Parsers typically expect a File object, so we need to adapt
-            class FileAdapter(File):
-                """Adapter to provide file interface from content."""
-                model_config = ConfigDict(arbitrary_types_allowed=True)
-                
-                def __init__(self, path_str: str, content: bytes, mimetype: str, encoding: str):
-                    # Create a memory filesystem for the adapter
-                    fs = fsspec.filesystem('memory')
-                    super().__init__(
-                        path=Path(path_str),
-                        fs=fs,
-                        mimetype=mimetype,
-                        encoding=encoding,
-                    )
-                    self._content = content
-                
-                async def read(self) -> bytes:
-                    return self._content
-                
-                def name(self) -> str:
-                    return self.path.name
-                
-                def permissions(self) -> list:
-                    # Return empty permissions for memory-based file
-                    return []
-                
-                def metadata(self) -> dict:
-                    # Return basic metadata
-                    return {
-                        "path": str(self.path),
-                        "mimetype": self.mimetype,
-                        "encoding": self.encoding,
-                        "size": len(self._content)
-                    }
-            
-            file_adapter = FileAdapter(
-                path_str=file_path,
-                content=file_content,  # Already decoded bytes
-                mimetype=mimetype,
-                encoding=record.metadata.get("encoding", "utf-8")
-            )
-            
-            # Parse file into documents
-            documents = parser.parse(file_adapter)
-            
-            # Collect all parsed documents
-            parsed_docs = []
-            async for doc in documents:
-                # Ensure the document has the source in its metadata
-                if "source" not in doc.metadata:
-                    doc.metadata["source"] = record.source
-                parsed_docs.append(doc)
-            
-            if not parsed_docs:
-                logger.warning(f"No documents parsed from {record.source}")
-                return None
-            
-            # Use the first document (or merge if multiple)
-            # Most files parse to a single document; if multiple, we take the first
-            primary_doc = parsed_docs[0]
-            
-            # Check if this is an async parsing marker document
-            if primary_doc.metadata.get('async_parsing') == 'true':
-                # This is a parent document for async parsing
-                # Store the marker doc and metadata, then return the record
-                # The parent document should NOT continue through the pipeline
-                # It will be marked as completed when the completion callback arrives
-                record.metadata["document"] = primary_doc.model_dump()
-                record.metadata["file_path"] = file_path
-                record.metadata["mimetype"] = mimetype
-                
-                # Add job tracking metadata
-                record.metadata["docling_job_id"] = primary_doc.metadata.get('docling_job_id')
-                record.metadata["is_parent_document"] = 'true'
-                record.metadata["nodes_received_count"] = 0
-                
-                logger.info(
-                    f"Async parsing initiated for {record.source}, "
-                    f"job_id={primary_doc.metadata.get('docling_job_id')}"
-                )
-                return record
-            
-            # If there are multiple documents, log this
-            if len(parsed_docs) > 1:
-                logger.info(
-                    f"Parser produced {len(parsed_docs)} documents from {record.source}, "
-                    f"using the first one"
-                )
-            
-            # Update the record with parsed document
-            # Note: We don't include file_content_b64 here as it's no longer needed
-            record.metadata["document"] = primary_doc.model_dump()
-            record.metadata["file_path"] = file_path
-            record.metadata["mimetype"] = mimetype
-            
-            logger.debug(f"Parsed document from {record.source}")
-            return record
-                
-        except Exception as e:
-            logger.error(f"Error parsing file {record.source}: {e}", exc_info=True)
-            raise
-    
-    def get_name(self) -> str:
-        """Get transformation name."""
-        return "ParsingTransformation"
+            raise ValueError(f"No file content in record for {source}")
 
-
-class AsyncParsingTransformation(AsyncTransformation):
-    """
-    Async parsing transformation for remote document parsing services.
-    
-    This transformation submits documents to an external parsing service
-    (e.g., docling) and handles callbacks as nodes are parsed.
-    
-    The callback message format expected:
-    - status: "PROCESSING" with message.type: "node" - contains a parsed node
-    - status: "COMPLETED" with message.type: "completion" - job finished
-    - status: "FAILED" - job failed with error
-    
-    Attributes:
-        parser_map: Map of mimetype -> parser (parsers must support async callbacks)
-    """
-    
-    def __init__(
-        self,
-        parser: Optional[DocumentParser] = None,
-        parser_map: Optional[Dict[str, DocumentParser]] = None,
-    ):
-        """
-        Initialize the async parsing transformation.
-        
-        Args:
-            parser: Default parser (added to parser_map as "default")
-            parser_map: Map of mimetype to parser
-        """
-        self.parser_map = parser_map or {}
-        
-        if parser and "default" not in self.parser_map:
-            self.parser_map["default"] = parser
-        
-        # Track accumulated nodes per task
-        self._task_nodes: Dict[str, List[Dict[str, Any]]] = {}
-        self._task_metadata: Dict[str, Dict[str, Any]] = {}
-        
-        logger.debug(f"AsyncParsingTransformation initialized with {len(self.parser_map)} parsers")
-    
-    async def submit(
-        self,
-        record: DocumentRecord,
-        task_id: str,
-        callback_url: str
-    ) -> None:
-        """
-        Submit document to external parsing service.
-        
-        Args:
-            record: The document record to process
-            task_id: Unique task identifier for correlation
-            callback_url: URL where callbacks should be sent
-        """
-        # Get file metadata
-        mimetype = record.metadata.get("mimetype", "")
-        file_path = record.metadata.get("file_path", "")
-        file_content_b64 = record.metadata.get("file_content_b64")
-        
-        if not file_content_b64:
-            raise ValueError(f"No file content in record for {record.source}")
-        
         # Decode base64 content
         file_content = base64.b64decode(file_content_b64)
-        
+
         # Select parser based on mimetype
-        parser = self.parser_map.get(mimetype, self.parser_map.get("default"))
+        parser = self.parser_map.get(mimetype, self.parser_map.get("default", None))
         
         if not parser:
-            raise ValueError(
-                f"No parser found for file {record.source} with mimetype {mimetype}"
-            )
-        
+            raise ValueError(f"No parser found for file {source} with mimetype {mimetype}")
+
         # Create file adapter
-        from pathlib import Path
-        import fsspec
-        
-        class FileAdapter(File):
-            """Adapter to provide file interface from content."""
-            model_config = ConfigDict(arbitrary_types_allowed=True)
-            
-            def __init__(self, path_str: str, content: bytes, mimetype: str, encoding: str):
-                fs = fsspec.filesystem('memory')
-                super().__init__(
-                    path=Path(path_str),
-                    fs=fs,
-                    mimetype=mimetype,
-                    encoding=encoding,
-                )
-                self._content = content
-            
-            async def read(self) -> bytes:
-                return self._content
-            
-            def name(self) -> str:
-                return self.path.name
-            
-            def permissions(self) -> list:
-                return []
-            
-            def metadata(self) -> dict:
-                return {
-                    "path": str(self.path),
-                    "mimetype": self.mimetype,
-                    "encoding": self.encoding,
-                    "size": len(self._content),
-                }
-        
         file_adapter = FileAdapter(
             path_str=file_path,
             content=file_content,
             mimetype=mimetype,
-            encoding=record.metadata.get("encoding", "utf-8")
+            encoding=record.get("encoding", "utf-8")
         )
         
-        # Initialize task tracking with record metadata
-        task_metadata = {
-            "persistent_key": record.source,
-            "source": record.source,
+        # Build metadata to pass to parser
+        parser_metadata = {
+            "source": source,
             "file_path": file_path,
             "mimetype": mimetype,
-            "document_id": record.id,
-            "job_id": record.job_id,
-        }
-        self._task_nodes[task_id] = []
-        self._task_metadata[task_id] = task_metadata
-        
-        # Build metadata to pass to parser (will be included in parsed documents)
-        parser_metadata = {
-            **task_metadata,
             # Include any additional metadata from the record (excluding large binary data)
-            **{k: v for k, v in record.metadata.items() if k != "file_content_b64"},
+            **{k: v for k, v in record.items() if k != "file_content_b64"},
         }
         
-        # Submit to parser - this triggers the async job submission
-        # The parser will yield a marker node and return
-        async for _ in parser.parse(file_adapter, metadata=parser_metadata, task_id=task_id):
-            pass  # We don't need the marker node here
-        
-        logger.info(
-            f"Submitted {record.source} to async parsing service "
-            f"(task_id: {task_id}, callback: {callback_url})"
-        )
-    
-    async def on_message(
+        # Check if parser is remote (async callback-based)
+        if parser.is_remote:
+            return await self._parse_remote(correlation_id, file_adapter, parser, parser_metadata)
+        else:
+            # Local parser - return async generator
+            return self._parse_local(parser, file_adapter, parser_metadata, source)
+
+    async def _parse_remote(self, correlation_id: str, file_adapter: FileAdapter, parser: DocumentParser, parser_metadata: dict[str, str]) -> AsyncRemote:
+        # Submit to remote parser using correlation_id for callback matching
+        # parser.parse() is an async generator, so we iterate to trigger submission
+        async for _ in parser.parse(file_adapter, metadata=parser_metadata, task_id=correlation_id):
+            pass  # Consume the generator to trigger the job submission
+
+        # Return AsyncRemote with correlation_id for callback correlation
+        return AsyncRemote(task_id=correlation_id, metadata=parser_metadata)
+
+    async def _parse_local(
         self,
-        message: Dict[str, Any],
-        status: Literal['PROCESSING', 'COMPLETED', 'FAILED']
-    ) -> Optional[DocumentRecord | Iterable[DocumentRecord]]:
+        parser: DocumentParser,
+        file_adapter: FileAdapter,
+        parser_metadata: Dict[str, Any],
+        source: str,
+    ) -> AsyncGenerator[Record, None]:
+        """Parse file locally and yield Records for each document."""
+        try:
+            async for doc in parser.parse(file_adapter, metadata=parser_metadata):
+                # Ensure the document has the source in its metadata
+                if "source" not in doc.metadata:
+                    doc.metadata["source"] = source
+                
+                # Create Record from parsed document
+                yield Record({
+                    "document": doc.model_dump(),
+                    "source": source,
+                    **parser_metadata,
+                })
+                
+        except Exception as e:
+            logger.error(f"Error parsing file {source}: {e}", exc_info=True)
+            raise
+    
+    def post_process(self, message: Dict[str, Any]) -> PostProcessResult:
         """
-        Handle callback message from parsing service.
+        Post-process callback message from remote parsing service.
         
-        Args:
-            message: Callback payload containing node data or completion info
-            status: Callback status
-            
-        Returns:
-            - If COMPLETED: List of DocumentRecords for each parsed node
-            - If PROCESSING: None (accumulate nodes)
-            - If FAILED: Raises exception
+        Transforms node callback data into a Record.
         """
-        # Extract task_id from the message context
-        # Note: task_id is passed separately to handle_task_callback, 
-        # but we need to track which task this message belongs to
         msg_type = message.get("type", "")
         
-        if status == "PROCESSING" and msg_type == "node":
-            # Accumulate node data
+        if msg_type == "node":
             node_data = message.get("node", {})
             filename = message.get("filename", "")
             node_index = message.get("node_index", 0)
+            node_metadata = node_data.get("metadata", {})
             
-            logger.debug(
-                f"Received node {node_index} from file {filename}"
-            )
-            
-            # We can't easily track by task_id here since it's not in message
-            # The pipeline handles task correlation
-            return None
+            # Create Record from node data
+            # Note: "document" must be set AFTER spreading metadata to avoid being overwritten
+            record_data = {
+                **node_metadata,
+                "source": node_metadata.get("source", filename),
+                "filename": filename,
+                "node_index": node_index,
+                "document": node_data,  # Set last to ensure it's not overwritten
+            }
+            return Record(record_data)
         
-        elif status == "COMPLETED" and msg_type == "completion":
-            # Parsing completed
-            total_nodes = message.get("total_nodes", 0)
-            total_files = message.get("total_files", 0)
-            processing_time = message.get("processing_time_ms", 0)
-            
-            logger.info(
-                f"Async parsing completed: {total_nodes} nodes from {total_files} files "
-                f"in {processing_time}ms"
-            )
-            
-            # The actual node documents are created via PROCESSING callbacks
-            # Return None to indicate completion without new documents
-            return None
-        
-        elif status == "FAILED":
-            error = message.get("error", "Unknown parsing error")
-            raise RuntimeError(f"Async parsing failed: {error}")
-        
-        else:
-            logger.warning(f"Unknown message type: {msg_type} with status: {status}")
-            return None
+        # For other message types, use default behavior
+        return Record(message)
     
     def get_name(self) -> str:
         """Get transformation name."""
-        return "AsyncParsingTransformation"
+        return "ParsingTransformation"
 
 
 class ExtractKeywords(Transformation):
@@ -436,35 +248,32 @@ class ExtractKeywords(Transformation):
     
     async def process(
         self,
-        record: DocumentRecord,
-        context: Optional[dict] = None
-    ) -> Optional[DocumentRecord | Iterable[DocumentRecord]]:
+        record: Record,
+        correlation_id: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> TransformationResult:
         """Extract keywords from document."""
-        try:
-            doc = DocumentNode.model_validate(record.metadata["document"])
-            text = doc.text
-            
-            # Simple word frequency analysis
-            words = [w.strip(".,!?;:\"'()[]{}-").lower() for w in text.split()]
-            counts: dict[str, int] = {}
-            
-            for w in words:
-                if len(w) >= self.min_word_length:
-                    counts[w] = counts.get(w, 0) + 1
-            
-            # Get top keywords
-            top = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
-            top = top[:self.max_keywords]
-            
-            keywords = [k for k, _ in top]
-            record.metadata["keywords"] = keywords
-            
-            logger.debug(f"Extracted {len(keywords)} keywords from {record.source}")
-            return record
-            
-        except Exception as e:
-            logger.error(f"Error extracting keywords from {record.source}: {e}")
-            raise
+        doc = DocumentNode.model_validate(record["document"])
+        text = doc.text
+        source = record.get("source", "unknown")
+        
+        # Simple word frequency analysis
+        words = [w.strip(".,!?;:\"'()[]{}-").lower() for w in text.split()]
+        counts: dict[str, int] = {}
+        
+        for w in words:
+            if len(w) >= self.min_word_length:
+                counts[w] = counts.get(w, 0) + 1
+        
+        # Get top keywords
+        top = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
+        top = top[:self.max_keywords]
+        
+        keywords = [k for k, _ in top]
+        record["keywords"] = keywords
+        
+        logger.debug(f"Extracted {len(keywords)} keywords from {source}")
+        return record
 
 
 class DocumentSummarization(Transformation):
@@ -486,32 +295,29 @@ class DocumentSummarization(Transformation):
     
     async def process(
         self,
-        record: DocumentRecord,
-        context: Optional[dict] = None
-    ) -> Optional[DocumentRecord | Iterable[DocumentRecord]]:
+        record: Record,
+        correlation_id: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> TransformationResult:
         """Create document summary."""
-        try:
-            doc = DocumentNode.model_validate(record.metadata["document"])
-            text = doc.text
-            
-            # Split into sentences
-            sentences = [s.strip() for s in text.split(".") if s.strip()]
-            selected = sentences[:self.max_sentences]
-            summary = ". ".join(selected)
-            
-            # Update document metadata
-            doc.metadata['summary'] = summary
-            record.metadata["document"] = doc.model_dump()
-            record.metadata["summary"] = summary
-            
-            logger.debug(
-                f"Created summary of {len(selected)} sentences for {record.source}"
-            )
-            return record
-            
-        except Exception as e:
-            logger.error(f"Error summarizing {record.source}: {e}")
-            raise
+        doc = DocumentNode.model_validate(record["document"])
+        text = doc.text
+        source = record.get("source", "unknown")
+        
+        # Split into sentences
+        sentences = [s.strip() for s in text.split(".") if s.strip()]
+        selected = sentences[:self.max_sentences]
+        summary = ". ".join(selected)
+        
+        # Update document metadata
+        doc.metadata['summary'] = summary
+        record["document"] = doc.model_dump()
+        record["summary"] = summary
+        
+        logger.debug(
+            f"Created summary of {len(selected)} sentences for {source}"
+        )
+        return record
 
 
 class ChunkingTransformation(Transformation):
@@ -533,26 +339,23 @@ class ChunkingTransformation(Transformation):
     
     async def process(
         self,
-        record: DocumentRecord,
-        context: Optional[dict] = None
-    ) -> Optional[DocumentRecord | Iterable[DocumentRecord]]:
+        record: Record,
+        correlation_id: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> TransformationResult:
         """Chunk the document."""
-        try:
-            doc = DocumentNode.model_validate(record.metadata["document"])
-            
-            # Chunk the document
-            nodes = self.chunker.get_nodes([doc])
-            
-            # Store chunks in record
-            record.metadata["document"] = doc.model_dump()
-            record.metadata["chunks"] = [n.model_dump() for n in nodes]
-            
-            logger.debug(f"Chunked {record.source} into {len(nodes)} chunks")
-            return record
-            
-        except Exception as e:
-            logger.error(f"Error chunking {record.source}: {e}")
-            raise
+        doc = DocumentNode.model_validate(record["document"])
+        source = record.get("source", "unknown")
+        
+        # Chunk the document
+        nodes = self.chunker.get_nodes([doc])
+        
+        # Store chunks in record
+        record["document"] = doc.model_dump()
+        record["chunks"] = [n.model_dump() for n in nodes]
+        
+        logger.debug(f"Chunked {source} into {len(nodes)} chunks")
+        return record
     
     def get_name(self) -> str:
         """Get transformation name."""

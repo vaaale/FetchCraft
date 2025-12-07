@@ -1,12 +1,18 @@
-import asyncio
+"""
+Legacy transformation implementations.
 
-from fetchcraft.ingestion.base import Record, Transformation
+DEPRECATED: Use fetchcraft.ingestion.transformations instead.
+These are kept for backwards compatibility with the legacy IngestionPipeline.
+"""
+from fetchcraft.ingestion.base import Record as LegacyRecord, Transformation as LegacyTransformation
 from fetchcraft.node import DocumentNode
 from fetchcraft.node_parser import NodeParser
 
 
-class ExtractKeywords(Transformation):
-    async def process(self, record: Record) -> Record:
+class ExtractKeywords(LegacyTransformation):
+    """Legacy keyword extraction - use fetchcraft.ingestion.transformations.ExtractKeywords instead."""
+    
+    async def process(self, record: LegacyRecord) -> LegacyRecord:
         doc = DocumentNode.model_validate(record.payload["document"])
         text = doc.text
         words = [w.strip(".,!?;:\"'()[]{}-").lower() for w in text.split()]
@@ -19,11 +25,13 @@ class ExtractKeywords(Transformation):
         return record
 
 
-class DocumentSummarization(Transformation):
+class DocumentSummarization(LegacyTransformation):
+    """Legacy summarization - use fetchcraft.ingestion.transformations.DocumentSummarization instead."""
+    
     def __init__(self, max_sentences: int = 30):
         self.max_sentences = max_sentences
 
-    async def process(self, record: Record) -> Record:
+    async def process(self, record: LegacyRecord) -> LegacyRecord:
         doc = DocumentNode.model_validate(record.payload["document"])
         text = doc.text
 
@@ -34,11 +42,14 @@ class DocumentSummarization(Transformation):
         record.payload["document"] = doc.model_dump()
         return record
 
-class ChunkingTransformation(Transformation):
+
+class ChunkingTransformation(LegacyTransformation):
+    """Legacy chunking - use fetchcraft.ingestion.transformations.ChunkingTransformation instead."""
+    
     def __init__(self, chunker: NodeParser):
         self.chunker = chunker
 
-    async def process(self, record: Record) -> Record:
+    async def process(self, record: LegacyRecord) -> LegacyRecord:
         doc = DocumentNode.model_validate(record.payload["document"])
         nodes = self.chunker.get_nodes([doc])
         record.payload["document"] = doc.model_dump()

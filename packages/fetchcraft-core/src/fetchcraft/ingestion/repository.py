@@ -721,6 +721,11 @@ class PostgresJobRepository(JobRepository):
                 "DELETE FROM messages WHERE body->>'job_id' = $1",
                 job_id
             )
+            # Delete related tasks
+            await conn.execute(
+                "DELETE FROM ingestion_tasks WHERE job_id = $1",
+                job_id
+            )
             # Delete the job itself
             await conn.execute("DELETE FROM ingestion_jobs WHERE id = $1", job_id)
 

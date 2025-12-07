@@ -86,6 +86,9 @@ class DoclingDocumentParser(DocumentParser):
                 "Install it with: pip install docling"
             )
 
+    @property
+    def is_remote(self):
+        return False
 
     async def parse(self, file: File, metadata: Optional[Dict[str, Any]] = None, **parser_kwargs) -> AsyncGenerator[DocumentNode, None]:
         """

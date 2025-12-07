@@ -59,10 +59,10 @@ Components:
 # Legacy support (deprecated - use new pipeline)
 from fetchcraft.ingestion.base import (
     IngestionPipeline as LegacyIngestionPipeline,
-    Record,
-    Source,
-    Transformation,
-    Sink,
+    Record as LegacyRecord,
+    Source as LegacySource,
+    Transformation as LegacyTransformation,
+    Sink as LegacySink,
     ConnectorSource as LegacyConnectorSource,
 )
 # Interfaces (new naming without I-prefix)
@@ -73,10 +73,15 @@ from fetchcraft.ingestion.interfaces import (
     Sink,
     Connector,
     QueueBackend,
+    # New result types
+    Record,
+    AsyncRemote,
+    AsyncDeferred,
+    TransformationResult,
+    PostProcessResult,
     # Backwards compatibility aliases
     ISource,
     ITransformation,
-    IRemoteTransformation,
     ISink,
     IConnector,
     IQueueBackend,
@@ -116,7 +121,6 @@ from fetchcraft.ingestion.sources import ConnectorSource
 from fetchcraft.ingestion.sqlite_backend import AsyncSQLiteQueue
 from fetchcraft.ingestion.transformations import (
     ParsingTransformation,
-    AsyncParsingTransformation,
     ChunkingTransformation,
     DocumentSummarization,
     ExtractKeywords,
@@ -142,10 +146,15 @@ __all__ = [
     "Sink",
     "Connector",
     "QueueBackend",
+    # Result types
+    "Record",
+    "AsyncRemote",
+    "AsyncDeferred",
+    "TransformationResult",
+    "PostProcessResult",
     # Interfaces (backwards compatibility)
     "ISource",
     "ITransformation",
-    "IRemoteTransformation",
     "ISink",
     "IConnector",
     "IQueueBackend",
@@ -153,7 +162,6 @@ __all__ = [
     "ConnectorSource",
     # Transformations
     "ParsingTransformation",
-    "AsyncParsingTransformation",
     "ChunkingTransformation",
     "DocumentSummarization",
     "ExtractKeywords",
@@ -175,6 +183,6 @@ __all__ = [
     "AsyncSQLiteQueue",
     # Legacy (deprecated)
     "LegacyIngestionPipeline",
-    "Record",
+    "LegacyRecord",
     "LegacyConnectorSource",
 ]

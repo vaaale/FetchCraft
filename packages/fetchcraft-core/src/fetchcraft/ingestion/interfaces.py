@@ -10,10 +10,139 @@ Naming Convention:
 """
 from __future__ import annotations
 
+import asyncio
+import logging
 from abc import ABC, abstractmethod
-from typing import AsyncIterable, Iterable, Optional, Any, Dict, Literal
+from dataclasses import dataclass, field
+from typing import (
+    AsyncIterable,
+    AsyncGenerator,
+    Awaitable,
+    Callable,
+    Iterable,
+    Optional,
+    Any,
+    Dict,
+    Union,
+    TYPE_CHECKING,
+)
 
 from fetchcraft.ingestion.models import DocumentRecord
+
+if TYPE_CHECKING:
+    from fetchcraft.ingestion.models import DocumentRecord as DocRecord
+
+logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Record and Result Types
+# ============================================================================
+
+class Record(dict):
+    """
+    Flexible record type for transformation data.
+    
+    Behaves like a dict but provides attribute-style access for convenience.
+    This is the primary data type passed between transformations.
+    """
+    
+    def __getattr__(self, key: str) -> Any:
+        """Allow attribute-style access to dict keys."""
+        try:
+            return self[key]
+        except KeyError:
+            raise AttributeError(f"Record has no attribute '{key}'")
+    
+    def __setattr__(self, key: str, value: Any) -> None:
+        """Allow attribute-style setting of dict keys."""
+        self[key] = value
+    
+    def __delattr__(self, key: str) -> None:
+        """Allow attribute-style deletion of dict keys."""
+        try:
+            del self[key]
+        except KeyError:
+            raise AttributeError(f"Record has no attribute '{key}'")
+    
+    def get_nested(self, *keys: str, default: Any = None) -> Any:
+        """Get nested value safely using a sequence of keys."""
+        val: Any = self
+        for key in keys:
+            if isinstance(val, dict) and key in val:
+                val = val[key]
+            else:
+                return default
+        return val
+    
+    def copy(self) -> "Record":
+        """Create a shallow copy of the record."""
+        return Record(super().copy())
+    
+    def deep_copy(self) -> "Record":
+        """Create a deep copy of the record."""
+        import copy
+        return Record(copy.deepcopy(dict(self)))
+
+
+@dataclass
+class AsyncRemote:
+    """
+    Indicates an async remote job was submitted.
+    
+    When a transformation returns this, the pipeline will:
+    1. Mark the task as waiting for callback
+    2. Stop processing this document until callback arrives
+    3. Resume processing when callback is received
+    
+    Attributes:
+        task_id: Unique identifier for callback correlation
+        metadata: Optional metadata about the pending job
+    """
+    task_id: str
+    metadata: Optional[Dict[str, Any]] = None
+
+
+# Type alias for deferred execution callable
+DeferredCallable = Callable[[], Awaitable[Union[Record, Iterable[Record]]]]
+
+
+@dataclass
+class AsyncDeferred:
+    """
+    Wraps a coroutine for deferred execution in a thread/process pool.
+    
+    When a transformation returns this, the pipeline will:
+    1. Execute the wrapped function without blocking other tasks
+    2. Process the results when execution completes
+    
+    Use this for long-running local operations (e.g., LLM calls, heavy computation)
+    that shouldn't block the processing of other documents.
+    
+    Attributes:
+        func: Async callable that returns Record or Iterable[Record]
+        metadata: Optional metadata about the deferred task
+    """
+    func: DeferredCallable
+    metadata: Optional[Dict[str, Any]] = field(default_factory=dict)
+    
+    async def execute(self) -> Union[Record, Iterable[Record]]:
+        """Execute the deferred function."""
+        return await self.func()
+
+
+# Type alias for all possible transformation results
+TransformationResult = Union[
+    Record,                              # Single record (sync)
+    Iterable[Record],                    # Multiple records / fan-out (sync)
+    AsyncGenerator[Record, None],        # Async generator for fan-out
+    AsyncRemote,                         # Remote callback-based
+    AsyncDeferred,                       # Deferred local execution
+    None,                                # Filter out
+]
+
+# Type alias for post_process results
+PostProcessResult = Union[Record, Iterable[Record]]
 
 
 class Connector(ABC):
@@ -78,48 +207,91 @@ class Transformation(ABC):
     """
     Interface for pipeline transformations.
     
-    A transformation processes a DocumentRecord and either:
-    - Returns a modified DocumentRecord (1:1)
-    - Returns multiple DocumentRecords (1:N fan-out)
-    - Returns None (filter out the document)
+    A transformation processes a Record and can return:
+    - Record: A single transformed record (sync)
+    - Iterable[Record]: Multiple records for fan-out (sync)
+    - AsyncGenerator[Record]: Async generator for fan-out
+    - AsyncRemote: Indicates remote job submitted, await callback
+    - AsyncDeferred: Wraps long-running local task for deferred execution
+    - None: Filter out this record
     
-    Transformations can be synchronous or asynchronous (callback-based).
-    Set is_async=True for transformations that use external services with callbacks.
+    The transformation behavior is determined by the return type at runtime,
+    eliminating the need for separate sync/async transformation classes.
     """
-    
-    @property
-    def is_async(self) -> bool:
-        """
-        Whether this transformation executes asynchronously via callbacks.
-        
-        Async transformations submit work to external services and receive
-        results via callbacks. The pipeline will pause document processing
-        until the callback is received.
-        
-        Returns:
-            True if async, False for synchronous execution
-        """
-        return False
     
     @abstractmethod
     async def process(
         self,
-        record: DocumentRecord,
-        context: Optional[dict] = None
-    ) -> Optional[DocumentRecord | Iterable[DocumentRecord]]:
+        record: Record,
+        correlation_id: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> TransformationResult:
         """
-        Process a document record synchronously.
+        Process a record.
         
         Args:
-            record: The document record to process
+            record: The record to process (extracted from DocumentRecord.metadata)
+            correlation_id: Unique identifier for this processing task, used for
+                callback correlation in async/remote transformations
             context: Optional pipeline context with shared data
             
         Returns:
-            - DocumentRecord: A single transformed record
-            - Iterable[DocumentRecord]: Multiple records (fan-out)
+            - Record: Single result (sync)
+            - Iterable[Record]: Multiple results / fan-out (sync)
+            - AsyncGenerator[Record]: Async fan-out
+            - AsyncRemote: Remote job submitted, await callback
+            - AsyncDeferred: Deferred execution in pool
             - None: Filter out this record
         """
         pass
+    
+    def post_process(self, message: Dict[str, Any]) -> PostProcessResult:
+        """
+        Post-process callback message from remote service.
+        
+        Override this method to transform callback data into the desired format.
+        Default implementation wraps the message as a Record.
+        
+        This is called by the pipeline when handling AsyncRemote callbacks.
+        Users should override this instead of on_callback for custom result transformation.
+        
+        Args:
+            message: Raw message from remote service callback
+            
+        Returns:
+            Record or Iterable[Record] for fan-out
+        """
+        return Record(message)
+    
+    async def on_callback(
+        self,
+        correlation_id: str,
+        message: Dict[str, Any],
+        status: str
+    ) -> Optional[PostProcessResult]:
+        """
+        Handle callback for AsyncRemote tasks.
+        
+        This is called by the pipeline - users should NOT override this.
+        Override post_process() instead to customize result transformation.
+        
+        Args:
+            correlation_id: The correlation ID for matching callbacks to tasks
+            message: Callback payload from remote service
+            status: Callback status ('PROCESSING', 'COMPLETED', 'FAILED')
+            
+        Returns:
+            - If PROCESSING: Result from post_process()
+            - If COMPLETED: None (completion is handled by pipeline)
+            - If FAILED: Raises exception
+        """
+        if status == "PROCESSING":
+            return self.post_process(message)
+        elif status == "FAILED":
+            error = message.get("error", "Unknown error from remote service")
+            raise RuntimeError(f"Remote task {correlation_id} failed: {error}")
+        # COMPLETED status is handled by pipeline
+        return None
     
     def get_name(self) -> str:
         """
@@ -129,80 +301,6 @@ class Transformation(ABC):
             Name of the transformation (defaults to class name)
         """
         return self.__class__.__name__
-
-
-class AsyncTransformation(Transformation):
-    """
-    Interface for async transformations that use callbacks.
-    
-    Async transformations submit work to external services and receive
-    results via callbacks. The pipeline pauses document processing until
-    the callback is received with status COMPLETED.
-    
-    Lifecycle:
-    1. Pipeline calls submit() with document and task_id
-    2. Transformation sends work to external service with callback_url
-    3. External service sends callbacks to callback_url
-    4. Pipeline calls on_message() for each callback
-    5. When status is COMPLETED, pipeline continues with returned document
-    """
-    
-    @property
-    def is_async(self) -> bool:
-        """Async transformations always return True."""
-        return True
-    
-    async def process(
-        self,
-        record: DocumentRecord,
-        context: Optional[dict] = None
-    ) -> Optional[DocumentRecord | Iterable[DocumentRecord]]:
-        """
-        Not used for async transformations - raises error if called.
-        
-        Use submit() and on_message() instead.
-        """
-        raise NotImplementedError(
-            "AsyncTransformation does not support process(). "
-            "Use submit() and on_message() instead."
-        )
-    
-    @abstractmethod
-    async def submit(
-        self,
-        record: DocumentRecord,
-        task_id: str,
-        callback_url: str
-    ) -> None:
-        """
-        Submit work to external service.
-        
-        Args:
-            record: The document record to process
-            task_id: Unique task identifier for correlation
-            callback_url: URL where callbacks should be sent
-        """
-        pass
-    
-    @abstractmethod
-    async def on_message(
-        self,
-        message: Dict[str, Any],
-        status: Literal['PROCESSING', 'COMPLETED', 'FAILED']
-    ) -> Optional[DocumentRecord | Iterable[DocumentRecord]]:
-        """
-        Handle callback message from external service.
-        
-        Args:
-            message: Callback payload from external service
-            status: Callback status
-            
-        Returns:
-            - If status is COMPLETED: Processed DocumentRecord(s)
-            - If status is PROCESSING: None (continue waiting)
-            - If status is FAILED: Should raise an exception
-        """
-        pass
 
 
 class Sink(ABC):
@@ -352,6 +450,9 @@ class QueueBackend(ABC):
 IConnector = Connector
 ISource = Source
 ITransformation = Transformation
-IRemoteTransformation = AsyncTransformation
 ISink = Sink
 IQueueBackend = QueueBackend
+
+# Legacy alias - AsyncTransformation is no longer needed
+# Transformations now signal async behavior via return type
+AsyncTransformation = Transformation

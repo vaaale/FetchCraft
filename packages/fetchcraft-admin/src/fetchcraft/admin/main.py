@@ -31,7 +31,7 @@ from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.ingestion import Source, ConnectorSource
 from fetchcraft.ingestion.pipeline import TrackedIngestionPipeline
 from fetchcraft.ingestion.transformations import (
-    AsyncParsingTransformation,
+    ParsingTransformation,
     ExtractKeywords,
     ChunkingTransformation,
 )
@@ -90,7 +90,7 @@ class DefaultPipelineFactory(FetchcraftIngestionPipelineFactory):
         """Configure the pipeline with default transformations and sinks."""
 
         pipeline.context({"directories": self.directories})
-        pipeline.add_transformation(AsyncParsingTransformation(parser_map=self.parser_map))
+        pipeline.add_transformation(ParsingTransformation(parser_map=self.parser_map))
         pipeline.add_transformation(ExtractKeywords())
         pipeline.add_transformation(ChunkingTransformation(chunker=self.chunker))
         pipeline.add_sink(VectorIndexSink(index_factory=self.index_factory))

@@ -11,14 +11,17 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass, field
-from typing import List, Optional, Callable, Awaitable, Any
+from typing import List, Optional, Callable, Awaitable, Any, Iterable
 
 from fetchcraft.ingestion.interfaces import (
     Source,
     Transformation,
-    AsyncTransformation,
     Sink,
     QueueBackend,
+    Record,
+    AsyncRemote,
+    AsyncDeferred,
+    TransformationResult,
 )
 from fetchcraft.ingestion.models import (
     IngestionJob,
@@ -34,7 +37,6 @@ from fetchcraft.ingestion.repository import (
     DocumentRepository,
     TaskRepository,
 )
-from fetchcraft.node import DocumentNode
 
 # Queue names
 MAIN_QUEUE = "ingest.main"
@@ -77,11 +79,6 @@ class PipelineStep:
     def __post_init__(self):
         if not self.name:
             self.name = self.transformation.get_name()
-    
-    @property
-    def is_async(self) -> bool:
-        """Whether this step uses async transformation."""
-        return self.transformation.is_async
 
 
 class Worker:
@@ -289,7 +286,7 @@ class TrackedIngestionPipeline:
         step = PipelineStep(transformation=transformation)
         self._steps.append(step)
         self.job.pipeline_steps.append(step.name)
-        logger.debug(f"Added transformation: {step.name} (async={step.is_async})")
+        logger.debug(f"Added transformation: {step.name}")
         return self
     
     def add_sink(self, sink: Sink) -> "TrackedIngestionPipeline":
@@ -579,87 +576,59 @@ class TrackedIngestionPipeline:
                         transformation_name=step.name,
                         step_index=current_step_idx,
                         status=TaskStatus.PENDING,
-                        is_async=step.is_async,
+                        is_async=False,  # Will be updated if AsyncRemote is returned
                     )
                     await self.task_repo.create_task(task)
                     await self.task_repo.set_task_started(task.id)
                 
-                # Handle async transformations differently
-                if step.is_async and isinstance(step.transformation, AsyncTransformation):
-                    # Build callback URL
-                    callback_url = f"{self.callback_base_url}/api/tasks/callback"
-                    
-                    # Submit to external service
-                    await step.transformation.submit(doc, task.id if task else doc_id, callback_url)
-                    
-                    # Update task status
-                    if self.task_repo and task:
-                        await self.task_repo.set_task_submitted(task.id)
-                    
-                    logger.info(
-                        f"Document {doc.source} submitted to async service "
-                        f"'{step.name}' (task_id: {task.id if task else doc_id})"
+                # Extract Record from DocumentRecord metadata for transformation
+                record = Record(doc.metadata)
+                
+                # Use task.id as correlation_id for callback correlation
+                correlation_id = task.id if task else doc_id
+                
+                # Apply transformation
+                try:
+                    result = await step.transformation.process(
+                        record,
+                        correlation_id=correlation_id,
+                        context=self._context,
                     )
-                    # Don't continue - wait for callback
+                except Exception as e:
+                    # Send to error queue and mark as failed
+                    await self._send_to_error_queue(
+                        doc=doc,
+                        step_name=step.name,
+                        error=e,
+                        task=task
+                    )
+                    raise
+                
+                # Handle different result types
+                handled = await self._handle_transformation_result(
+                    result=result,
+                    doc=doc,
+                    step=step,
+                    task=task,
+                    current_step_idx=current_step_idx,
+                    job_id=job_id,
+                )
+                
+                if handled:
+                    # Result was handled (async, deferred, or fan-out) - stop processing
                     return
                 
-                # Apply synchronous transformation
-                result = await step.transformation.process(doc, context=self._context)
+                # Result was a single Record - update doc metadata and continue
+                if isinstance(result, Record):
+                    doc.metadata = dict(result)
                 
                 # Mark task as completed
                 if self.task_repo and task:
                     await self.task_repo.set_task_completed(task.id)
                 
-                if result is None:
-                    # Document filtered out
-                    await self.doc_repo.update_step_status(doc_id, step.name, "filtered")
-                    logger.info(f"Document {doc.source} filtered by step '{step.name}'")
-                    return
-                
                 # Update step as completed
                 await self.doc_repo.update_step_status(doc_id, step.name, "completed")
                 
-                # Check if this is a parent document for async parsing
-                # If so, mark it as processing and stop here - it will be completed via callback
-                if isinstance(result, DocumentRecord):
-                    if result.metadata.get('is_parent_document') == 'true':
-                        # IMPORTANT: Save the metadata first (includes docling_job_id)
-                        await self.doc_repo.update_document_metadata(doc_id, result.metadata)
-                        
-                        await self.doc_repo.update_document_status(
-                            doc_id,
-                            DocumentStatus.PROCESSING,
-                            current_step="waiting_for_async_parsing"
-                        )
-                        logger.info(
-                            f"Document {doc.source} is parent for async parsing "
-                            f"(job_id={result.metadata.get('docling_job_id')}), "
-                            f"halting pipeline - will be completed via callback"
-                        )
-                        return
-                
-                # Handle fan-out (multiple documents from one)
-                if not isinstance(result, DocumentRecord):
-                    logger.debug(f"Step '{step.name}' produced fan-out for {doc.source}")
-                    for child_doc in result:  # type: ignore
-                        # Create new document records for children
-                        child_doc.job_id = job_id
-                        child_doc.step_statuses = {s: "pending" for s in self.job.pipeline_steps}
-                        await self.doc_repo.create_document(child_doc)
-                        
-                        # Enqueue child from next step
-                        await self.backend.enqueue(
-                            MAIN_QUEUE,
-                            body={
-                                "type": "document",
-                                "doc_id": child_doc.id,
-                                "job_id": job_id,
-                                "current_step_idx": current_step_idx + 1,
-                            }
-                        )
-                    return
-                
-                doc = result
                 current_step_idx += 1
             
             # All steps completed, write to sinks
@@ -694,6 +663,313 @@ class TrackedIngestionPipeline:
                 exc_info=True
             )
             raise
+    
+    async def _handle_transformation_result(
+        self,
+        result: TransformationResult,
+        doc: DocumentRecord,
+        step: PipelineStep,
+        task: Optional[TaskRecord],
+        current_step_idx: int,
+        job_id: str,
+    ) -> bool:
+        """
+        Handle the result from a transformation.
+        
+        Args:
+            result: The transformation result
+            doc: The document being processed
+            step: The current pipeline step
+            task: The task record (if tracking enabled)
+            current_step_idx: Current step index
+            job_id: The job ID
+            
+        Returns:
+            True if result was handled and processing should stop,
+            False if processing should continue to next step
+        """
+        doc_id = doc.id
+        
+        # Handle None - document filtered out
+        if result is None:
+            await self.doc_repo.update_step_status(doc_id, step.name, "filtered")
+            if self.task_repo and task:
+                await self.task_repo.set_task_completed(task.id)
+            logger.info(f"Document {doc.source} filtered by step '{step.name}'")
+            return True
+        
+        # Handle AsyncRemote - remote job submitted, wait for callback
+        if isinstance(result, AsyncRemote):
+            # Update task to async mode
+            if self.task_repo and task:
+                task.is_async = True
+                await self.task_repo.update_task_metadata(task.id, {
+                    "async_task_id": result.task_id,
+                    **(result.metadata or {})
+                })
+                await self.task_repo.set_task_submitted(task.id)
+            
+            # Store the transformation reference for callback handling
+            await self.doc_repo.update_document_metadata(doc_id, {
+                **doc.metadata,
+                "_async_task_id": result.task_id,
+                "_async_step_idx": current_step_idx,
+            })
+            
+            logger.info(
+                f"Document {doc.source} submitted to remote service "
+                f"'{step.name}' (task_id: {result.task_id})"
+            )
+            return True
+        
+        # Handle AsyncDeferred - execute in background without blocking
+        if isinstance(result, AsyncDeferred):
+            asyncio.create_task(
+                self._execute_deferred(
+                    deferred=result,
+                    doc=doc,
+                    step=step,
+                    task=task,
+                    current_step_idx=current_step_idx,
+                    job_id=job_id,
+                )
+            )
+            logger.debug(
+                f"Document {doc.source} deferred execution started for '{step.name}'"
+            )
+            return True
+        
+        # Handle async generator - fan-out
+        if hasattr(result, '__anext__'):
+            await self._handle_async_generator_fanout(
+                result=result,  # type: ignore
+                doc=doc,
+                step=step,
+                task=task,
+                current_step_idx=current_step_idx,
+                job_id=job_id,
+            )
+            return True
+        
+        # Handle iterable (but not Record which is also iterable as dict)
+        if isinstance(result, Iterable) and not isinstance(result, (Record, dict)):
+            await self._handle_sync_fanout(
+                result=result,
+                doc=doc,
+                step=step,
+                task=task,
+                current_step_idx=current_step_idx,
+                job_id=job_id,
+            )
+            return True
+        
+        # Single Record result - continue processing
+        return False
+    
+    async def _execute_deferred(
+        self,
+        deferred: AsyncDeferred,
+        doc: DocumentRecord,
+        step: PipelineStep,
+        task: Optional[TaskRecord],
+        current_step_idx: int,
+        job_id: str,
+    ) -> None:
+        """Execute a deferred task and process its results."""
+        doc_id = doc.id
+        
+        try:
+            result = await deferred.execute()
+            
+            # Handle the result
+            if isinstance(result, Record):
+                # Single result - update doc and continue pipeline
+                doc.metadata = dict(result)
+                
+                if self.task_repo and task:
+                    await self.task_repo.set_task_completed(task.id)
+                await self.doc_repo.update_step_status(doc_id, step.name, "completed")
+                await self.doc_repo.update_document_metadata(doc_id, doc.metadata)
+                
+                # Re-enqueue for next step
+                await self.backend.enqueue(
+                    MAIN_QUEUE,
+                    body={
+                        "type": "document",
+                        "doc_id": doc_id,
+                        "job_id": job_id,
+                        "current_step_idx": current_step_idx + 1,
+                    }
+                )
+            else:
+                # Fan-out result
+                await self._handle_sync_fanout(
+                    result=result,
+                    doc=doc,
+                    step=step,
+                    task=task,
+                    current_step_idx=current_step_idx,
+                    job_id=job_id,
+                )
+                
+        except Exception as e:
+            await self._send_to_error_queue(
+                doc=doc,
+                step_name=step.name,
+                error=e,
+                task=task
+            )
+            logger.error(
+                f"Deferred execution failed for {doc.source} at '{step.name}': {e}",
+                exc_info=True
+            )
+    
+    async def _handle_async_generator_fanout(
+        self,
+        result: Any,  # AsyncGenerator[Record, None]
+        doc: DocumentRecord,
+        step: PipelineStep,
+        task: Optional[TaskRecord],
+        current_step_idx: int,
+        job_id: str,
+    ) -> None:
+        """Handle fan-out from an async generator."""
+        doc_id = doc.id
+        child_count = 0
+        
+        try:
+            async for child_record in result:
+                child_doc = self._create_child_document(
+                    parent_doc=doc,
+                    child_record=child_record,
+                    job_id=job_id,
+                    step_name=step.name,
+                )
+                await self.doc_repo.create_document(child_doc)
+                
+                await self.backend.enqueue(
+                    MAIN_QUEUE,
+                    body={
+                        "type": "document",
+                        "doc_id": child_doc.id,
+                        "job_id": job_id,
+                        "current_step_idx": current_step_idx + 1,
+                    }
+                )
+                child_count += 1
+            
+            if self.task_repo and task:
+                await self.task_repo.set_task_completed(task.id)
+            await self.doc_repo.update_step_status(doc_id, step.name, "completed")
+            
+            logger.debug(
+                f"Step '{step.name}' produced {child_count} children for {doc.source}"
+            )
+            
+        except Exception as e:
+            await self._send_to_error_queue(
+                doc=doc,
+                step_name=step.name,
+                error=e,
+                task=task
+            )
+            raise
+    
+    async def _handle_sync_fanout(
+        self,
+        result: Iterable[Record],
+        doc: DocumentRecord,
+        step: PipelineStep,
+        task: Optional[TaskRecord],
+        current_step_idx: int,
+        job_id: str,
+    ) -> None:
+        """Handle fan-out from a sync iterable."""
+        doc_id = doc.id
+        child_count = 0
+        
+        for child_record in result:
+            child_doc = self._create_child_document(
+                parent_doc=doc,
+                child_record=child_record,
+                job_id=job_id,
+                step_name=step.name,
+            )
+            await self.doc_repo.create_document(child_doc)
+            
+            await self.backend.enqueue(
+                MAIN_QUEUE,
+                body={
+                    "type": "document",
+                    "doc_id": child_doc.id,
+                    "job_id": job_id,
+                    "current_step_idx": current_step_idx + 1,
+                }
+            )
+            child_count += 1
+        
+        if self.task_repo and task:
+            await self.task_repo.set_task_completed(task.id)
+        await self.doc_repo.update_step_status(doc_id, step.name, "completed")
+        
+        logger.debug(
+            f"Step '{step.name}' produced {child_count} children for {doc.source}"
+        )
+    
+    def _create_child_document(
+        self,
+        parent_doc: DocumentRecord,
+        child_record: Record,
+        job_id: str,
+        step_name: str,
+    ) -> DocumentRecord:
+        """Create a child DocumentRecord from a Record."""
+        child_doc = DocumentRecord(
+            id=str(uuid.uuid4()),
+            job_id=job_id,
+            source=child_record.get("source", f"{parent_doc.source}#child"),
+            status=DocumentStatus.PENDING,
+            current_step=step_name,
+            step_statuses={s: "pending" for s in self.job.pipeline_steps},
+            metadata=dict(child_record),
+        )
+        # Mark current step as completed for child
+        child_doc.step_statuses[step_name] = "completed"
+        child_doc.metadata["parent_document_id"] = parent_doc.id
+        return child_doc
+    
+    async def _send_to_error_queue(
+        self,
+        doc: DocumentRecord,
+        step_name: str,
+        error: Exception,
+        task: Optional[TaskRecord] = None,
+    ) -> None:
+        """Send a failed document to the error queue."""
+        error_body = {
+            "type": "transformation_error",
+            "doc_id": doc.id,
+            "job_id": doc.job_id,
+            "source": doc.source,
+            "step_name": step_name,
+            "error": str(error),
+            "error_type": error.__class__.__name__,
+            "metadata": doc.metadata,
+        }
+        
+        if task:
+            error_body["task_id"] = task.id
+            if self.task_repo:
+                await self.task_repo.update_task_status(
+                    task.id, TaskStatus.FAILED, str(error)
+                )
+        
+        await self.backend.enqueue(ERROR_QUEUE, body=error_body)
+        await self.doc_repo.update_step_status(doc.id, step_name, "failed")
+        
+        logger.error(
+            f"Document {doc.source} sent to error queue: {error}"
+        )
     
     async def handle_task_callback(
         self,
@@ -732,9 +1008,6 @@ class TrackedIngestionPipeline:
             return False
         
         step = self._steps[task.step_index]
-        if not isinstance(step.transformation, AsyncTransformation):
-            logger.error(f"Step {task.step_index} is not an async transformation")
-            return False
         
         # Get document
         doc = await self.doc_repo.get_document(task.document_id)
@@ -748,89 +1021,69 @@ class TrackedIngestionPipeline:
             task_metadata['last_callback_status'] = status
             task_metadata['callback_count'] = task_metadata.get('callback_count', 0) + 1
             
-            msg_type = message.get('type', '')
-            
-            if status == 'PROCESSING' and msg_type == 'node':
-                # Node callback - create a child document for this node
-                node_data = message.get('node', {})
-                filename = message.get('filename', '')
-                node_index = message.get('node_index', 0)
-                
-                # Track nodes received
-                task_metadata['nodes_received'] = task_metadata.get('nodes_received', 0) + 1
-                await self.task_repo.update_task_metadata(task_id, task_metadata)
-                
-                # Create DocumentNode from callback data
-                doc_node = DocumentNode(
-                    text=node_data.get('text', ''),
-                    metadata={
-                        **node_data.get('metadata', {}),
-                        'source': doc.source,
-                        'parent_document_id': doc.id,
-                        'node_index': node_index,
-                        'filename': filename,
-                    }
+            # Use transformation's on_callback method
+            # task_id serves as the correlation_id
+            try:
+                result = await step.transformation.on_callback(task_id, message, status)
+            except Exception as e:
+                # Callback processing failed - send to error queue
+                await self._send_to_error_queue(
+                    doc=doc,
+                    step_name=step.name,
+                    error=e,
+                    task=task
                 )
-                
-                # Create child document record
-                child_doc = DocumentRecord(
-                    id=str(uuid.uuid4()),
-                    job_id=task.job_id,
-                    source=f"{doc.source}#node_{node_index}",
-                    status=DocumentStatus.PENDING,
-                    current_step=step.name,
-                    step_statuses={s: "pending" for s in self.job.pipeline_steps},
-                    metadata={
-                        'document': doc_node.model_dump(),
-                        'parent_document_id': doc.id,
-                        'node_index': node_index,
-                        'filename': filename,
-                        'source': doc.source,
-                    }
-                )
-                
-                # Mark parsing step as completed for child (it's already parsed)
-                child_doc.step_statuses[step.name] = "completed"
-                
-                await self.doc_repo.create_document(child_doc)
-                
-                # Enqueue child from next step (skip parsing since it's done)
-                await self.backend.enqueue(
-                    MAIN_QUEUE,
-                    body={
-                        "type": "document",
-                        "doc_id": child_doc.id,
-                        "job_id": task.job_id,
-                        "current_step_idx": task.step_index + 1,
-                    }
-                )
-                
-                logger.debug(
-                    f"Created child document for node {node_index} from {filename} "
-                    f"(parent: {doc.id})"
-                )
-                return True
-            
-            elif status == 'PROCESSING':
-                # Other processing callbacks - just update status
-                await self.task_repo.update_task_metadata(task_id, task_metadata)
-                await self.task_repo.update_task_status(task_id, TaskStatus.WAITING)
-                logger.debug(f"Task {task_id} still processing")
-                return True
-            
-            elif status == 'FAILED':
-                # Task failed
-                error_msg = message.get('error', 'Unknown error')
-                await self.task_repo.update_task_metadata(task_id, task_metadata)
-                await self.task_repo.update_task_status(task_id, TaskStatus.FAILED, error_msg)
-                await self.doc_repo.update_step_status(task.document_id, step.name, "failed")
                 await self.doc_repo.update_document_status(
                     task.document_id,
                     DocumentStatus.FAILED,
-                    error_message=error_msg,
+                    error_message=str(e),
                     error_step=step.name
                 )
-                logger.error(f"Task {task_id} failed: {error_msg}")
+                logger.error(f"Task {task_id} callback failed: {e}")
+                return True
+            
+            if status == 'PROCESSING' and result is not None:
+                # Transformation returned result(s) from callback - create child documents
+                task_metadata['nodes_received'] = task_metadata.get('nodes_received', 0) + 1
+                await self.task_repo.update_task_metadata(task_id, task_metadata)
+                
+                # Handle result (could be single Record or Iterable[Record])
+                if isinstance(result, Record):
+                    results = [result]
+                else:
+                    results = list(result)
+                
+                for idx, child_record in enumerate(results):
+                    child_doc = self._create_child_document(
+                        parent_doc=doc,
+                        child_record=child_record,
+                        job_id=task.job_id,
+                        step_name=step.name,
+                    )
+                    await self.doc_repo.create_document(child_doc)
+                    
+                    # Enqueue child from next step
+                    await self.backend.enqueue(
+                        MAIN_QUEUE,
+                        body={
+                            "type": "document",
+                            "doc_id": child_doc.id,
+                            "job_id": task.job_id,
+                            "current_step_idx": task.step_index + 1,
+                        }
+                    )
+                    
+                    logger.debug(
+                        f"Created child document from callback (parent: {doc.id})"
+                    )
+                
+                return True
+            
+            elif status == 'PROCESSING':
+                # Processing callback with no result - just update status
+                await self.task_repo.update_task_metadata(task_id, task_metadata)
+                await self.task_repo.update_task_status(task_id, TaskStatus.WAITING)
+                logger.debug(f"Task {task_id} still processing")
                 return True
             
             elif status == 'COMPLETED':

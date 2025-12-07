@@ -54,8 +54,8 @@ class FetchcraftIngestionPipelineFactory(BaseModel):
     
     Example:
         class MyPipelineFactory(FetchcraftIngestionPipelineFactory):
-            def configure_pipeline(self, pipeline: TrackedIngestionPipeline) -> None:
-                pipeline.add_transformation(AsyncParsingTransformation(parser_map=self.parser_map))
+            async def configure_pipeline(self, pipeline: TrackedIngestionPipeline) -> None:
+                pipeline.add_transformation(ParsingTransformation(parser_map=self.parser_map))
                 pipeline.add_transformation(ExtractKeywords())
                 pipeline.add_transformation(ChunkingTransformation(chunker=self.chunker))
                 pipeline.add_sink(VectorIndexSink(index_factory=self.index_factory))
@@ -181,8 +181,8 @@ class FetchcraftIngestionPipelineFactory(BaseModel):
             pipeline: Pre-configured pipeline instance
         
         Example:
-            def configure_pipeline(self, pipeline: TrackedIngestionPipeline) -> None:
-                pipeline.add_transformation(AsyncParsingTransformation(parser_map=self.parser_map))
+            async def configure_pipeline(self, pipeline: TrackedIngestionPipeline) -> None:
+                pipeline.add_transformation(ParsingTransformation(parser_map=self.parser_map))
                 pipeline.add_transformation(ExtractKeywords())
                 pipeline.add_transformation(ChunkingTransformation(chunker=self.chunker))
                 pipeline.add_sink(VectorIndexSink(index_factory=self.index_factory, index_id=self.index_id))

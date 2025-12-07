@@ -13,15 +13,15 @@ Example usage:
     )
     from fetchcraft.ingestion.pipeline import TrackedIngestionPipeline
     from fetchcraft.ingestion.transformations import (
-        AsyncParsingTransformation,
+        ParsingTransformation,
         ExtractKeywords,
         ChunkingTransformation,
     )
     from fetchcraft.ingestion.sinks import VectorIndexSink
     
     class MyPipelineFactory(FetchcraftIngestionPipelineFactory):
-        def configure_pipeline(self, pipeline: TrackedIngestionPipeline) -> None:
-            pipeline.add_transformation(AsyncParsingTransformation(parser_map=self.parser_map))
+        async def configure_pipeline(self, pipeline: TrackedIngestionPipeline) -> None:
+            pipeline.add_transformation(ParsingTransformation(parser_map=self.parser_map))
             pipeline.add_transformation(ExtractKeywords())
             pipeline.add_transformation(ChunkingTransformation(chunker=self.chunker))
             pipeline.add_sink(VectorIndexSink(index_factory=self.index_factory, index_id=self.index_id))

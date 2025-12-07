@@ -31,6 +31,10 @@ class RemoteDoclingParser(DocumentParser):
             callback_url=callback_url,
         )
 
+    @property
+    def is_remote(self):
+        return True
+
     async def parse(self, file: File, metadata: Optional[Dict[str, Any]] = None, task_id: Optional[str] = None, **parser_kwargs) -> AsyncGenerator[DocumentNode, None]:
         """
         Parse a file using the remote docling server.
