@@ -154,7 +154,8 @@ class AsyncTransformation(Transformation):
     
     async def process(
         self,
-        record: DocumentRecord
+        record: DocumentRecord,
+        context: Optional[dict] = None
     ) -> Optional[DocumentRecord | Iterable[DocumentRecord]]:
         """
         Not used for async transformations - raises error if called.

@@ -224,13 +224,7 @@ class FetchcraftIngestionPipelineFactory(BaseModel):
         self._index_id = index_id
         
         full_source_path = self._document_root / job.source_path
-        # connector = FilesystemConnector(
-        #     path=full_source_path,
-        #     filter=None
-        # )
-        
-        # directories = await connector.list_directories()
-        
+
         # Create base pipeline with system dependencies
         pipeline = TrackedIngestionPipeline(
             job=job,
@@ -241,15 +235,10 @@ class FetchcraftIngestionPipelineFactory(BaseModel):
             num_workers=self.num_workers,
             callback_base_url=self.callback_base_url,
             context={}
-            # context={"directories": directories}
         )
         
         # Configure source if requested (skip for recovery scenarios)
         if include_source:
-            # source = ConnectorSource(
-            #     connector=connector,
-            #     document_root=self._document_root,
-            # )
             source = await self.create_source(full_source_path)
             pipeline.source(source)
         

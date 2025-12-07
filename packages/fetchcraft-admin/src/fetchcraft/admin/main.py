@@ -13,7 +13,9 @@ For custom configurations, use the framework directly:
     )
 """
 from pathlib import Path
+from typing import Optional
 
+from pydantic import ConfigDict
 from qdrant_client import QdrantClient
 
 from fetchcraft.admin import (
@@ -51,11 +53,11 @@ FRONTEND_DIST = PACKAGE_ROOT / "frontend" / "dist"
 
 
 class DefaultPipelineFactory(FetchcraftIngestionPipelineFactory):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     index_factory: DefaultIndexFactory
     chunker: HierarchicalNodeParser
     parser_map: dict[str, DocumentParser]
     directories: list[str] = []
-    connector: Connector
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -73,21 +75,25 @@ class DefaultPipelineFactory(FetchcraftIngestionPipelineFactory):
 
     async def create_source(self, documents_path: Path) -> Source:
         """Create a source for the pipeline."""
+        connector = FilesystemConnector(
+            path=documents_path,
+            filter=None
+        )
+        self.directories = await connector.list_directories()
+
         return ConnectorSource(
-            connector=self.connector,
-            document_root=self._document_root,
+            connector=connector,
+            document_root=documents_path,
         )
 
     async def configure_pipeline(self, pipeline: TrackedIngestionPipeline) -> None:
         """Configure the pipeline with default transformations and sinks."""
-        if len(self.directories) == 0:
-            self.directories = await self.connector.list_directories()
 
+        pipeline.context({"directories": self.directories})
         pipeline.add_transformation(AsyncParsingTransformation(parser_map=self.parser_map))
         pipeline.add_transformation(ExtractKeywords())
         pipeline.add_transformation(ChunkingTransformation(chunker=self.chunker))
         pipeline.add_sink(VectorIndexSink(index_factory=self.index_factory))
-        pipeline.context({"directories": self.directories})
 
 
 
@@ -137,11 +143,6 @@ def get_ingestion_dependencies(settings: IngestionConfig):
     # Build callback URL for docling async parsing
     callback_url = f"{settings.callback_base_url}/api/tasks/callback"
 
-    connector = FilesystemConnector(
-        path=settings.documents_path,
-        filter=None
-    )
-
     parser_map = {
         "default": TextFileParser(),
         "application/pdf": RemoteDoclingParser(
@@ -153,7 +154,6 @@ def get_ingestion_dependencies(settings: IngestionConfig):
     return {
         "index_factory": index_factory,
         "chunker": chunker,
-        "connector": connector,
         "parser_map": parser_map,
     }
 
