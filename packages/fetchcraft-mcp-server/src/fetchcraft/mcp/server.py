@@ -28,7 +28,7 @@ def configure_fetchcraft_mcp(app: FastAPI, mcp_name: str) -> FastAPI:
     mcp = FastMCP.from_fastapi(app=app, name=mcp_name)
     
     # Construct server URL for frontend assets (use localhost for iframe compatibility)
-    server_url = "http://localhost:8003"
+    server_url = settings.frontend_base_url
     add_tools(mcp=mcp, find_files_service=FindFilesService.create(settings), server_url=server_url)
     
     mcp_app = mcp.http_app(path='/mcp')

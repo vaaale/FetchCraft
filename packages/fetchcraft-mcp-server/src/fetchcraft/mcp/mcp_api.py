@@ -4,6 +4,7 @@ from pathlib import Path
 from fastmcp import FastMCP
 
 from fetchcraft.mcp.find_files_service import FindFilesService
+from fetchcraft.mcp.settings import MCPServerSettings
 
 
 def _get_frontend_asset_filenames() -> tuple[str | None, str | None]:
@@ -29,7 +30,7 @@ def _get_frontend_asset_filenames() -> tuple[str | None, str | None]:
 
 def add_tools(mcp: FastMCP, find_files_service: FindFilesService, server_url: str = "http://localhost:8003"):
     """Add MCP tools to the server."""
-    
+
     @mcp.tool()
     async def find_files(
         query: str,
@@ -118,7 +119,7 @@ def add_tools(mcp: FastMCP, find_files_service: FindFilesService, server_url: st
             html_content = f"""
 <html lang="en">
     <head>
-    <meta http-equiv="refresh" content="0; url=http://localhost:8003/find-files?query={query}&num_results={num_results}&offset={offset}">
+    <meta http-equiv="refresh" content="0; url={server_url}/find-files?query={query}&num_results={num_results}&offset={offset}">
     </head>
     <body>
     </body>

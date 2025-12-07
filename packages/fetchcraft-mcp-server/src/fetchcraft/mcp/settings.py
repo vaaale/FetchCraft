@@ -7,6 +7,8 @@ class MCPServerSettings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore"
     )
+    frontend_base_url: str = "http://localhost:8003"
+    frontend_port: int = 8003
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
     database_name: str = "fetchcraft"
