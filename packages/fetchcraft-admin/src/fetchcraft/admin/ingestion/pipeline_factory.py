@@ -52,34 +52,35 @@ class FetchcraftIngestionPipelineFactory(BaseModel):
     to add their custom transformations and sinks. The framework handles
     all the plumbing (queue backend, repositories, etc.).
     
+    Subclasses should define their own fields for parser_map, chunker,
+    index_factory, etc. as needed for their specific pipeline configuration.
+    
     Example:
         class MyPipelineFactory(FetchcraftIngestionPipelineFactory):
+            parser_map: Dict[str, DocumentParser]
+            chunker: NodeParser
+            index_factory: IndexFactory
+            
             async def configure_pipeline(self, pipeline: TrackedIngestionPipeline) -> None:
                 pipeline.add_transformation(ParsingTransformation(parser_map=self.parser_map))
                 pipeline.add_transformation(ExtractKeywords())
                 pipeline.add_transformation(ChunkingTransformation(chunker=self.chunker))
                 pipeline.add_sink(VectorIndexSink(index_factory=self.index_factory))
     
-    Attributes available in configure_pipeline:
-        self.parser_map: dict - Map of mimetype to parser
-        self.chunker: NodeParser - Node parser for chunking
-        self.index_factory: IndexFactory - Factory for creating vector indices
-        self.index_id: str - Identifier for the vector index
+    Attributes available in subclasses:
         self.document_root: Path - Root directory for documents
+        self.queue_backend: QueueBackend - Queue backend for message passing
+        self.job_repo: JobRepository - Repository for job tracking
+        self.doc_repo: DocumentRepository - Repository for document tracking
+        self.task_repo: TaskRepository - Repository for task tracking
     """
     
     def __init__(self, **kwargs):
         """Initialize the pipeline factory."""
-        # These will be set by the handler during initialization
         super().__init__(**kwargs)
+        # These will be set by the handler during initialization
         self._context: Optional[HandlerContext] = None
         self._document_root: Optional[Path] = None
-        
-        # These will be set per-job during create_pipeline
-        self._parser_map: Optional[dict] = None
-        self._chunker = None
-        self._index_factory: Optional[IndexFactory] = None
-        self._index_id: Optional[str] = None
     
     def initialize(
         self,
@@ -137,26 +138,6 @@ class FetchcraftIngestionPipelineFactory(BaseModel):
         """Get the document root path."""
         return self._document_root
     
-    @property
-    def parser_map(self) -> dict:
-        """Get the parser map (available during configure_pipeline)."""
-        return self._parser_map
-    
-    @property
-    def chunker(self):
-        """Get the chunker (available during configure_pipeline)."""
-        return self._chunker
-    
-    @property
-    def index_factory(self) -> IndexFactory:
-        """Get the index factory (available during configure_pipeline)."""
-        return self._index_factory
-    
-    @property
-    def index_id(self) -> str:
-        """Get the index ID (available during configure_pipeline)."""
-        return self._index_id
-    
     @abstractmethod
     async def create_source(self, documents_path: Path) -> Source:
         """Create a source for the pipeline."""
@@ -170,12 +151,8 @@ class FetchcraftIngestionPipelineFactory(BaseModel):
         This method is called after the pipeline is created with all system
         dependencies. Users should add their transformations and sinks here.
         
-        Available properties:
-            - self.parser_map: Map of mimetype to parser
-            - self.chunker: Node parser for chunking
-            - self.index_factory: Factory for creating vector indices
-            - self.index_id: Identifier for the vector index
-            - self.document_root: Root directory for documents
+        Subclasses should define their own fields (parser_map, chunker, etc.)
+        and use them in this method.
         
         Args:
             pipeline: Pre-configured pipeline instance
@@ -185,17 +162,13 @@ class FetchcraftIngestionPipelineFactory(BaseModel):
                 pipeline.add_transformation(ParsingTransformation(parser_map=self.parser_map))
                 pipeline.add_transformation(ExtractKeywords())
                 pipeline.add_transformation(ChunkingTransformation(chunker=self.chunker))
-                pipeline.add_sink(VectorIndexSink(index_factory=self.index_factory, index_id=self.index_id))
+                pipeline.add_sink(VectorIndexSink(index_factory=self.index_factory))
         """
         pass
     
     async def create_pipeline(
         self,
         job: IngestionJob,
-        parser_map: dict,
-        chunker,
-        index_factory: IndexFactory,
-        index_id: str = "default",
         include_source: bool = True,
     ) -> TrackedIngestionPipeline:
         """
@@ -206,22 +179,12 @@ class FetchcraftIngestionPipelineFactory(BaseModel):
         
         Args:
             job: The ingestion job
-            parser_map: Map of mimetype to parser
-            chunker: Node parser for chunking
-            index_factory: Index factory for creating vector index
-            index_id: Identifier for the vector index
             include_source: Whether to configure the source (False for recovery)
             
         Returns:
             Configured pipeline
         """
         logger.info(f"Creating pipeline for job '{job.name}' (ID: {job.id})")
-        
-        # Store job-specific dependencies for use in configure_pipeline
-        self._parser_map = parser_map
-        self._chunker = chunker
-        self._index_factory = index_factory
-        self._index_id = index_id
         
         full_source_path = self._document_root / job.source_path
 
@@ -244,12 +207,6 @@ class FetchcraftIngestionPipelineFactory(BaseModel):
         
         # Call user's configure_pipeline to add transformations and sinks
         await self.configure_pipeline(pipeline)
-        
-        # Clear job-specific dependencies
-        self._parser_map = None
-        self._chunker = None
-        self._index_factory = None
-        self._index_id = None
         
         logger.info(f"Pipeline configured for job '{job.name}'")
         return pipeline

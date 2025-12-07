@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import List, Optional
 from typing import TYPE_CHECKING
 
-from fetchcraft.index import IndexFactory
 from fetchcraft.index.vector_index import VectorIndex
 from fetchcraft.ingestion import TrackedIngestionPipeline
 from fetchcraft.ingestion.models import (
@@ -27,8 +26,6 @@ from fetchcraft.ingestion.repository import (
     DocumentRepository,
 )
 from fetchcraft.node import Node
-from fetchcraft.node_parser import NodeParser
-from fetchcraft.parsing.base import DocumentParser
 
 if TYPE_CHECKING:
     from fetchcraft.admin.ingestion.services.worker_manager import WorkerManager
@@ -92,10 +89,6 @@ class IngestionService:
         self,
         name: str,
         source_path: str | Path,
-        parser_map: dict[str, DocumentParser],
-        chunker: NodeParser,
-        index_factory: IndexFactory,
-        index_id: str = "default",
     ) -> str:
         """
         Create a new ingestion job.
@@ -103,10 +96,6 @@ class IngestionService:
         Args:
             name: Human-readable job name
             source_path: Path to source documents (relative to document_root)
-            parser_map: Map of mimetype to parser
-            chunker: Node parser for chunking
-            index_factory: Index factory for creating vector index
-            index_id: Identifier for the vector index
             
         Returns:
             Job ID
@@ -127,10 +116,6 @@ class IngestionService:
 
         pipeline = await self.pipeline_factory.create_pipeline(
             job=job,
-            parser_map=parser_map,
-            chunker=chunker,
-            index_factory=index_factory,
-            index_id=index_id,
             include_source=True,
         )
 
@@ -245,14 +230,7 @@ class IngestionService:
 
         return True
 
-    async def restart_job(
-        self,
-        job_id: str,
-        parser_map: dict[str, DocumentParser],
-        chunker: NodeParser,
-        index_factory: IndexFactory,
-        index_id: str = "default",
-    ) -> str:
+    async def restart_job(self, job_id: str) -> str:
         """Restart a completed or failed job."""
         job = await self.job_repo.get_job(job_id)
         if not job:
@@ -268,10 +246,6 @@ class IngestionService:
         new_job_id = await self.create_job(
             name=f"{job.name} (restarted)",
             source_path=job.source_path,
-            parser_map=parser_map,
-            chunker=chunker,
-            index_factory=index_factory,
-            index_id=index_id,
         )
 
         logger.info(f"Job '{job.name}' restarted as new job {new_job_id}")

@@ -13,9 +13,10 @@ For custom configurations, use the framework directly:
     )
 """
 from pathlib import Path
-from typing import Optional
+from typing import Dict
 
-from pydantic import ConfigDict
+from dotenv import load_dotenv
+from pydantic import ConfigDict, Field
 from qdrant_client import QdrantClient
 
 from fetchcraft.admin import (
@@ -24,20 +25,17 @@ from fetchcraft.admin import (
     FetchcraftIngestionPipelineFactory,
     IngestionConfig, DefaultIndexFactory,
 )
-from fetchcraft.connector import Connector
 from fetchcraft.connector.filesystem import FilesystemConnector
 from fetchcraft.document_store import MongoDBDocumentStore
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.ingestion import Source, ConnectorSource
 from fetchcraft.ingestion.pipeline import TrackedIngestionPipeline
+from fetchcraft.ingestion.sinks import VectorIndexSink
 from fetchcraft.ingestion.transformations import (
     ParsingTransformation,
     ExtractKeywords,
     ChunkingTransformation,
 )
-from fetchcraft.ingestion.sinks import VectorIndexSink
-from dotenv import load_dotenv
-
 from fetchcraft.node_parser import HierarchicalNodeParser
 from fetchcraft.parsing.base import DocumentParser
 from fetchcraft.parsing.docling.client.docling_parser import RemoteDoclingParser
@@ -51,17 +49,15 @@ PACKAGE_ROOT = Path(__file__).parent.parent.parent.parent
 FRONTEND_DIST = PACKAGE_ROOT / "frontend" / "dist"
 
 
-
 class DefaultPipelineFactory(FetchcraftIngestionPipelineFactory):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     index_factory: DefaultIndexFactory
     chunker: HierarchicalNodeParser
-    parser_map: dict[str, DocumentParser]
+    parser_map: Dict[str, DocumentParser] = Field(default=dict)
     directories: list[str] = []
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
 
     """
     Default pipeline factory with standard transformations.
@@ -96,14 +92,11 @@ class DefaultPipelineFactory(FetchcraftIngestionPipelineFactory):
         pipeline.add_sink(VectorIndexSink(index_factory=self.index_factory))
 
 
-
 # =============================================================================
 # Helper Functions
 # =============================================================================
 
 def get_ingestion_dependencies(settings: IngestionConfig):
-
-
     """Get common dependencies needed for ingestion jobs."""
     doc_store = MongoDBDocumentStore(
         connection_string=settings.mongo_uri,
@@ -144,8 +137,8 @@ def get_ingestion_dependencies(settings: IngestionConfig):
     callback_url = f"{settings.callback_base_url}/api/tasks/callback"
 
     parser_map = {
-        "default": TextFileParser(),
-        "application/pdf": RemoteDoclingParser(
+        "text/plain": TextFileParser(),
+        "default": RemoteDoclingParser(
             docling_url=settings.docling_server,
             callback_url=callback_url
         )
@@ -170,12 +163,12 @@ def create_server(config: IngestionConfig = None, deps: dict = None) -> Fetchcra
     """
     if config is None:
         config = IngestionConfig()
-    
+
     handler = FetchcraftIngestionAdminHandler(
         pipeline_factory=DefaultPipelineFactory(**deps),
         frontend_dist=FRONTEND_DIST if FRONTEND_DIST.exists() else None,
     )
-    
+
     server = FetchcraftAdminServer(
         handlers=[handler],
         config=config,
@@ -184,7 +177,7 @@ def create_server(config: IngestionConfig = None, deps: dict = None) -> Fetchcra
         version="2.0.0",
         frontend_dist=FRONTEND_DIST if FRONTEND_DIST.exists() else None,
     )
-    
+
     return server
 
 

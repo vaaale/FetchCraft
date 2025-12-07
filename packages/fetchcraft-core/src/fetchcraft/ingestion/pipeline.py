@@ -644,7 +644,11 @@ class TrackedIngestionPipeline:
             # Check if this is a child node from async parsing
             # If so, check if all siblings are done and mark parent as completed
             if doc.metadata.get('parent_document_id'):
-                await self._check_parent_completion(doc.metadata['parent_document_id'], doc.metadata.get('total_nodes', 0))
+                await self._check_parent_completion(
+                    parent_doc_id=doc.metadata['parent_document_id'],
+                    expected_children=doc.metadata.get('total_nodes', 0),
+                    parent_task_id=doc.metadata.get('parent_task_id'),
+                )
             
         except Exception as e:
             # Mark document as failed
@@ -662,6 +666,16 @@ class TrackedIngestionPipeline:
                 f"Document {doc.source} failed at step '{step_name}': {e}",
                 exc_info=True
             )
+            
+            # Check if this is a child node - if so, check parent completion
+            # (parent may need to be marked as failed if all children are done)
+            if doc.metadata.get('parent_document_id'):
+                await self._check_parent_completion(
+                    parent_doc_id=doc.metadata['parent_document_id'],
+                    expected_children=doc.metadata.get('total_nodes', 0),
+                    parent_task_id=doc.metadata.get('parent_task_id'),
+                )
+            
             raise
     
     async def _handle_transformation_result(
@@ -922,6 +936,7 @@ class TrackedIngestionPipeline:
         child_record: Record,
         job_id: str,
         step_name: str,
+        parent_task_id: Optional[str] = None,
     ) -> DocumentRecord:
         """Create a child DocumentRecord from a Record."""
         child_doc = DocumentRecord(
@@ -936,6 +951,8 @@ class TrackedIngestionPipeline:
         # Mark current step as completed for child
         child_doc.step_statuses[step_name] = "completed"
         child_doc.metadata["parent_document_id"] = parent_doc.id
+        if parent_task_id:
+            child_doc.metadata["parent_task_id"] = parent_task_id
         return child_doc
     
     async def _send_to_error_queue(
@@ -1059,6 +1076,7 @@ class TrackedIngestionPipeline:
                         child_record=child_record,
                         job_id=task.job_id,
                         step_name=step.name,
+                        parent_task_id=task_id,
                     )
                     await self.doc_repo.create_document(child_doc)
                     
@@ -1074,7 +1092,7 @@ class TrackedIngestionPipeline:
                     )
                     
                     logger.debug(
-                        f"Created child document from callback (parent: {doc.id})"
+                        f"Created child document from callback (parent: {doc.id}, task: {task_id})"
                     )
                 
                 return True
@@ -1118,45 +1136,93 @@ class TrackedIngestionPipeline:
             await self.task_repo.update_task_status(task_id, TaskStatus.FAILED, str(e))
             return False
     
-    async def _check_parent_completion(self, parent_doc_id: str, expected_children: int):
+    async def _check_parent_completion(
+        self,
+        parent_doc_id: str,
+        expected_children: int,
+        parent_task_id: Optional[str] = None,
+    ):
         """
-        Check if all child nodes for a parent document have completed.
-        If so, mark the parent document as completed.
+        Check if all child nodes for a parent document have completed or failed.
+        Updates both the parent document and parent task status accordingly.
+        
+        - If all children completed: mark parent as COMPLETED
+        - If any child failed and all are done: mark parent as FAILED
         """
         try:
-            # Count completed and total children using repository method
+            # Count children by status
             completed_count = await self.doc_repo.count_children_by_parent(
                 parent_doc_id,
                 DocumentStatus.COMPLETED
             )
+            failed_count = await self.doc_repo.count_children_by_parent(
+                parent_doc_id,
+                DocumentStatus.FAILED
+            )
             total_children = await self.doc_repo.count_children_by_parent(parent_doc_id)
             
+            finished_count = completed_count + failed_count
+            
             logger.info(
-                f"Parent {parent_doc_id}: {completed_count}/{total_children} children completed "
-                f"(expected: {expected_children})"
+                f"Parent {parent_doc_id}: {completed_count} completed, {failed_count} failed, "
+                f"{total_children} total (expected: {expected_children})"
             )
             
-            # Check if all children are done
-            # Note: We check if all actual children are completed, not if count matches expected
-            # The expected count might differ slightly due to parsing edge cases
-            if completed_count == total_children and total_children > 0:
-                # Verify parent is in PROCESSING state before updating
+            # Check if all children are done (either completed or failed)
+            if finished_count == total_children and total_children > 0:
+                # Verify parent is not already in a final state
                 parent = await self.doc_repo.get_document(parent_doc_id)
-                if parent and parent.status == DocumentStatus.PROCESSING:
-                    # Mark parent as completed
+                if not parent:
+                    logger.debug(f"Parent {parent_doc_id} not found")
+                    return
+                
+                if parent.status in (DocumentStatus.COMPLETED, DocumentStatus.FAILED):
+                    logger.debug(f"Parent {parent_doc_id} already in final state: {parent.status}")
+                    return
+                
+                # Determine final status based on children
+                if failed_count > 0:
+                    # At least one child failed - mark parent as failed
+                    final_status = DocumentStatus.FAILED
+                    error_message = f"{failed_count} of {total_children} child documents failed"
+                    
                     await self.doc_repo.update_document_status(
                         parent_doc_id,
-                        DocumentStatus.COMPLETED
+                        final_status,
+                        error_message=error_message
                     )
+                    
+                    # Update parent task if provided
+                    if parent_task_id and self.task_repo:
+                        await self.task_repo.update_task_status(
+                            parent_task_id,
+                            TaskStatus.FAILED,
+                            error_message
+                        )
+                    
+                    logger.warning(
+                        f"Parent {parent_doc_id} marked as FAILED: {error_message}"
+                    )
+                else:
+                    # All children completed successfully
+                    final_status = DocumentStatus.COMPLETED
+                    
+                    await self.doc_repo.update_document_status(
+                        parent_doc_id,
+                        final_status
+                    )
+                    
+                    # Update parent task if provided
+                    if parent_task_id and self.task_repo:
+                        await self.task_repo.set_task_completed(parent_task_id)
+                    
                     logger.info(
                         f"All {total_children} child nodes completed - "
                         f"marked parent document {parent_doc_id} as COMPLETED"
                     )
-                else:
-                    logger.debug(f"Parent {parent_doc_id} already in final state: {parent.status if parent else 'not found'}")
             elif total_children > 0:
                 logger.debug(
-                    f"Parent {parent_doc_id} still waiting: {completed_count}/{total_children} children done"
+                    f"Parent {parent_doc_id} still waiting: {finished_count}/{total_children} children done"
                 )
         
         except Exception as e:

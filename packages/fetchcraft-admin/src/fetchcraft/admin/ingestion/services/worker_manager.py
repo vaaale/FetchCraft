@@ -13,7 +13,6 @@ import asyncio
 import logging
 from typing import Dict, Optional, List, TYPE_CHECKING
 
-from fetchcraft.index import IndexFactory
 from fetchcraft.ingestion import (
     TrackedIngestionPipeline,
     QueueBackend,
@@ -23,8 +22,6 @@ from fetchcraft.ingestion import (
     JobStatus,
     DocumentStatus,
 )
-from fetchcraft.node_parser import NodeParser
-from fetchcraft.parsing.base import DocumentParser
 
 if TYPE_CHECKING:
     from fetchcraft.admin.ingestion.pipeline_factory import FetchcraftIngestionPipelineFactory
@@ -77,22 +74,10 @@ class WorkerManager:
         
         logger.info("WorkerManager initialized")
     
-    async def start(
-        self,
-        parser_map: Dict[str, DocumentParser],
-        chunker: NodeParser,
-        index_factory: IndexFactory,
-        index_id: str = "default",
-    ) -> int:
+    async def start(self) -> int:
         """
         Start the WorkerManager and recover any pending jobs.
         
-        Args:
-            parser_map: Map of mimetype to parser
-            chunker: Node parser for chunking
-            index_factory: Index factory for creating vector index
-            index_id: Identifier for the vector index
-            
         Returns:
             Number of jobs recovered
         """
@@ -119,13 +104,7 @@ class WorkerManager:
         recovered = 0
         for job in jobs_to_recover:
             try:
-                await self._recover_job(
-                    job,
-                    parser_map=parser_map,
-                    chunker=chunker,
-                    index_factory=index_factory,
-                    index_id=index_id,
-                )
+                await self._recover_job(job)
                 recovered += 1
             except Exception as e:
                 logger.error(f"Failed to recover job '{job.name}': {e}", exc_info=True)
@@ -138,23 +117,12 @@ class WorkerManager:
         logger.info(f"✅ WorkerManager started, recovered {recovered} job(s)")
         return recovered
     
-    async def _recover_job(
-        self,
-        job,
-        parser_map: Dict[str, DocumentParser],
-        chunker: NodeParser,
-        index_factory: IndexFactory,
-        index_id: str,
-    ):
+    async def _recover_job(self, job):
         """Recover a single job by creating pipeline and starting workers."""
         logger.info(f"Recovering job '{job.name}' (ID: {job.id})")
         
         pipeline = await self.pipeline_factory.create_pipeline(
             job=job,
-            parser_map=parser_map,
-            chunker=chunker,
-            index_factory=index_factory,
-            index_id=index_id,
             include_source=False,
         )
         

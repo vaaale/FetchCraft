@@ -140,12 +140,7 @@ class FetchcraftIngestionAdminHandler(FetchcraftAdminHandler):
         
         # Start worker manager and recover jobs
         logger.info("🔄 Starting worker manager and recovering jobs...")
-        recovered_count = await self._worker_manager.start(
-            parser_map=self._ingestion_deps["parser_map"],
-            chunker=self._ingestion_deps["chunker"],
-            index_factory=self._ingestion_deps["index_factory"],
-            index_id=config.index_id,
-        )
+        recovered_count = await self._worker_manager.start()
         if recovered_count > 0:
             logger.info(f"✓ Recovered {recovered_count} job(s)")
         

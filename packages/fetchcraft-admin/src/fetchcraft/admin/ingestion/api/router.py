@@ -150,21 +150,14 @@ def create_ingestion_router(
     async def create_job(request: CreateJobRequest):
         """Create a new ingestion job."""
         ingestion_service = get_ingestion_service()
-        config = get_config()
         
         if not ingestion_service:
             raise HTTPException(status_code=503, detail="Service not initialized")
         
         try:
-            deps = get_ingestion_dependencies()
-            
             job_id = await ingestion_service.create_job(
                 name=request.name,
                 source_path=request.source_path,
-                parser_map=deps["parser_map"],
-                chunker=deps["chunker"],
-                index_factory=deps["index_factory"],
-                index_id=config.index_id,
             )
             
             job = await ingestion_service.get_job(job_id)
@@ -325,21 +318,12 @@ def create_ingestion_router(
     async def restart_job(job_id: str):
         """Restart a completed or failed job."""
         ingestion_service = get_ingestion_service()
-        config = get_config()
         
         if not ingestion_service:
             raise HTTPException(status_code=503, detail="Service not initialized")
         
         try:
-            deps = get_ingestion_dependencies()
-            
-            new_job_id = await ingestion_service.restart_job(
-                job_id=job_id,
-                parser_map=deps["parser_map"],
-                chunker=deps["chunker"],
-                index_factory=deps["index_factory"],
-                index_id=config.index_id,
-            )
+            new_job_id = await ingestion_service.restart_job(job_id=job_id)
             
             new_job = await ingestion_service.get_job(new_job_id)
             if not new_job:
