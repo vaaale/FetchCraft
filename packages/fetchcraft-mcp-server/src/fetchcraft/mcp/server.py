@@ -75,7 +75,12 @@ def init_server(*args):
     return combined_app
 
 
-if __name__ == "__main__":
+def main():
+    """Entry point for the fetchcraft-mcp CLI command."""
     import uvicorn
-    uvicorn.run("fetchcraft.mcp.server:init_server", host="0.0.0.0", port=8003, reload=True)
+    uvicorn.run("fetchcraft.mcp.server:init_server", host="0.0.0.0", port=8003, factory=True)
+
+
+if __name__ == "__main__":
+    main()
 
