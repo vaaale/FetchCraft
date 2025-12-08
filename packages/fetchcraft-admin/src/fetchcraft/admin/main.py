@@ -69,9 +69,10 @@ class DefaultPipelineFactory(FetchcraftIngestionPipelineFactory):
     - Vector index sink
     """
 
-    async def create_source(self, documents_path: Path) -> Source:
+    async def create_source(self, ingestion_root: Path, documents_path: Path) -> Source:
         """Create a source for the pipeline."""
         connector = FilesystemConnector(
+            root=ingestion_root,
             path=documents_path,
             filter=None
         )
@@ -79,6 +80,7 @@ class DefaultPipelineFactory(FetchcraftIngestionPipelineFactory):
 
         return ConnectorSource(
             connector=connector,
+            root=ingestion_root,
             document_root=documents_path,
         )
 

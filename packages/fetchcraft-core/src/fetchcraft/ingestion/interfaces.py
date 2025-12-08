@@ -45,7 +45,25 @@ class Record(dict):
     
     Behaves like a dict but provides attribute-style access for convenience.
     This is the primary data type passed between transformations.
+    
+    The 'content' field stores base64-encoded file content separately from metadata.
     """
+    
+    _content: Optional[str] = None
+    
+    def __init__(self, *args, content: Optional[str] = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        object.__setattr__(self, '_content', content)
+    
+    @property
+    def content(self) -> Optional[str]:
+        """Get the base64-encoded content."""
+        return object.__getattribute__(self, '_content')
+    
+    @content.setter
+    def content(self, value: Optional[str]) -> None:
+        """Set the base64-encoded content."""
+        object.__setattr__(self, '_content', value)
     
     def __getattr__(self, key: str) -> Any:
         """Allow attribute-style access to dict keys."""
@@ -64,7 +82,11 @@ class Record(dict):
             del self[key]
         except KeyError:
             raise AttributeError(f"Record has no attribute '{key}'")
-    
+
+    def metadata(self) -> Dict[str, Any]:
+        """Get the metadata dictionary."""
+        return {key: value for key, value in self.items() if key != 'content'}
+
     def get_nested(self, *keys: str, default: Any = None) -> Any:
         """Get nested value safely using a sequence of keys."""
         val: Any = self
@@ -77,12 +99,12 @@ class Record(dict):
     
     def copy(self) -> "Record":
         """Create a shallow copy of the record."""
-        return Record(super().copy())
+        return Record(super().copy(), content=self.content)
     
     def deep_copy(self) -> "Record":
         """Create a deep copy of the record."""
         import copy
-        return Record(copy.deepcopy(dict(self)))
+        return Record(copy.deepcopy(dict(self)), content=self.content)
 
 
 @dataclass

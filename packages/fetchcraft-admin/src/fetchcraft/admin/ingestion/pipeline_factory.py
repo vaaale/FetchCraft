@@ -139,7 +139,7 @@ class FetchcraftIngestionPipelineFactory(BaseModel):
         return self._document_root
     
     @abstractmethod
-    async def create_source(self, documents_path: Path) -> Source:
+    async def create_source(self, ingestion_root: Path, documents_path: Path) -> Source:
         """Create a source for the pipeline."""
         pass
 
@@ -202,7 +202,7 @@ class FetchcraftIngestionPipelineFactory(BaseModel):
         
         # Configure source if requested (skip for recovery scenarios)
         if include_source:
-            source = await self.create_source(full_source_path)
+            source = await self.create_source(self._document_root, full_source_path)
             pipeline.source(source)
         
         # Call user's configure_pipeline to add transformations and sinks

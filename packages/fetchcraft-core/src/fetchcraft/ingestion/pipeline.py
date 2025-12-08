@@ -582,7 +582,7 @@ class TrackedIngestionPipeline:
                     await self.task_repo.set_task_started(task.id)
                 
                 # Extract Record from DocumentRecord metadata for transformation
-                record = Record(doc.metadata)
+                record = Record(doc.metadata, content=doc.content)
                 
                 # Use task.id as correlation_id for callback correlation
                 correlation_id = task.id if task else doc_id
@@ -618,9 +618,10 @@ class TrackedIngestionPipeline:
                     # Result was handled (async, deferred, or fan-out) - stop processing
                     return
                 
-                # Result was a single Record - update doc metadata and continue
+                # Result was a single Record - update doc metadata and content
                 if isinstance(result, Record):
                     doc.metadata = dict(result)
+                    doc.content = result.content
                 
                 # Mark task as completed
                 if self.task_repo and task:
@@ -799,11 +800,13 @@ class TrackedIngestionPipeline:
             if isinstance(result, Record):
                 # Single result - update doc and continue pipeline
                 doc.metadata = dict(result)
+                doc.content = result.content
                 
                 if self.task_repo and task:
                     await self.task_repo.set_task_completed(task.id)
                 await self.doc_repo.update_step_status(doc_id, step.name, "completed")
                 await self.doc_repo.update_document_metadata(doc_id, doc.metadata)
+                await self.doc_repo.update_document_content(doc_id, doc.content)
                 
                 # Re-enqueue for next step
                 await self.backend.enqueue(
@@ -943,6 +946,7 @@ class TrackedIngestionPipeline:
             id=str(uuid.uuid4()),
             job_id=job_id,
             source=child_record.get("source", f"{parent_doc.source}#child"),
+            content=child_record.content,
             status=DocumentStatus.PENDING,
             current_step=step_name,
             step_statuses={s: "pending" for s in self.job.pipeline_steps},

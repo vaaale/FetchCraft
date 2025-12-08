@@ -160,8 +160,6 @@ class DoclingDocumentParser(DocumentParser):
             
             # Prepare base metadata
             base_metadata = {
-                "parsing": str(file_path),
-                "filename": file_path.name,
                 "file_size": file_path.stat().st_size,
                 "file_type": file_path.suffix[1:],  # Remove the dot
             }

@@ -33,6 +33,7 @@ class ConnectorSource(Source):
     def __init__(
         self,
         connector: BaseConnector,
+        root: Path,
         document_root: Optional[str | Path] = None,
     ):
         """
@@ -43,6 +44,7 @@ class ConnectorSource(Source):
             document_root: Root path for relative path computation
         """
         self.connector = connector
+        self.root = root
         self.document_root = str(document_root) if document_root else ""
         
         logger.debug("ConnectorSource initialized")
@@ -71,12 +73,8 @@ class ConnectorSource(Source):
             logger.debug(f"Processing file: {file.path}")
             
             # Compute relative path if document_root is set
-            file_path_str = str(file.path)
-            if self.document_root and file_path_str.startswith(self.document_root):
-                relative_source = str(Path(file_path_str).relative_to(self.document_root))
-            else:
-                relative_source = file_path_str
-            
+            relative_source = str((self.document_root / Path(file.path)).relative_to(self.root))
+
             # Read file content
             try:
                 content = await file.read()
@@ -89,9 +87,11 @@ class ConnectorSource(Source):
             # Create document record with file metadata
             doc_record = DocumentRecord(
                 source=relative_source,
+                content=content_b64,
                 metadata={
-                    "file_path": file_path_str,
-                    "file_content_b64": content_b64,
+                    **file.metadata(),
+                    "source": relative_source,
+                    "path": relative_source,
                     "mimetype": file.mimetype,
                     "encoding": file.encoding,
                 }

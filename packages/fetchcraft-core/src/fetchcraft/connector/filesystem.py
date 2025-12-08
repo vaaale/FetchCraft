@@ -82,11 +82,12 @@ class FilesystemConnector(Connector):
     fs: fsspec.AbstractFileSystem
     filter: Optional[Callable[[LocalFile], bool]] = None
 
-    def __init__(self, path: Path, fs: Optional[fsspec.AbstractFileSystem] = None, filter: Optional[Callable[[LocalFile], bool]] = None):
+    def __init__(self, root: Path, path: Path, fs: Optional[fsspec.AbstractFileSystem] = None, filter: Optional[Callable[[LocalFile], bool]] = None):
         if fs is None:
             fs = fsspec.filesystem("dir", path=path)
+        self.root = root
         self.path = path
-        self.fs =fs
+        self.fs = fs
         self.filter = filter
 
     def get_name(self) -> str:

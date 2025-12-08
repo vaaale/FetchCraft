@@ -95,6 +95,3 @@ class RemoteDoclingParser(DocumentParser):
                 doc = DocumentNode.model_validate(data)
                 doc.metadata.update(file.metadata())
                 yield doc
-
-    async def get_documents(self, metadata: Optional[Dict[str, Any]] = None, **kwargs) -> AsyncGenerator[DocumentNode, None]:
-        pass

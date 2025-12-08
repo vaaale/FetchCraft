@@ -38,7 +38,7 @@ class FileAdapter(File):
     """Adapter to provide file interface from in-memory content."""
     model_config = ConfigDict(arbitrary_types_allowed=True)
     
-    def __init__(self, path_str: str, content: bytes, mimetype: str, encoding: str):
+    def __init__(self, path_str: str, content: bytes, mimetype: str, encoding: str, metadata: dict):
         fs = fsspec.filesystem('memory')
         super().__init__(
             path=Path(path_str),
@@ -47,6 +47,7 @@ class FileAdapter(File):
             encoding=encoding,
         )
         self._content = content
+        self._metadata = {**metadata, "encoding": encoding, "mimetype": mimetype}
     
     async def read(self) -> bytes:
         return self._content
@@ -58,12 +59,7 @@ class FileAdapter(File):
         return []
     
     def metadata(self) -> dict:
-        return {
-            "path": str(self.path),
-            "mimetype": self.mimetype,
-            "encoding": self.encoding,
-            "size": len(self._content),
-        }
+        return self._metadata
 
 
 class ParsingTransformation(Transformation):
@@ -121,15 +117,14 @@ class ParsingTransformation(Transformation):
         """
         # Get file metadata
         mimetype = record.get("mimetype", "")
-        file_path = record.get("file_path", "")
-        file_content_b64 = record.get("file_content_b64")
+        file_path = record.get("path", "")
         source = record.get("source", file_path)
         
-        if not file_content_b64:
+        if not record.content:
             raise ValueError(f"No file content in record for {source}")
 
         # Decode base64 content
-        file_content = base64.b64decode(file_content_b64)
+        file_content = base64.b64decode(record.content)
 
         # Select parser based on mimetype
         parser = self.parser_map.get(mimetype, self.parser_map.get("default", None))
@@ -142,16 +137,17 @@ class ParsingTransformation(Transformation):
             path_str=file_path,
             content=file_content,
             mimetype=mimetype,
-            encoding=record.get("encoding", "utf-8")
+            encoding=record.get("encoding", "utf-8"),
+            metadata=record.metadata()
         )
         
         # Build metadata to pass to parser
         parser_metadata = {
             "source": source,
-            "file_path": file_path,
+            "path": file_path,
             "mimetype": mimetype,
-            # Include any additional metadata from the record (excluding large binary data)
-            **{k: v for k, v in record.items() if k != "file_content_b64"},
+            # Include any additional metadata from the record
+            **dict(record),
         }
         
         # Check if parser is remote (async callback-based)

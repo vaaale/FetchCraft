@@ -241,6 +241,21 @@ class DocumentRepository(ABC):
         pass
     
     @abstractmethod
+    async def update_document_content(
+        self,
+        doc_id: str,
+        content: Optional[str]
+    ) -> None:
+        """
+        Update a document's content.
+        
+        Args:
+            doc_id: The document ID
+            content: Base64-encoded content string
+        """
+        pass
+    
+    @abstractmethod
     async def increment_retry_count(self, doc_id: str) -> int:
         """
         Increment document retry count.
@@ -751,6 +766,7 @@ class PostgresDocumentRepository(DocumentRepository):
                     id TEXT PRIMARY KEY,
                     job_id TEXT NOT NULL,
                     source TEXT NOT NULL,
+                    content TEXT,
                     status TEXT NOT NULL,
                     current_step TEXT,
                     step_statuses JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -797,14 +813,15 @@ class PostgresDocumentRepository(DocumentRepository):
             await conn.execute(
                 """
                 INSERT INTO ingestion_documents 
-                (id, job_id, source, status, current_step, step_statuses,
+                (id, job_id, source, content, status, current_step, step_statuses,
                  created_at, started_at, completed_at, error_message, 
                  error_step, retry_count, metadata)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 """,
                 doc.id,
                 doc.job_id,
                 _sanitize_for_postgres(doc.source),
+                doc.content,
                 doc.status.value,
                 _sanitize_for_postgres(doc.current_step),
                 json.dumps(sanitized_step_statuses),
@@ -830,6 +847,7 @@ class PostgresDocumentRepository(DocumentRepository):
                 id=row["id"],
                 job_id=row["job_id"],
                 source=row["source"],
+                content=row["content"],
                 status=DocumentStatus(row["status"]),
                 current_step=row["current_step"],
                 step_statuses=json.loads(row["step_statuses"]) if isinstance(row["step_statuses"], str) else row["step_statuses"],
@@ -883,6 +901,7 @@ class PostgresDocumentRepository(DocumentRepository):
                         id=row["id"],
                         job_id=row["job_id"],
                         source=row["source"],
+                        content=row["content"],
                         status=DocumentStatus(row["status"]),
                         current_step=row["current_step"],
                         step_statuses=json.loads(row["step_statuses"]) if isinstance(row["step_statuses"], str) else row["step_statuses"],
@@ -975,6 +994,22 @@ class PostgresDocumentRepository(DocumentRepository):
                 doc_id,
             )
     
+    async def update_document_content(
+        self,
+        doc_id: str,
+        content: Optional[str]
+    ) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE ingestion_documents 
+                SET content = $1
+                WHERE id = $2
+                """,
+                content,
+                doc_id,
+            )
+    
     async def increment_retry_count(self, doc_id: str) -> int:
         async with self.pool.acquire() as conn:
             new_count = await conn.fetchval(
@@ -1033,6 +1068,7 @@ class PostgresDocumentRepository(DocumentRepository):
                         id=row["id"],
                         job_id=row["job_id"],
                         source=row["source"],
+                        content=row["content"],
                         status=DocumentStatus(row["status"]),
                         current_step=row["current_step"],
                         step_statuses=json.loads(row["step_statuses"]) if isinstance(row["step_statuses"], str) else row["step_statuses"],
@@ -1085,6 +1121,7 @@ class PostgresDocumentRepository(DocumentRepository):
                 id=row["id"],
                 job_id=row["job_id"],
                 source=row["source"],
+                content=row["content"],
                 status=DocumentStatus(row["status"]),
                 current_step=row["current_step"],
                 step_statuses=json.loads(row["step_statuses"]) if isinstance(row["step_statuses"], str) else row["step_statuses"],

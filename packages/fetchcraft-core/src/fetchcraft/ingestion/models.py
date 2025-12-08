@@ -108,6 +108,7 @@ class DocumentRecord:
         id: Unique document identifier
         job_id: ID of the parent ingestion job
         source: Document source path or identifier (displayed in UI)
+        content: Base64-encoded file content
         status: Current document status
         current_step: Name of the current pipeline step
         step_statuses: Status of each pipeline step
@@ -122,6 +123,7 @@ class DocumentRecord:
     id: str = field(default_factory=lambda: str(uuid4()))
     job_id: str = ""
     source: str = ""
+    content: Optional[str] = None  # Base64-encoded file content
     status: DocumentStatus = DocumentStatus.PENDING
     current_step: Optional[str] = None
     step_statuses: Dict[str, str] = field(default_factory=dict)  # step_name -> "pending" | "processing" | "completed" | "failed"
@@ -139,6 +141,7 @@ class DocumentRecord:
             "id": self.id,
             "job_id": self.job_id,
             "source": self.source,
+            "content": self.content,
             "status": self.status.value,
             "current_step": self.current_step,
             "step_statuses": self.step_statuses,
