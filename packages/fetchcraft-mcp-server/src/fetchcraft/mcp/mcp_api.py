@@ -28,7 +28,7 @@ def _get_frontend_asset_filenames() -> tuple[str | None, str | None]:
     return css_filename, js_filename
 
 
-def add_tools(mcp: FastMCP, find_files_service: FindFilesService, server_url: str = "http://localhost:8003"):
+def add_tools(mcp: FastMCP, find_files_service: FindFilesService, server_url: str = "http://localhost:8003", mcp_server_name: str = "fetchcraft"):
     """Add MCP tools to the server."""
 
     @mcp.tool()
@@ -98,39 +98,27 @@ def add_tools(mcp: FastMCP, find_files_service: FindFilesService, server_url: st
             # Build asset URLs
             css_url = f"{server_url}/assets/{css_filename}" if css_filename else ""
             js_url = f"{server_url}/assets/{js_filename}" if js_filename else ""
-            
-#             html_content = f"""<!doctype html>
-# <html lang="en">
-#   <head>
-#     <meta charset="UTF-8" />
-#     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-#     <title>Fetchcraft File Finder</title>
-#     <link rel="stylesheet" crossorigin href="{css_url}">
-#     <script>
-#       window.__SEARCH_RESULTS__ = {json_data};
-#     </script>
-#   </head>
-#   <body>
-#     <div id="root"></div>
-#     <script type="module" crossorigin src="{js_url}"></script>
-#   </body>
-# </html>"""
 
-            html_content = f"""
-<html lang="en">
-    <head>
-    <meta http-equiv="refresh" content="0;url={server_url}/find-files?query={query}&num_results={num_results}&offset={offset}">
-    </head>
-    <body>
-    </body>
-</html>"""
+            # Build the redirect URL
+            redirect_url = f"{server_url}/find-files?query={query}&num_results={num_results}&offset={offset}"
 
+            # HTML content with meta refresh redirect
+            html_content = f"""<html lang="en">
+                <head>
+                    <meta http-equiv="refresh" content="0;url={redirect_url}">
+                </head>
+                <body>
+                    <p>Redirecting to search results...</p>
+                    <a href="{redirect_url}" target="_top">Click here if not redirected</a>
+                </body>
+            </html>"""
 
             # Format for MCP with artifact syntax
+            # Using application/vnd.external-app type and mcpServer attribute for secure external app rendering
             response_header = f"Your search results for query: {query}"
             search_id = "_".join(query.split())
-            artifact_header = f':::artifact{{identifier="{search_id}" type="text/html" title="File Search Results"}}'
-            result = f"{response_header}\n{artifact_header}\n```html\n{html_content}\n```\n"
+            artifact_header = f':::artifact{{identifier="{search_id}" type="application/vnd.external-app" title="File Search Results" mcpServer="{mcp_server_name}"}}'
+            result = f"{response_header}\n{artifact_header}\n```html\n{html_content}\n```\n:::"
 
             return result
         except Exception as e:

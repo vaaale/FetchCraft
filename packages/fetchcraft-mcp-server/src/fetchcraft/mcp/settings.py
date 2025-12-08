@@ -25,3 +25,4 @@ class MCPServerSettings(BaseSettings):
     fusion_method: str = "rrf"
     host: str = "0.0.0.0"
     port: int = 8001
+    mcp_server_name: str = "fetchcraft"

@@ -8,6 +8,7 @@ from fastmcp import FastMCP
 from fetchcraft.mcp.api import create_api_router
 from fetchcraft.mcp.find_files_service import FindFilesService
 from fetchcraft.mcp.frontend_router import create_frontend_router, mount_static_assets
+from fetchcraft.mcp.iframe_middleware import IframeHeadersMiddleware
 from fetchcraft.mcp.mcp_api import add_tools
 from fetchcraft.mcp.query_service import QueryService
 from fetchcraft.mcp.settings import MCPServerSettings
@@ -31,7 +32,12 @@ def configure_fetchcraft_mcp(app: FastAPI, mcp_name: str) -> FastAPI:
     
     # Construct server URL for frontend assets (use localhost for iframe compatibility)
     server_url = settings.frontend_base_url
-    add_tools(mcp=mcp, find_files_service=FindFilesService.create(settings), server_url=server_url)
+    add_tools(
+        mcp=mcp,
+        find_files_service=FindFilesService.create(settings),
+        server_url=server_url,
+        mcp_server_name=settings.mcp_server_name
+    )
     
     mcp_app = mcp.http_app(path='/mcp')
 
@@ -53,6 +59,7 @@ def configure_fetchcraft_mcp(app: FastAPI, mcp_name: str) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    combined_app.add_middleware(IframeHeadersMiddleware)
 
     # Mount static assets for frontend
     mount_static_assets(combined_app)
