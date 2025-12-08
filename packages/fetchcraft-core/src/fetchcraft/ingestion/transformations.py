@@ -127,6 +127,7 @@ class ParsingTransformation(Transformation):
         file_content = base64.b64decode(record.content)
 
         # Select parser based on mimetype
+        logger.info(f"Getting parser for {file_path} -> {mimetype}")
         parser = self.parser_map.get(mimetype, self.parser_map.get("default", None))
         
         if not parser:
@@ -143,11 +144,8 @@ class ParsingTransformation(Transformation):
         
         # Build metadata to pass to parser
         parser_metadata = {
-            "source": source,
             "path": file_path,
-            "mimetype": mimetype,
-            # Include any additional metadata from the record
-            **dict(record),
+            **record.metadata()
         }
         
         # Check if parser is remote (async callback-based)

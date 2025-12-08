@@ -1,7 +1,7 @@
 services:
 
   fetchcraft-admin:
-    image: fetchcraft
+    image: fetchcraft:latest
     container_name: fetchcraft-admin
     entrypoint: ["uv", "run", "fetchcraft-admin"]
     hostname: fetchcraft-admin
@@ -17,7 +17,7 @@ services:
     depends_on:
       - qdrant
       - mongodb
-      - fetchcraft-docling-server
+      - pgvector
     restart: unless-stopped
     networks: [ 'demo-net' ]
 
@@ -65,7 +65,7 @@ services:
     networks: [ 'demo-net' ]
 
   librechat:
-    image: librechat-new
+    image: librechat
 #    image: librechat-dev-alex2
 #    image: ghcr.io/danny-avila/librechat-dev-api:latest
     container_name: librechat
@@ -99,6 +99,7 @@ services:
   qdrant:
     image: qdrant/qdrant
     hostname: fetchcraft-qdrant
+    container_name: fetchcraft-qdrant
     ports:
       - "6333:6333"
       - "6334:6334"
@@ -170,6 +171,29 @@ services:
 #    env_file:
 #      - librechat.env
 
+  compass:
+    image: haohanyang/compass-web
+    container_name: mongodb-compass
+    environment:
+      - CW_MONGO_URI=mongodb://mongodb:27017
+    depends_on:
+      - mongodb
+    ports:
+      - 9010:8080
+    networks: [ 'demo-net' ]
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin4_container
+    ports:
+      - "9020:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: alexander.vaagan@crayon.com
+      PGADMIN_DEFAULT_PASSWORD: strong-password
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    networks: [ 'demo-net' ]
+
 networks:
   demo-net:
     driver: bridge
@@ -179,3 +203,4 @@ volumes:
   qdrant-data:
   meili_data:
   pg-data:
+  pgadmin-data:
