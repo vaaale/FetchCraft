@@ -67,6 +67,8 @@ class LocalFile(File):
         st = self.fs.stat(str(self.path))
         return {
             "filename": self.path.name,
+            "mimetype": self.mimetype,
+            "encoding": self.encoding,
             "source": str(self.path),
             "size": st["size"],
             "modified": st["mtime"],

@@ -1,3 +1,4 @@
+import logging
 import mimetypes
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -6,6 +7,8 @@ from uuid import uuid4
 
 import fsspec
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 
 class Role(BaseModel):
@@ -24,7 +27,7 @@ class File(BaseModel, ABC):
     def __init__(self, path: Path, fs: fsspec.AbstractFileSystem, mimetype: Optional[str] = None, encoding: Optional[str] = None, **kwargs):
         if mimetype is None or encoding is None:
             _mimetype, _encoding = mimetypes.guess_type(path) or "application/octet-stream"
-            mimetype = mimetype or _mimetype or "text/plain"
+            mimetype = mimetype or _mimetype or "application/octet-stream"
             encoding = encoding or _encoding or "utf-8"
 
         super().__init__(path=path, fs=fs, mimetype=mimetype, encoding=encoding, **kwargs)
