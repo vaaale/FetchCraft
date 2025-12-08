@@ -112,8 +112,14 @@ class VectorIndex(BaseIndex[D]):
             if self._doc_store:
                 await self._doc_store.delete_documents(existing_nodes)
 
-        if self._doc_store:
-            await self._doc_store.add_documents([doc] + nodes)
+        try:
+            if self._doc_store:
+                await self._doc_store.add_documents([doc] + nodes)
+        except Exception as e:
+            print(f"Error adding documents to document store: {e}")
+            print(f"Document: {doc}")
+            print(f"Nodes: {nodes}")
+            raise e
 
         return await self.vector_store.insert_nodes(nodes, index_id=self.index_id, show_progress=show_progress)
 

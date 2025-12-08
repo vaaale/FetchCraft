@@ -34,6 +34,7 @@ DOCLING_SUPPORTED_EXTENSIONS = {
     '.html',     # HTML documents
     '.htm',      # HTML documents
     '.xlsx',     # Microsoft Excel
+    '.xls',     # Microsoft Excel
     '.png',      # Images (with OCR)
     '.jpg',      # Images (with OCR)
     '.jpeg',     # Images (with OCR)

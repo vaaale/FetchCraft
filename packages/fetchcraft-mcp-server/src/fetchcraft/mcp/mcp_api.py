@@ -119,7 +119,7 @@ def add_tools(mcp: FastMCP, find_files_service: FindFilesService, server_url: st
             html_content = f"""
 <html lang="en">
     <head>
-    <meta http-equiv="refresh" content="0; url="{server_url}/find-files?query={query}&num_results={num_results}&offset={offset}">
+    <meta http-equiv="refresh" content="0;url={server_url}/find-files?query={query}&num_results={num_results}&offset={offset}">
     </head>
     <body>
     </body>

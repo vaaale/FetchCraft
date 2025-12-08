@@ -19,12 +19,17 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.windsurf
 
 # Virtual environments
 .venv/
 venv/
 ENV/
 env/
+
+# Environment variables
+.env
+.env.example
 
 # Testing and Coverage
 .pytest_cache/
@@ -41,6 +46,9 @@ htmlcov/
 *.swp
 *.swo
 *~
+logs/
+images/
+uploads/
 
 # OS
 .DS_Store
@@ -72,3 +80,6 @@ pdfs/
 # Keep README for package info
 !README.md
 Dockerfile*
+
+# Other
+librechat.*

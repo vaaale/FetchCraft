@@ -1,3 +1,5 @@
+import os
+
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -72,13 +74,18 @@ def init_server(*args):
 
     combined_app = configure_fetchcraft_mcp(app, mcp_name="Fetchcraft Files MCP Server")
 
+    # print environment
+    print("Environment variables:")
+    for key, value in os.environ.items():
+        print(f"{key}: {value}")
+
     return combined_app
 
 
 def main():
     """Entry point for the fetchcraft-mcp CLI command."""
     import uvicorn
-    uvicorn.run("fetchcraft.mcp.server:init_server", host="0.0.0.0", port=8003, factory=True)
+    uvicorn.run("fetchcraft.mcp.server:init_server", host=settings.host, port=settings.port, factory=True)
 
 
 if __name__ == "__main__":

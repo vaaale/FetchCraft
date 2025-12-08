@@ -79,7 +79,7 @@ class Settings(BaseSettings):
 
     # Server configuration
     host: str = Field(default="0.0.0.0", description="Server host")
-    port: int = Field(default=8080, description="Server port")
+    port: int = Field(default=8001, description="Server port")
     max_concurrent_requests: int = Field(default=10, description="Maximum concurrent requests")
     max_concurrent_files: int = Field(default=4, description="Maximum concurrent file processing")
     max_file_size_mb: int = Field(default=100, description="Maximum file size in MB")
