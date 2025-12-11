@@ -406,7 +406,7 @@ class GenerateQuestionContextPairsTransformation(Transformation):
             node_qa_pairs = node_qa_map[node_id]
             if self.as_node:
                 q_str = "\n".join([f"{q.question}" for q in node_qa_pairs])
-                q_node = SymNode.create(text=q_str, parent_id=node.node_id, metadata=node.metadata)
+                q_node = SymNode.create(text=q_str, parent_id=node.id, metadata=node.metadata)
                 node.children.append(q_node.id)
                 nodes.append(q_node)
             if self.as_metadata:
