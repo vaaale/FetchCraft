@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import logging
+from collections import defaultdict
 from pathlib import Path
 from typing import Optional, Dict, Any, AsyncGenerator, Union, Iterable
 
@@ -15,6 +16,7 @@ import fsspec
 from pydantic import ConfigDict
 
 from fetchcraft.connector.base import File
+from fetchcraft.evaluation import DatasetGenerator
 from fetchcraft.ingestion.interfaces import (
     Transformation,
     Record,
@@ -23,7 +25,7 @@ from fetchcraft.ingestion.interfaces import (
     TransformationResult,
     PostProcessResult,
 )
-from fetchcraft.node import DocumentNode
+from fetchcraft.node import DocumentNode, SymNode
 from fetchcraft.node_parser import NodeParser
 from fetchcraft.parsing.base import DocumentParser
 
@@ -354,3 +356,60 @@ class ChunkingTransformation(Transformation):
     def get_name(self) -> str:
         """Get transformation name."""
         return "ChunkingTransformation"
+
+
+class GenerateQuestionContextPairsTransformation(Transformation):
+    """
+    Generate question-context pairs from document nodes.
+
+    This transformation takes a document and generates question-context pairs
+    using a DatasetGenerator.
+    """
+
+    def __init__(
+        self,
+        node_attr_name: str = "chunks",
+        num_questions_per_node: int = 3,
+        model: str = "gpt-5",
+        as_node: bool = True,
+        as_metadata: bool = False,
+        show_progress: bool = False
+    ):
+        self.logger = logging.getLogger(__name__)
+        self.node_attr_name = node_attr_name
+        self.num_questions_per_node = num_questions_per_node
+        self.generator = DatasetGenerator(model=model)
+        self.as_node = as_node
+        self.as_metadata = as_metadata
+        self.show_progress = show_progress
+
+    async def process(self, record: Record, correlation_id: str, context: Optional[Dict[str, Any]] = None) -> TransformationResult:
+        nodes = record.get(self.node_attr_name, None)
+        if not nodes:
+            self.logger.warning(f"No nodes found in record {record}")
+            return record
+
+        qa_pairs = await self.generator.from_nodes(nodes, questions_per_node=self.num_questions_per_node, show_progress=self.show_progress)
+
+        _node_map = {n.id: n for n in nodes}
+
+        node_qa_map = defaultdict(list)
+        for qa in qa_pairs:
+            node_qa_map[qa.node_id].append(qa)
+
+        for node_id in node_qa_map:
+            node = _node_map[node_id]
+            node_qa_pairs = node_qa_map[node_id]
+            if self.as_node:
+                q_str = "\n".join([f"{q.question}" for q in node_qa_pairs])
+                q_node = SymNode.create(text=q_str, parent_id=qa.node_id, metadata=node.metadata)
+                node.children.append(q_node)
+                nodes.append(q_node)
+            if self.as_metadata:
+                q_str = "\n".join([f"- {q.question}" for q in node_qa_pairs])
+                node.metadata["Sample Questions"] = f"* Example questions that can be answered by this document:\n{q_str}"
+
+        return record
+
+
+

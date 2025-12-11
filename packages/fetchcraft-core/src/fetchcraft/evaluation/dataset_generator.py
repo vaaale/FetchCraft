@@ -13,7 +13,7 @@ import logging
 
 from ..document_store.base import DocumentStore
 from ..vector_store.base import VectorStore
-from ..node import Node, DocumentNode, Chunk
+from ..node import Node, DocumentNode, Chunk, ContentMode, NodeType
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +68,7 @@ SOURCE PASSAGE:
 
 Generate {num_questions} questions.
 """
+
 
 class QuestionContextPair(BaseModel):
     """A question-answer pair for evaluation."""
@@ -135,8 +136,8 @@ class DatasetGenerator(BaseModel):
     _model: str | Model = PrivateAttr()
 
     def __init__(
-            self,
-            model: str | Model,
+        self,
+        model: str | Model,
     ):
         """
         Initialize the dataset generator.
@@ -152,9 +153,9 @@ class DatasetGenerator(BaseModel):
         self._model = model
 
     async def _generate_questions_for_node(
-            self,
-            node: Node,
-            num_questions: int
+        self,
+        node: Node,
+        num_questions: int
     ) -> List[str]:
         """
         Generate questions that can be answered by the given node.
@@ -219,15 +220,38 @@ class DatasetGenerator(BaseModel):
 
         return nodes
 
-    async def generate_dataset(
-            self,
-            num_documents: int,
-            document_store: DocumentStore,
-            vector_store: VectorStore,
-            index_id: Optional[str] = None,
-            questions_per_node: int = 3,
-            max_nodes_per_document: int = 5,
-            show_progress: bool = True,
+    async def from_nodes(self, nodes: List[Node], questions_per_node: int = 3, show_progress: bool = True) -> List[QuestionContextPair]:
+        # Generate questions for each node
+        node_iterator = tqdm(nodes, desc=f"  Nodes", leave=False) if show_progress else nodes
+
+        qa_pairs: List[QuestionContextPair] = []
+
+        for node in node_iterator:
+            questions = await self._generate_questions_for_node(node, questions_per_node)
+
+            for question in questions:
+                qa_pair = QuestionContextPair(
+                    question=question,
+                    node_id=node.id,
+                    context=node.get_content(mode=ContentMode.EMBEDDING),
+                    metadata={
+                        'doc_id': node.doc_id,
+                        'source': node.metadata.get('source', 'unknown')
+                    }
+                )
+                qa_pairs.append(qa_pair)
+
+        return qa_pairs
+
+    async def from_storage(
+        self,
+        num_documents: int,
+        document_store: DocumentStore,
+        vector_store: VectorStore,
+        index_id: Optional[str] = None,
+        questions_per_node: int = 3,
+        max_nodes_per_document: int = 5,
+        show_progress: bool = True,
     ) -> EvaluationDataset:
         """
         Generate an evaluation dataset.
@@ -244,20 +268,20 @@ class DatasetGenerator(BaseModel):
         logger.info(f"Generating evaluation dataset from {num_documents} documents")
 
         # Sample documents from document store
-        all_documents = await document_store.list_documents(
-            limit=1000,  # Get a large pool to sample from
-            # filters={'document': True} if hasattr(self.document_store, 'list_documents') else None
+        all_ids = await document_store.all_ids(
+            filters={'node_type': NodeType.DOCUMENT}
         )
 
-        if len(all_documents) < num_documents:
+        if len(all_ids) < num_documents:
             logger.warning(
-                f"Only {len(all_documents)} documents available, "
+                f"Only {len(all_ids)} documents available, "
                 f"requested {num_documents}"
             )
-            num_documents = len(all_documents)
+            num_documents = len(all_ids)
 
         # Randomly sample documents
-        sampled_documents = random.sample(all_documents, num_documents)
+        sampled_ids = random.sample(all_ids, num_documents)
+        sampled_documents = await document_store.get_documents(sampled_ids)
 
         qa_pairs: List[QuestionContextPair] = []
 
@@ -277,22 +301,7 @@ class DatasetGenerator(BaseModel):
                 nodes = random.sample(nodes, max_nodes_per_document)
 
             # Generate questions for each node
-            node_iterator = tqdm(nodes, desc=f"  Nodes", leave=False) if show_progress else nodes
-
-            for node in node_iterator:
-                questions = await self._generate_questions_for_node(node, questions_per_node)
-
-                for question in questions:
-                    qa_pair = QuestionContextPair(
-                        question=question,
-                        node_id=node.id,
-                        context=node.text[:500] + "..." if len(node.text) > 500 else node.text,
-                        metadata={
-                            'doc_id': document.id,
-                            'parsing': node.metadata.get('parsing', 'unknown')
-                        }
-                    )
-                    qa_pairs.append(qa_pair)
+            qa_pairs.extend(await self.from_nodes(nodes, questions_per_node, show_progress))
 
         logger.info(f"Generated {len(qa_pairs)} question-answer pairs")
 
@@ -306,12 +315,12 @@ class DatasetGenerator(BaseModel):
         )
 
     async def generate_from_specific_nodes(
-            self,
-            node_ids: List[str],
-            vector_store: VectorStore,
-            questions_per_node: int = 3,
-            index_id: Optional[str] = None,
-            show_progress: bool = True
+        self,
+        node_ids: List[str],
+        vector_store: VectorStore,
+        questions_per_node: int = 3,
+        index_id: Optional[str] = None,
+        show_progress: bool = True
     ) -> EvaluationDataset:
         """
         Generate dataset from specific node IDs.

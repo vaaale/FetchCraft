@@ -55,10 +55,10 @@ generator = DatasetGenerator(
 )
 
 # Generate dataset
-dataset = await generator.generate_dataset(
-    num_documents=10,           # Sample 10 documents
-    questions_per_node=3,        # 3 questions per node
-    max_nodes_per_document=5,    # Use up to 5 nodes per doc
+dataset = await generator.from_storage(
+    num_documents=10,  # Sample 10 documents
+    questions_per_node=3,  # 3 questions per node
+    max_nodes_per_document=5,  # Use up to 5 nodes per doc
     show_progress=True
 )
 
@@ -217,6 +217,7 @@ from fetchcraft import (
     EvaluationDataset
 )
 
+
 async def evaluate_retriever_pipeline():
     # 1. Generate dataset (do this once)
     openai_client = AsyncOpenAI(api_key="...")
@@ -226,27 +227,28 @@ async def evaluate_retriever_pipeline():
         vector_store=vector_store,
         model="gpt-4"
     )
-    
-    dataset = await generator.generate_dataset(
+
+    dataset = await generator.from_storage(
         num_documents=20,
         questions_per_node=3,
         show_progress=True
     )
     dataset.save("eval_dataset.json")
-    
+
     # 2. Evaluate baseline retriever
     evaluator = RetrieverEvaluator(retriever=baseline_retriever)
     baseline_metrics = await evaluator.evaluate(dataset)
     print("Baseline:", baseline_metrics.hit_rate, baseline_metrics.mrr)
-    
+
     # 3. Evaluate improved retriever
     evaluator = RetrieverEvaluator(retriever=improved_retriever)
     improved_metrics = await evaluator.evaluate(dataset)
     print("Improved:", improved_metrics.hit_rate, improved_metrics.mrr)
-    
+
     # 4. Compare
     improvement = improved_metrics.hit_rate - baseline_metrics.hit_rate
     print(f"Hit Rate Improvement: {improvement:+.2%}")
+
 
 asyncio.run(evaluate_retriever_pipeline())
 ```

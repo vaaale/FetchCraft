@@ -38,6 +38,11 @@ class IngestionConfig(FetchcraftAdminConfig):
         default="mongodb://localhost:27017",
         description="MongoDB connection URI"
     )
+
+    # LLM Config
+    llm_model: str = Field(default="gpt-4-turbo", description="LLM model name")
+    openai_api_key: str = Field(default="sk-321", description="LLM API key")
+    openai_base_url: Optional[str] = Field(default=None, description="LLM API base URL")
     
     # Embeddings configuration
     embedding_model: str = Field(default="bge-m3", description="Embedding model name")

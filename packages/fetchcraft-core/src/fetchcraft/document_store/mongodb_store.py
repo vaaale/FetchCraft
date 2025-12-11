@@ -327,7 +327,18 @@ class MongoDBDocumentStore(DocumentStore[Node]):
         """
         count = await self.collection.count_documents({"id": document_id}, limit=1)
         return count > 0
-    
+
+    async def all_ids(self, filters: Optional[Dict[str, Any]] = None) -> List[str]:
+        """
+        Return all document IDs in the store.
+
+        Returns:
+            List of document IDs
+        """
+        query = filters or {}
+        cursor = self.collection.find(query)
+        return [doc["id"] for doc in cursor]
+
     async def list_documents(
         self,
         limit: int = 100,

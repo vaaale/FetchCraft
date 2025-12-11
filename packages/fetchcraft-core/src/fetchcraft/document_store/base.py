@@ -126,7 +126,17 @@ class DocumentStore(ABC, Generic[D]):
             True if document exists, False otherwise
         """
         pass
-    
+
+    @abstractmethod
+    async def all_ids(self, filters: Optional[Dict[str, Any]] = None) -> List[str]:
+        """
+        Return all document IDs in the store.
+
+        Returns:
+            List of document IDs
+        """
+        pass
+
     @abstractmethod
     async def list_documents(
         self,

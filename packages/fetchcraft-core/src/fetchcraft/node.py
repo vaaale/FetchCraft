@@ -2,12 +2,11 @@ import hashlib
 import json
 from abc import abstractmethod, ABC
 from enum import Enum
-from typing import Optional, List, Dict, Any, Set
+from typing import Optional, List, Dict, Any
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, PrivateAttr, computed_field
-
 from fetchcraft.mixins import ObjectNodeMixin
+from pydantic import BaseModel, Field, computed_field
 
 
 # Node type enum
@@ -18,6 +17,11 @@ class NodeType(str, Enum):
     SYMNODE = "SymNode"
     OBJECT = "ObjectNode"
     NODE_WITH_SCORE = "NodeWithScore"
+
+
+class ContentMode(str, Enum):
+    LLM = "llm"
+    EMBEDDING = "embedding"
 
 
 class Node(BaseModel):
@@ -40,9 +44,12 @@ class Node(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid4()))
     node_type: NodeType = NodeType.NODE
+    hash_: Optional[str] = Field(description="Hash of the node", default=None, exclude=True)
+
     text: str
     metadata: Dict[str, Any] = Field(default_factory=dict)
-    hash_: Optional[str] = Field(description="Hash of the node", default=None, exclude=True)
+    exclude_from_llm: List[str] = Field(default_factory=list)
+    exclude_from_embeddings: List[str] = Field(default_factory=list)
     embedding: Optional[List[float]] = None
 
     # Document reference
@@ -55,7 +62,6 @@ class Node(BaseModel):
     # Sequential relationships (sibling ordering)
     next_id: Optional[str] = None
     previous_id: Optional[str] = None
-
 
     @computed_field
     @property
@@ -76,7 +82,6 @@ class Node(BaseModel):
         keys = [str(self.metadata.get(key, "")) for key in sorted(keys)]
 
         return "_".join(keys)
-
 
     @property
     def parent(self) -> Optional[str]:
@@ -175,7 +180,6 @@ class Node(BaseModel):
         if node_id in self.children_ids:
             self.children_ids.remove(node_id)
 
-
     def get_hash(self) -> str:
         # Create a deterministic string from text and metadata
         # Sort metadata keys for consistent hashing
@@ -185,18 +189,31 @@ class Node(BaseModel):
         doc_hash = hashlib.md5(content.encode('utf-8')).hexdigest()
         return doc_hash
 
-    def get_text_with_context(self, include_parent: bool = True) -> str:
+    def _format_metadata(self, excluded_keys: List[str]) -> str:
+        include_keys = [k for k in self.metadata if k not in excluded_keys and not k.startswith("__")]
+
+        metadata_str = "* Metadata\n"
+        filename = self.metadata.get("filename", self.metadata.get("path", self.metadata.get("source", None)))
+        if filename:
+            metadata_str += f"** Filename: {filename}\n"
+
+        for k in include_keys:
+            metadata_str += f"- {k}: {self.metadata[k]}\n"
+
+        return metadata_str
+
+
+    def get_content(self, mode: ContentMode = ContentMode.LLM) -> str:
         """
-        Get the text. Note: context from parent cannot be included as this method
-        no longer has access to Node objects, only IDs.
-        
-        Args:
-            include_parent: Deprecated - no longer used
-            
+        Get the node content.
+
         Returns:
-            The node's text
+            The node's content
         """
-        return self.text
+        metadata_str = self._format_metadata(self.exclude_from_llm if mode == ContentMode.LLM else self.exclude_from_embeddings)
+
+        context_str = f"---\n{metadata_str}\n---\n\n* Content\n{self.text}"
+        return context_str
 
 
 class DocumentNode(Node):

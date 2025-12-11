@@ -55,7 +55,7 @@ generator = DatasetGenerator(
     vector_store=vector_store
 )
 
-dataset = await generator.generate_dataset(
+dataset = await generator.from_storage(
     num_documents=10,
     questions_per_node=3
 )
@@ -184,7 +184,7 @@ generator = DatasetGenerator(
 )
 
 # Generate comprehensive dataset
-dataset = await generator.generate_dataset(
+dataset = await generator.from_storage(
     num_documents=50,
     questions_per_node=3,
     max_nodes_per_document=5,
