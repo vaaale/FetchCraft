@@ -25,6 +25,18 @@ from fetchcraft.ingestion.models import (
 )
 
 
+def _normalize_job_status(status_str: str) -> JobStatus:
+    """
+    Normalize job status string to JobStatus enum.
+    
+    Handles legacy status values for backwards compatibility:
+    - 'processing' -> JobStatus.RUNNING
+    """
+    if status_str == "processing":
+        return JobStatus.RUNNING
+    return JobStatus(status_str)
+
+
 def _sanitize_for_postgres(obj: Any) -> Any:
     """
     Recursively remove null bytes from strings in an object.
@@ -366,6 +378,16 @@ class DocumentRepository(ABC):
             Count of child documents
         """
         pass
+    
+    @abstractmethod
+    async def count_documents_by_status(self) -> Dict[str, int]:
+        """
+        Count all documents grouped by status.
+        
+        Returns:
+            Dictionary mapping status string to count
+        """
+        pass
 
 
 class TaskRepository(ABC):
@@ -627,7 +649,7 @@ class PostgresJobRepository(JobRepository):
             return IngestionJob(
                 id=row["id"],
                 name=row["name"],
-                status=JobStatus(row["status"]),
+                status=_normalize_job_status(row["status"]),
                 source_path=row["source_path"],
                 document_root=row["document_root"],
                 pipeline_steps=json.loads(row["pipeline_steps"]) if isinstance(row["pipeline_steps"], str) else row["pipeline_steps"],
@@ -674,7 +696,7 @@ class PostgresJobRepository(JobRepository):
                     IngestionJob(
                         id=row["id"],
                         name=row["name"],
-                        status=JobStatus(row["status"]),
+                        status=_normalize_job_status(row["status"]),
                         source_path=row["source_path"],
                         document_root=row["document_root"],
                         pipeline_steps=json.loads(row["pipeline_steps"]) if isinstance(row["pipeline_steps"], str) else row["pipeline_steps"],
@@ -1175,6 +1197,14 @@ class PostgresDocumentRepository(DocumentRepository):
                     parent_doc_id
                 )
             return count or 0
+    
+    async def count_documents_by_status(self) -> Dict[str, int]:
+        """Count all documents grouped by status."""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT status, COUNT(*) as count FROM ingestion_documents GROUP BY status"
+            )
+            return {row["status"]: row["count"] for row in rows}
 
 
 class PostgresTaskRepository(TaskRepository):

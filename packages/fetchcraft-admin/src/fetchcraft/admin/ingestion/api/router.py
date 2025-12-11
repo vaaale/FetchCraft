@@ -493,6 +493,7 @@ def create_ingestion_router(
     async def get_queue_stats():
         """Get statistics about the ingestion queues."""
         queue_backend = get_queue_backend()
+        ingestion_service = get_ingestion_service()
         
         if not queue_backend:
             raise HTTPException(status_code=503, detail="Queue backend not initialized")
@@ -500,15 +501,27 @@ def create_ingestion_router(
         try:
             stats = await queue_backend.get_stats()
             
+            # Get document stats for accurate status counts
+            doc_stats = {}
+            if ingestion_service:
+                doc_stats = await ingestion_service.get_document_stats()
+            
             oldest_pending = None
             if stats.get("oldest_pending"):
                 oldest_pending = datetime.fromtimestamp(stats["oldest_pending"]).strftime("%Y-%m-%d %H:%M:%S")
             
+            # Map document statuses to the by_state format expected by frontend
+            # Frontend expects: done, ready (pending), failed
+            by_state = {
+                "done": doc_stats.get("completed", 0),
+                "ready": doc_stats.get("pending", 0) + doc_stats.get("processing", 0),
+            }
+            
             return QueueStatsResponse(
-                total_messages=stats.get("total_messages", 0),
-                by_state=stats.get("by_state", {}),
+                total_messages=sum(doc_stats.values()) if doc_stats else stats.get("total_messages", 0),
+                by_state=by_state,
                 by_queue=stats.get("by_queue", {}),
-                failed_messages=stats.get("failed_messages", 0),
+                failed_messages=doc_stats.get("failed", 0),
                 oldest_pending=oldest_pending,
             )
         

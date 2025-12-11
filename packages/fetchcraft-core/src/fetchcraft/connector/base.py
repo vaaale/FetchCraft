@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import fsspec
 from pydantic import BaseModel, Field
+import magic
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +27,16 @@ class File(BaseModel, ABC):
 
     def __init__(self, path: Path, fs: fsspec.AbstractFileSystem, mimetype: Optional[str] = None, encoding: Optional[str] = None, **kwargs):
         if mimetype is None or encoding is None:
-            _mimetype, _encoding = mimetypes.guess_type(path) or "application/octet-stream"
-            mimetype = mimetype or _mimetype or "application/octet-stream"
-            encoding = encoding or _encoding or "utf-8"
+            with fs.open(str(path), "rb") as f:
+                buf = f.read()
+                _mimetype = magic.from_buffer(buf, mime=True)
+
+            _mimetype_, _encoding_ = mimetypes.guess_type(path) or ("text/plain", "utf-8")
+            if "text/plain" == _mimetype_ or "text/plain" == _mimetype:
+                mimetype = "text/plain"
+            else:
+                mimetype = mimetype or _mimetype or _mimetype_
+            encoding = encoding or _encoding_ or "utf-8"
 
         super().__init__(path=path, fs=fs, mimetype=mimetype, encoding=encoding, **kwargs)
 

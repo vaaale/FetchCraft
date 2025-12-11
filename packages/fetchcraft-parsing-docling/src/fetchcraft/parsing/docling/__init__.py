@@ -10,6 +10,7 @@ from .models import (
 )
 from .client.async_client import AsyncDoclingParserClient
 from .client.simple_client import DoclingParserClient
+from .models import UnsupportedFileFormatError
 
 __all__ = [
     "DoclingDocumentParser",
@@ -22,4 +23,5 @@ __all__ = [
     "JobResultResponse",
     "AsyncDoclingParserClient",
     "DoclingParserClient",
+    "UnsupportedFileFormatError",
 ]

@@ -5,6 +5,12 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 from pydantic import BaseModel, Field
 
+class UnsupportedFileFormatError(Exception):
+    """Exception raised when an unsupported file format is encountered."""
+    def __init__(self, message: str, filename: str):
+        super().__init__(message)
+        self.filename = filename
+
 
 class JobStatusEnum(str, Enum):
     """Enum for job status."""

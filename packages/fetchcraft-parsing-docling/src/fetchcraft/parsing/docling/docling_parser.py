@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import AsyncGenerator, Optional, Dict, Any
 
 from fetchcraft.connector import File
+from fetchcraft.parsing.docling.models import UnsupportedFileFormatError
 
 try:
     from docling.document_converter import DocumentConverter
@@ -43,6 +44,7 @@ DOCLING_SUPPORTED_EXTENSIONS = {
     '.asciidoc', # AsciiDoc
     '.adoc',     # AsciiDoc
     '.md',       # Markdown
+    '.txt',       # Markdown
 }
 
 
@@ -109,7 +111,7 @@ class DoclingDocumentParser(DocumentParser):
             file_ext = file_path.suffix.lower()
             if file_ext not in DOCLING_SUPPORTED_EXTENSIONS:
                 self.logger.warning(f"Unsupported file format: {file_ext}")
-                return
+                raise UnsupportedFileFormatError(f"Unsupported file format: {file_ext}", filename=str(file_path))
 
         # Yield one or more documents from this file
         try:

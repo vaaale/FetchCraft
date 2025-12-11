@@ -50,6 +50,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from fetchcraft.parsing.docling.docling_parser import DOCLING_SUPPORTED_EXTENSIONS
 from fetchcraft.parsing.docling.models import (
     ParseResponse,
     BatchParseResponse,
@@ -629,6 +630,15 @@ async def submit_job(
     for file in files:
         content = await file.read()
         filename = file.filename or "unknown"
+
+        # Check file type
+        file_ext = Path(file.filename).suffix.lower()
+        if file_ext not in DOCLING_SUPPORTED_EXTENSIONS:
+            logger.error(f"Unsupported file format: {file.filename}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Unsupported file format: {file.filename}"
+            )
 
         # Check file size
         if len(content) > settings.max_file_size_bytes:

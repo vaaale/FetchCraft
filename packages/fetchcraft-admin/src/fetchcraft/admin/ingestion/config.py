@@ -38,6 +38,10 @@ class IngestionConfig(FetchcraftAdminConfig):
         default="mongodb://localhost:27017",
         description="MongoDB connection URI"
     )
+    mongo_db: str = Field(
+        default="fetchcraft",
+        description="MongoDB database name"
+    )
 
     # LLM Config
     llm_model: str = Field(default="gpt-4-turbo", description="LLM model name")

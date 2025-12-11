@@ -17,6 +17,7 @@ from fetchcraft.admin.handler import FetchcraftAdminHandler
 from fetchcraft.admin.ingestion.api.router import create_ingestion_router
 from fetchcraft.admin.ingestion.services.ingestion_service import IngestionService
 from fetchcraft.admin.ingestion.services.worker_manager import WorkerManager
+from importlib.resources import files
 
 if TYPE_CHECKING:
     from fetchcraft.admin.context import HandlerContext
@@ -190,9 +191,10 @@ class FetchcraftIngestionAdminHandler(FetchcraftAdminHandler):
     def _create_ui_router(self) -> APIRouter:
         """Create the UI router for serving frontend."""
         router = APIRouter()
-        frontend_dist = self._frontend_dist
-        
+        frontend_dist = files("fetchcraft.frontend") / "dist"
+
         if frontend_dist is None:
+            frontend_dist = self._frontend_dist
             # Try default location
             package_root = Path(__file__).parent.parent.parent.parent
             frontend_dist = package_root / "frontend" / "dist"

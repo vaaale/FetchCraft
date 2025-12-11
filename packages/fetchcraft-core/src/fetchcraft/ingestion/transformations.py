@@ -25,7 +25,7 @@ from fetchcraft.ingestion.interfaces import (
     TransformationResult,
     PostProcessResult,
 )
-from fetchcraft.node import DocumentNode, SymNode
+from fetchcraft.node import DocumentNode, SymNode, node_from_dict
 from fetchcraft.node_parser import NodeParser
 from fetchcraft.parsing.base import DocumentParser
 
@@ -384,7 +384,11 @@ class GenerateQuestionContextPairsTransformation(Transformation):
         self.show_progress = show_progress
 
     async def process(self, record: Record, correlation_id: str, context: Optional[Dict[str, Any]] = None) -> TransformationResult:
-        nodes = record.get(self.node_attr_name, None)
+        node_dicts = record.get(self.node_attr_name, None)
+        all_nodes = [node_from_dict(node_dict) for node_dict in node_dicts]
+        # Get the top parent nodes
+        nodes = [n for n in all_nodes if n.parent_id is None]
+
         if not nodes:
             self.logger.warning(f"No nodes found in record {record}")
             return record
@@ -402,12 +406,14 @@ class GenerateQuestionContextPairsTransformation(Transformation):
             node_qa_pairs = node_qa_map[node_id]
             if self.as_node:
                 q_str = "\n".join([f"{q.question}" for q in node_qa_pairs])
-                q_node = SymNode.create(text=q_str, parent_id=qa.node_id, metadata=node.metadata)
-                node.children.append(q_node)
+                q_node = SymNode.create(text=q_str, parent_id=node.node_id, metadata=node.metadata)
+                node.children.append(q_node.id)
                 nodes.append(q_node)
             if self.as_metadata:
                 q_str = "\n".join([f"- {q.question}" for q in node_qa_pairs])
                 node.metadata["Sample Questions"] = f"* Example questions that can be answered by this document:\n{q_str}"
+
+        record[self.node_attr_name] = [n.model_dump() for n in nodes]
 
         return record
 

@@ -321,3 +321,7 @@ class IngestionService:
                 jobs_dict[job_id] = job
 
         return docs, jobs_dict
+
+    async def get_document_stats(self) -> dict[str, int]:
+        """Get document counts grouped by status."""
+        return await self.doc_repo.count_documents_by_status()

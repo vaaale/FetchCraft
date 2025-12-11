@@ -565,3 +565,23 @@ class DefaultObjectMapper(ObjectMapper):
     async def resolve_custom(self, node: ObjectNode, score: float, query: str, top_k: Optional[int] = None, **kwargs) -> List[Node]:
         """Override this method to implement custom object resolution"""
         return [node]
+
+
+def node_from_dict(node: dict[str, Any]) -> Node | NodeWithScore:
+    if "node_type" not in node:
+        raise ValueError("Node must have a node_type")
+
+    if node["node_type"] == NodeType.DOCUMENT:
+        return DocumentNode(**node)
+    elif node["node_type"] == NodeType.NODE:
+        return Node(**node)
+    elif node["node_type"] == NodeType.CHUNK:
+        return Chunk(**node)
+    elif node["node_type"] == NodeType.SYMNODE:
+        return SymNode(**node)
+    elif node["node_type"] == NodeType.OBJECT:
+        return ObjectNode(**node)
+    elif node["node_type"] == NodeType.NODE_WITH_SCORE:
+        return NodeWithScore(**node)
+    else:
+        raise ValueError(f"Unsupported node type: {node['node_type']}")
