@@ -69,11 +69,11 @@ class DefaultPipelineFactory(FetchcraftIngestionPipelineFactory):
     - Vector index sink
     """
 
-    async def create_source(self, ingestion_root: Path, documents_path: Path) -> Source:
+    async def create_source(self, ingestion_root: Path, sub_path: Path) -> Source:
         """Create a source for the pipeline."""
         connector = FilesystemConnector(
             root=ingestion_root,
-            path=documents_path,
+            path=sub_path,
             filter=None
         )
         self.directories = await connector.list_directories()
@@ -81,7 +81,7 @@ class DefaultPipelineFactory(FetchcraftIngestionPipelineFactory):
         return ConnectorSource(
             connector=connector,
             root=ingestion_root,
-            document_root=documents_path,
+            document_root=sub_path,
         )
 
     async def configure_pipeline(self, pipeline: TrackedIngestionPipeline) -> None:

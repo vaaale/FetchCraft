@@ -4,11 +4,13 @@ from pwd import getpwuid
 from typing import *
 
 import fsspec
-from pydantic import ConfigDict
+from pydantic import ConfigDict, BaseModel
 
 from fetchcraft.connector import Connector, File
 from fetchcraft.connector.base import Role
+import logging
 
+logger = logging.getLogger(__name__)
 
 class LocalFile(File):
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -79,18 +81,19 @@ class LocalFile(File):
         }
 
 
-class FilesystemConnector(Connector):
-    path: Path
+class FilesystemConnector(BaseModel, Connector):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    root_path: Path
+    sub_path: Path
     fs: fsspec.AbstractFileSystem
-    filter: Optional[Callable[[LocalFile], bool]] = None
+    filter: Optional[Callable[[LocalFile], Awaitable[bool]]] = None
 
-    def __init__(self, root: Path, path: Path, fs: Optional[fsspec.AbstractFileSystem] = None, filter: Optional[Callable[[LocalFile], bool]] = None):
+    def __init__(self, root_path: Path, fs: Optional[fsspec.AbstractFileSystem] = None, sub_path: Path = Path("/"), filter: Optional[Callable[[LocalFile], Awaitable[bool]]] = None):
         if fs is None:
-            fs = fsspec.filesystem("dir", path=path)
-        self.root = root
-        self.path = path
-        self.fs = fs
-        self.filter = filter
+            fs = fsspec.filesystem("dir", path=root_path)
+
+        super().__init__(root_path=root_path, sub_path=sub_path, fs=fs, filter=filter)
+
 
     def get_name(self) -> str:
         return f"FilesystemConnector"
@@ -103,9 +106,10 @@ class FilesystemConnector(Connector):
         return dirs
 
     async def glob(self) -> AsyncIterable[LocalFile]:
-        print(f"Ingesting files from {self.path}")
-        for path in self.fs.glob("**/*"):
-            if self.fs.isdir(path) or (self.filter and not self.filter(LocalFile(path=path, fs=self.fs))):
+        logger.info(f"Ingesting files from {self.root_path}")
+        ingest_from_path = self.sub_path / "**/*"
+        for path in self.fs.glob(str(ingest_from_path)):
+            if self.fs.isdir(path) or (self.filter and not await self.filter(LocalFile(path=path, fs=self.fs))):
                 continue
-            print(f"Ingesting file: {path}")
+            logger.info(f"Ingesting file: {path}")
             yield LocalFile(path=path, fs=self.fs)

@@ -8,26 +8,23 @@ from __future__ import annotations
 
 import base64
 import logging
-from collections import defaultdict
 from pathlib import Path
-from typing import Optional, Dict, Any, AsyncGenerator, Union, Iterable
+from typing import Optional, Dict, Any, AsyncGenerator
 
 import fsspec
-from pydantic import ConfigDict
-
 from fetchcraft.connector.base import File
 from fetchcraft.evaluation import DatasetGenerator
 from fetchcraft.ingestion.interfaces import (
     Transformation,
     Record,
     AsyncRemote,
-    AsyncDeferred,
     TransformationResult,
     PostProcessResult,
 )
-from fetchcraft.node import DocumentNode, SymNode, node_from_dict
+from fetchcraft.node import DocumentNode
 from fetchcraft.node_parser import NodeParser
 from fetchcraft.parsing.base import DocumentParser
+from pydantic import ConfigDict
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +36,7 @@ logger = logging.getLogger(__name__)
 class FileAdapter(File):
     """Adapter to provide file interface from in-memory content."""
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    
+
     def __init__(self, path_str: str, content: bytes, mimetype: str, encoding: str, metadata: dict):
         fs = fsspec.filesystem('memory')
         super().__init__(
@@ -50,16 +47,16 @@ class FileAdapter(File):
         )
         self._content = content
         self._metadata = {**metadata, "encoding": encoding, "mimetype": mimetype}
-    
+
     async def read(self) -> bytes:
         return self._content
-    
+
     def name(self) -> str:
         return self.path.name
-    
+
     def permissions(self) -> list:
         return []
-    
+
     def metadata(self) -> dict:
         return self._metadata
 
@@ -78,7 +75,7 @@ class ParsingTransformation(Transformation):
     Attributes:
         parser_map: Map of mimetype -> parser (use "default" for fallback)
     """
-    
+
     def __init__(
         self,
         parser: Optional[DocumentParser] = None,
@@ -92,12 +89,12 @@ class ParsingTransformation(Transformation):
             parser_map: Map of mimetype to parser
         """
         self.parser_map = parser_map or {}
-        
+
         if parser and "default" not in self.parser_map:
             self.parser_map["default"] = parser
-        
+
         logger.debug(f"ParsingTransformation initialized with {len(self.parser_map)} parsers")
-    
+
     async def process(
         self,
         record: Record,
@@ -121,7 +118,7 @@ class ParsingTransformation(Transformation):
         mimetype = record.get("mimetype", "")
         file_path = record.get("path", "")
         source = record.get("source", file_path)
-        
+
         if not record.content:
             raise ValueError(f"No file content in record for {source}")
 
@@ -131,7 +128,7 @@ class ParsingTransformation(Transformation):
         # Select parser based on mimetype
         logger.info(f"Getting parser for {file_path} -> {mimetype}")
         parser = self.parser_map.get(mimetype, self.parser_map.get("default", None))
-        
+
         if not parser:
             raise ValueError(f"No parser found for file {source} with mimetype {mimetype}")
 
@@ -143,13 +140,13 @@ class ParsingTransformation(Transformation):
             encoding=record.get("encoding", "utf-8"),
             metadata=record.metadata()
         )
-        
+
         # Build metadata to pass to parser
         parser_metadata = {
             "path": file_path,
             **record.metadata()
         }
-        
+
         # Check if parser is remote (async callback-based)
         if parser.is_remote:
             return await self._parse_remote(correlation_id, file_adapter, parser, parser_metadata)
@@ -179,18 +176,18 @@ class ParsingTransformation(Transformation):
                 # Ensure the document has the source in its metadata
                 if "source" not in doc.metadata:
                     doc.metadata["source"] = source
-                
+
                 # Create Record from parsed document
                 yield Record({
                     "document": doc.model_dump(),
                     "source": source,
                     **parser_metadata,
                 })
-                
+
         except Exception as e:
             logger.error(f"Error parsing file {source}: {e}", exc_info=True)
             raise
-    
+
     def post_process(self, message: Dict[str, Any]) -> PostProcessResult:
         """
         Post-process callback message from remote parsing service.
@@ -198,13 +195,13 @@ class ParsingTransformation(Transformation):
         Transforms node callback data into a Record.
         """
         msg_type = message.get("type", "")
-        
+
         if msg_type == "node":
             node_data = message.get("node", {})
             filename = message.get("filename", "")
             node_index = message.get("node_index", 0)
             node_metadata = node_data.get("metadata", {})
-            
+
             # Create Record from node data
             # Note: "document" must be set AFTER spreading metadata to avoid being overwritten
             record_data = {
@@ -215,10 +212,10 @@ class ParsingTransformation(Transformation):
                 "document": node_data,  # Set last to ensure it's not overwritten
             }
             return Record(record_data)
-        
+
         # For other message types, use default behavior
         return Record(message)
-    
+
     def get_name(self) -> str:
         """Get transformation name."""
         return "ParsingTransformation"
@@ -230,7 +227,7 @@ class ExtractKeywords(Transformation):
     
     This is a simple keyword extraction based on word frequency.
     """
-    
+
     def __init__(self, max_keywords: int = 10, min_word_length: int = 4):
         """
         Initialize keyword extractor.
@@ -241,7 +238,7 @@ class ExtractKeywords(Transformation):
         """
         self.max_keywords = max_keywords
         self.min_word_length = min_word_length
-    
+
     async def process(
         self,
         record: Record,
@@ -252,22 +249,22 @@ class ExtractKeywords(Transformation):
         doc = DocumentNode.model_validate(record["document"])
         text = doc.text
         source = record.get("source", "unknown")
-        
+
         # Simple word frequency analysis
         words = [w.strip(".,!?;:\"'()[]{}-").lower() for w in text.split()]
         counts: dict[str, int] = {}
-        
+
         for w in words:
             if len(w) >= self.min_word_length:
                 counts[w] = counts.get(w, 0) + 1
-        
+
         # Get top keywords
         top = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
         top = top[:self.max_keywords]
-        
+
         keywords = [k for k, _ in top]
         record["keywords"] = keywords
-        
+
         logger.debug(f"Extracted {len(keywords)} keywords from {source}")
         return record
 
@@ -279,7 +276,7 @@ class DocumentSummarization(Transformation):
     This uses a basic sentence extraction approach. For production,
     consider using a more sophisticated summarization model.
     """
-    
+
     def __init__(self, max_sentences: int = 30):
         """
         Initialize summarization.
@@ -288,7 +285,7 @@ class DocumentSummarization(Transformation):
             max_sentences: Maximum number of sentences in summary
         """
         self.max_sentences = max_sentences
-    
+
     async def process(
         self,
         record: Record,
@@ -299,17 +296,17 @@ class DocumentSummarization(Transformation):
         doc = DocumentNode.model_validate(record["document"])
         text = doc.text
         source = record.get("source", "unknown")
-        
+
         # Split into sentences
         sentences = [s.strip() for s in text.split(".") if s.strip()]
         selected = sentences[:self.max_sentences]
         summary = ". ".join(selected)
-        
+
         # Update document metadata
         doc.metadata['summary'] = summary
         record["document"] = doc.model_dump()
         record["summary"] = summary
-        
+
         logger.debug(
             f"Created summary of {len(selected)} sentences for {source}"
         )
@@ -323,7 +320,7 @@ class ChunkingTransformation(Transformation):
     This transformation takes a document and splits it into smaller
     chunks suitable for embedding and retrieval.
     """
-    
+
     def __init__(self, chunker: NodeParser):
         """
         Initialize chunking transformation.
@@ -332,7 +329,7 @@ class ChunkingTransformation(Transformation):
             chunker: The NodeParser to use for chunking
         """
         self.chunker = chunker
-    
+
     async def process(
         self,
         record: Record,
@@ -342,17 +339,17 @@ class ChunkingTransformation(Transformation):
         """Chunk the document."""
         doc = DocumentNode.model_validate(record["document"])
         source = record.get("source", "unknown")
-        
+
         # Chunk the document
         nodes = self.chunker.get_nodes([doc])
-        
+
         # Store chunks in record
         record["document"] = doc.model_dump()
         record["chunks"] = [n.model_dump() for n in nodes]
-        
+
         logger.debug(f"Chunked {source} into {len(nodes)} chunks")
         return record
-    
+
     def get_name(self) -> str:
         """Get transformation name."""
         return "ChunkingTransformation"
@@ -368,54 +365,21 @@ class GenerateQuestionContextPairsTransformation(Transformation):
 
     def __init__(
         self,
-        node_attr_name: str = "chunks",
         num_questions_per_node: int = 3,
         model: str = "gpt-5",
-        as_node: bool = True,
-        as_metadata: bool = False,
         show_progress: bool = False
     ):
         self.logger = logging.getLogger(__name__)
-        self.node_attr_name = node_attr_name
         self.num_questions_per_node = num_questions_per_node
         self.generator = DatasetGenerator(model=model)
-        self.as_node = as_node
-        self.as_metadata = as_metadata
         self.show_progress = show_progress
 
     async def process(self, record: Record, correlation_id: str, context: Optional[Dict[str, Any]] = None) -> TransformationResult:
-        node_dicts = record.get(self.node_attr_name, None)
-        all_nodes = [node_from_dict(node_dict) for node_dict in node_dicts]
-        # Get the top parent nodes
-        nodes = [n for n in all_nodes if n.parent_id is None]
+        doc = DocumentNode.model_validate(record["document"])
 
-        if not nodes:
-            self.logger.warning(f"No nodes found in record {record}")
-            return record
+        qa_pairs = await self.generator.from_nodes([doc], questions_per_node=self.num_questions_per_node, show_progress=self.show_progress)
 
-        qa_pairs = await self.generator.from_nodes(nodes, questions_per_node=self.num_questions_per_node, show_progress=self.show_progress)
-
-        _node_map = {n.id: n for n in nodes}
-
-        node_qa_map = defaultdict(list)
-        for qa in qa_pairs:
-            node_qa_map[qa.node_id].append(qa)
-
-        for node_id in node_qa_map:
-            node = _node_map[node_id]
-            node_qa_pairs = node_qa_map[node_id]
-            if self.as_node:
-                q_str = "\n".join([f"{q.question}" for q in node_qa_pairs])
-                q_node = SymNode.create(text=q_str, parent_id=node.id, metadata=node.metadata)
-                node.children.append(q_node.id)
-                nodes.append(q_node)
-            if self.as_metadata:
-                q_str = "\n".join([f"- {q.question}" for q in node_qa_pairs])
-                node.metadata["Sample Questions"] = f"* Example questions that can be answered by this document:\n{q_str}"
-
-        record[self.node_attr_name] = [n.model_dump() for n in nodes]
+        doc.metadata["questions"] = [q.question for q in qa_pairs]
+        record["document"] = doc.model_dump()
 
         return record
-
-
-

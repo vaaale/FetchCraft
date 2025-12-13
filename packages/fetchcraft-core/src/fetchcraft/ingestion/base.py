@@ -18,10 +18,7 @@ import dataclasses
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, AsyncIterable, Awaitable, Callable, Iterable, List, Optional, Protocol, Dict
-
-from fetchcraft.connector import Connector
-from fetchcraft.parsing.base import DocumentParser
+from typing import Any, AsyncIterable, Awaitable, Callable, Iterable, List, Optional, Protocol
 
 UTC = timezone.utc
 
@@ -253,7 +250,7 @@ class IngestionPipeline:
                 return await self.wait_until_idle(poll_interval, grace_seconds)
             grace_check += 1
             await asyncio.sleep(poll_interval)
-        
+
         print(f"[wait_until_idle] Grace period complete, queues are idle!")
 
     async def _start_workers(self) -> None:
@@ -415,18 +412,3 @@ class IngestionPipeline:
             if spec:
                 out.append(StepSpec(step=spec.step, deferred=bool(c.get("deferred", False))))
         return out
-
-
-class ConnectorSource(Source):
-    def __init__(self, connector: Connector, parser: Optional[DocumentParser] = None, parser_map: Optional[Dict[str, DocumentParser]] = None):
-        self.connector = connector
-        self.parser_map = parser_map or {}
-        if parser and "default" not in self.parser_map:
-            self.parser_map["default"] = parser
-
-    async def read(self) -> AsyncIterable[Record]:  # async generator
-        async for file in self.connector.glob():
-            parser = self.parser_map.get(file.mimetype, self.parser_map.get("default"))
-            documents = parser.parse(file)
-            async for doc in documents:
-                yield Record(id=str(file.path), payload={"document": doc.model_dump()}, meta={"path": str(file.path)})

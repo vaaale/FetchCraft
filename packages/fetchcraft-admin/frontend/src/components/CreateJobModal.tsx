@@ -36,11 +36,35 @@ export default function CreateJobModal({ onClose, onJobCreated }: CreateJobModal
   const handleNavigate = (item: DirectoryItem) => {
     if (item.is_directory) {
       loadDirectories(item.path)
+      
+      // Auto-fill job name if empty
+      if (!jobName.trim()) {
+        setJobName(toCamelCase(item.name))
+      }
     }
+  }
+
+  const toCamelCase = (str: string): string => {
+    return str
+      .split(/[-_\s]+/)
+      .map((word, index) => 
+        index === 0 
+          ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+          : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+      )
+      .join(' ')
   }
 
   const handleSelectPath = () => {
     setSelectedPath(currentPath)
+    
+    // Auto-fill job name if empty
+    if (!jobName.trim() && currentPath) {
+      const folderName = currentPath.split('/').pop() || ''
+      if (folderName) {
+        setJobName(toCamelCase(folderName))
+      }
+    }
   }
 
   const handleGoUp = () => {

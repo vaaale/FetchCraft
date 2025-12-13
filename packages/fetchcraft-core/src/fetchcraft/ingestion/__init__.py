@@ -59,11 +59,6 @@ Components:
 # Legacy support (deprecated - use new pipeline)
 from fetchcraft.ingestion.base import (
     IngestionPipeline as LegacyIngestionPipeline,
-    Record as LegacyRecord,
-    Source as LegacySource,
-    Transformation as LegacyTransformation,
-    Sink as LegacySink,
-    ConnectorSource as LegacyConnectorSource,
 )
 # Interfaces (new naming without I-prefix)
 from fetchcraft.ingestion.interfaces import (
@@ -181,8 +176,4 @@ __all__ = [
     # Queue Backends
     "AsyncPostgresQueue",
     "AsyncSQLiteQueue",
-    # Legacy (deprecated)
-    "LegacyIngestionPipeline",
-    "LegacyRecord",
-    "LegacyConnectorSource",
 ]

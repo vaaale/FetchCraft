@@ -2,7 +2,7 @@ import hashlib
 import json
 from abc import abstractmethod, ABC
 from enum import Enum
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, ClassVar
 from uuid import uuid4
 
 from fetchcraft.mixins import ObjectNodeMixin
@@ -48,8 +48,8 @@ class Node(BaseModel):
 
     text: str
     metadata: Dict[str, Any] = Field(default_factory=dict)
-    exclude_from_llm: List[str] = Field(default_factory=list)
-    exclude_from_embeddings: List[str] = Field(default_factory=list)
+    exclude_from_llm: ClassVar[List[str]] = []
+    exclude_from_embeddings: ClassVar[List[str]] = []
     embedding: Optional[List[float]] = None
 
     # Document reference

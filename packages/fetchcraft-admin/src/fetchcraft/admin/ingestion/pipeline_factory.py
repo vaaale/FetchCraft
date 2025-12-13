@@ -139,7 +139,7 @@ class FetchcraftIngestionPipelineFactory(BaseModel):
         return self._document_root
     
     @abstractmethod
-    async def create_source(self, ingestion_root: Path, documents_path: Path) -> Source:
+    async def create_source(self, ingestion_root: Path, sub_path: Path) -> Source:
         """Create a source for the pipeline."""
         pass
 
@@ -186,7 +186,7 @@ class FetchcraftIngestionPipelineFactory(BaseModel):
         """
         logger.info(f"Creating pipeline for job '{job.name}' (ID: {job.id})")
         
-        full_source_path = self._document_root / job.source_path
+        ingest_from_path = self._document_root / job.source_path
 
         # Create base pipeline with system dependencies
         pipeline = TrackedIngestionPipeline(
@@ -202,7 +202,7 @@ class FetchcraftIngestionPipelineFactory(BaseModel):
         
         # Configure source if requested (skip for recovery scenarios)
         if include_source:
-            source = await self.create_source(self._document_root, full_source_path)
+            source = await self.create_source(ingestion_root=self._document_root, sub_path=ingest_from_path)
             pipeline.source(source)
         
         # Call user's configure_pipeline to add transformations and sinks

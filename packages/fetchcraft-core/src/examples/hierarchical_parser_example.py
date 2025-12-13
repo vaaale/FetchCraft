@@ -10,6 +10,7 @@ This example demonstrates:
 
 from fetchcraft.node_parser import HierarchicalNodeParser, SimpleNodeParser
 from fetchcraft.node import DocumentNode, Chunk, SymNode, NodeType
+from fetchcraft.text_splitter import RecursiveTextSplitter
 
 
 def main():
@@ -162,6 +163,7 @@ def main():
     print("="*80)
     
     multi_level_parser = HierarchicalNodeParser(
+        text_splitter=RecursiveTextSplitter(),
         chunk_size=800,
         child_sizes=[400, 200, 100, 50]  # 4 levels!
     )

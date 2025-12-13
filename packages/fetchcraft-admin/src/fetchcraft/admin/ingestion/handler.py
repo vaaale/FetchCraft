@@ -19,6 +19,8 @@ from fetchcraft.admin.ingestion.services.ingestion_service import IngestionServi
 from fetchcraft.admin.ingestion.services.worker_manager import WorkerManager
 from importlib.resources import files
 
+from fetchcraft.text_splitter import RecursiveTextSplitter
+
 if TYPE_CHECKING:
     from fetchcraft.admin.context import HandlerContext
     from fetchcraft.admin.ingestion.pipeline_factory import FetchcraftIngestionPipelineFactory
@@ -281,6 +283,7 @@ class FetchcraftIngestionAdminHandler(FetchcraftAdminHandler):
         )
         
         chunker = HierarchicalNodeParser(
+            text_splitter=RecursiveTextSplitter(),
             chunk_size=config.chunk_size,
             overlap=config.chunk_overlap,
             child_sizes=config.child_chunks,
