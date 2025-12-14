@@ -217,7 +217,17 @@ class VectorIndex(BaseIndex[D]):
             True if deletion was successful
         """
         return await self.vector_store.delete(document_ids, index_id=self.index_id)
-    
+
+    async def count(self) -> int:
+        """
+        Count the number of documents in the index.
+
+        Returns:
+            The number of documents in the index
+        """
+        return await self.vector_store.count(index_id=self.index_id)
+
+
     def as_retriever(
         self,
         top_k: int = 4,

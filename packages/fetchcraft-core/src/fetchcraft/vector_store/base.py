@@ -174,7 +174,18 @@ class VectorStore(BaseModel, ABC, Generic[D]):
             The document if found, None otherwise
         """
         pass
-    
+
+    @abstractmethod
+    async def count(self, index_id: Optional[str] = None) -> int:
+        """
+        Count the number of documents in the vector store.
+
+        Returns:
+            The number of documents in the vector store
+        """
+        pass
+
+
     @classmethod
     @abstractmethod
     def from_config(cls, config: Dict[str, Any]) -> 'VectorStore':

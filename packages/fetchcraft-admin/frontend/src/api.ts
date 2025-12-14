@@ -33,11 +33,6 @@ export interface QueueStats {
   oldest_pending: string | null
 }
 
-export interface IngestionStatus {
-  status: 'running' | 'stopped' | 'error'
-  pid: number | null
-}
-
 const API_BASE = '/api'
 
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
@@ -77,18 +72,5 @@ export const api = {
   // Queue Statistics
   getStats: (): Promise<QueueStats> => {
     return fetchAPI('/stats')
-  },
-
-  // Ingestion Control
-  startIngestion: (): Promise<IngestionStatus> => {
-    return fetchAPI('/ingestion/start', { method: 'POST' })
-  },
-
-  stopIngestion: (): Promise<IngestionStatus> => {
-    return fetchAPI('/ingestion/stop', { method: 'POST' })
-  },
-
-  getIngestionStatus: (): Promise<IngestionStatus> => {
-    return fetchAPI('/ingestion/status')
   },
 }

@@ -1,10 +1,9 @@
 import { useState } from 'react'
-import { Database, Play, Briefcase } from 'lucide-react'
+import { Database, Briefcase } from 'lucide-react'
 import QueueTab from './components/QueueTab'
-import IngestionTab from './components/IngestionTab'
 import JobsTab from './components/JobsTab'
 
-type Tab = 'jobs' | 'queue' | 'ingestion'
+type Tab = 'jobs' | 'queue'
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('jobs')
@@ -60,20 +59,6 @@ function App() {
                 <Database className="w-4 h-4 mr-2" />
                 Queue Messages
               </button>
-              <button
-                onClick={() => setActiveTab('ingestion')}
-                className={`
-                  flex items-center px-6 py-3 text-sm font-medium border-b-2 transition-colors
-                  ${
-                    activeTab === 'ingestion'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }
-                `}
-              >
-                <Play className="w-4 h-4 mr-2" />
-                Ingestion Control
-              </button>
             </nav>
           </div>
 
@@ -81,7 +66,6 @@ function App() {
           <div className="p-6">
             {activeTab === 'jobs' && <JobsTab />}
             {activeTab === 'queue' && <QueueTab />}
-            {activeTab === 'ingestion' && <IngestionTab />}
           </div>
         </div>
       </main>

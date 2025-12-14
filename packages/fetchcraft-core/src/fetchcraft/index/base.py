@@ -24,7 +24,7 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
         self._doc_store = doc_store
 
     @abstractmethod
-    def add_nodes(self, doc: Optional[D], nodes: List[D], show_progress: bool = False):
+    async def add_nodes(self, doc: Optional[D], nodes: List[D], show_progress: bool = False):
         """
         Add documents to the index.
 
@@ -43,7 +43,7 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def search(self, query_embedding, k, resolve_parents, kwargs):
+    async def search(self, query_embedding, k, resolve_parents, kwargs):
         """
         Search for similar documents using a query embedding.
         Only searches within this index's documents.
@@ -60,7 +60,7 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def search_by_text(self, query, k, resolve_parents, kwargs):
+    async def search_by_text(self, query, k, resolve_parents, kwargs):
         """
         Search for similar documents using a text query.
         Automatically generates the query embedding.
@@ -159,7 +159,7 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
         return resolved_results
 
     @abstractmethod
-    def get_document(self, document_id):
+    async def get_document(self, document_id):
         """
         Retrieve a single document by its ID.
         Only retrieves if the document belongs to this index.
@@ -173,7 +173,7 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def delete_documents(self, document_ids):
+    async def delete_documents(self, document_ids):
         """
         Delete documents by their IDs.
         Only deletes documents that belong to this index.
@@ -187,7 +187,7 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def as_retriever(self, top_k, resolve_parents, object_mapper: Optional[ObjectMapper] = None, **search_kwargs):
+    async def as_retriever(self, top_k, resolve_parents, object_mapper: Optional[ObjectMapper] = None, **search_kwargs):
         """
         Create a retriever from this index.
 

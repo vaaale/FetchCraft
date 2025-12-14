@@ -490,7 +490,29 @@ class QdrantVectorStore(VectorStore[Node]):
         # Reconstruct using the correct class type
         doc_class = self._get_doc_class(doc_class_name)
         return doc_class(**doc_data)
-    
+
+    async def count(self, index_id: str = "vector_index") -> int:
+        """
+        Count the number of documents in the vector store.
+
+        Returns:
+            The number of documents in the vector store
+        """
+        _index_filter = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="index_id",
+                    match=models.MatchValue(value=index_id)
+                )
+            ]
+        )
+
+        return self.client.count(
+            collection_name=self.collection_name,
+            filter=_index_filter,
+            exact=True
+        )
+
     @classmethod
     def from_config(cls, config: Union[Dict[str, Any], QdrantConfig], embeddings: Optional[Any] = None) -> 'QdrantVectorStore':
         """

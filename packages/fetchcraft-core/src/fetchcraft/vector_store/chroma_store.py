@@ -562,7 +562,24 @@ class ChromaVectorStore(VectorStore[D]):
         doc_class = self._get_doc_class(doc_class_name)
         
         return doc_class(**doc_dict)
-    
+
+    async def count(self, index_id: str = "vector_index") -> int:
+        """
+        Count the number of documents in the vector store.
+
+        Returns:
+            The number of documents in the vector store
+        """
+        where_filter = {"index_id": {"$eq": index_id}}
+
+        # Get documents matching the filter
+        results = self._collection.get(
+            where={"index_id": index_id},
+            include=["ids"]  # Only include IDs for efficiency if you only need the count
+        )
+        return len(results['ids'])
+
+
     @classmethod
     def from_config(cls, config: Union[Dict[str, Any], ChromaConfig], embeddings: Optional[Any] = None) -> 'ChromaVectorStore':
         """
