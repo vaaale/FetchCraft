@@ -14,8 +14,18 @@ from qdrant_client import QdrantClient
 
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
-from fetchcraft.node import Node
+from fetchcraft.node import Node, DocumentNode
 from fetchcraft.vector_store import QdrantVectorStore
+
+
+async def collect_results(async_iter, k: int = 100):
+    """Helper to collect results from async iterator."""
+    results = []
+    async for item in async_iter:
+        results.append(item)
+        if len(results) >= k:
+            break
+    return results
 
 
 async def basic_hybrid_search_example():
@@ -66,7 +76,7 @@ async def basic_hybrid_search_example():
     index = VectorIndex(vector_store=vector_store, index_id="hybrid_test")
     
     nodes = [Node(text=text, metadata={"index": i}) for i, text in enumerate(documents_text)]
-    await index.add_nodes(DocumentNode, nodes)
+    await index.add_nodes(None, nodes)
     
     print(f"   ✓ Indexed {len(nodes)} documents")
     print(f"   ✓ Each document has both:")
@@ -88,7 +98,7 @@ async def basic_hybrid_search_example():
         print(f"\n📝 Query: '{query}'")
         print("-" * 80)
         
-        results = await index.search_by_text(query, k=3)
+        results = await collect_results(index.search_by_text_iter(query), k=3)
         
         for i, (doc, score) in enumerate(results, 1):
             print(f"\n  {i}. [Score: {score:.4f}]")
@@ -149,8 +159,8 @@ async def compare_hybrid_vs_dense():
     
     # Index same documents in both
     nodes = [Node(text=text) for text in documents_text]
-    await dense_index.add_nodes(DocumentNode, nodes)
-    await hybrid_index.add_nodes(DocumentNode, nodes)
+    await dense_index.add_nodes(None, nodes)
+    await hybrid_index.add_nodes(None, nodes)
     
     print(f"   ✓ Indexed {len(nodes)} documents in both stores")
     
@@ -163,14 +173,14 @@ async def compare_hybrid_vs_dense():
     print("\n" + "-"*80)
     print("Dense-Only Results (semantic search):")
     print("-"*80)
-    dense_results = await dense_index.search_by_text(query, k=3)
+    dense_results = await collect_results(dense_index.search_by_text_iter(query), k=3)
     for i, (doc, score) in enumerate(dense_results, 1):
         print(f"{i}. [Score: {score:.4f}] {doc.text}")
     
     print("\n" + "-"*80)
     print("Hybrid Results (semantic + keyword):")
     print("-"*80)
-    hybrid_results = await hybrid_index.search_by_text(query, k=3)
+    hybrid_results = await collect_results(hybrid_index.search_by_text_iter(query), k=3)
     for i, (doc, score) in enumerate(hybrid_results, 1):
         print(f"{i}. [Score: {score:.4f}] {doc.text}")
     
@@ -229,8 +239,8 @@ async def fusion_methods_comparison():
     rrf_index = VectorIndex(vector_store=rrf_store)
     dbsf_index = VectorIndex(vector_store=dbsf_store)
     
-    await rrf_index.add_nodes(DocumentNode, nodes)
-    await dbsf_index.add_nodes(DocumentNode, nodes)
+    await rrf_index.add_nodes(None, nodes)
+    await dbsf_index.add_nodes(None, nodes)
     
     print(f"   ✓ Indexed {len(nodes)} documents with both methods")
     
@@ -239,13 +249,13 @@ async def fusion_methods_comparison():
     
     print("\n" + "-"*80)
     print("RRF Results:")
-    rrf_results = await rrf_index.search_by_text(query, k=3)
+    rrf_results = await collect_results(rrf_index.search_by_text_iter(query), k=3)
     for i, (doc, score) in enumerate(rrf_results, 1):
         print(f"{i}. [Score: {score:.4f}] {doc.text}")
     
     print("\n" + "-"*80)
     print("DBSF Results:")
-    dbsf_results = await dbsf_index.search_by_text(query, k=3)
+    dbsf_results = await collect_results(dbsf_index.search_by_text_iter(query), k=3)
     for i, (doc, score) in enumerate(dbsf_results, 1):
         print(f"{i}. [Score: {score:.4f}] {doc.text}")
     

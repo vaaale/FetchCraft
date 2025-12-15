@@ -9,8 +9,18 @@ from qdrant_client import QdrantClient
 
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
-from fetchcraft.node import Node
+from fetchcraft.node import Node, DocumentNode
 from fetchcraft.vector_store import QdrantVectorStore
+
+
+async def collect_results(async_iter, k: int = 100):
+    """Helper to collect results from async iterator."""
+    results = []
+    async for item in async_iter:
+        results.append(item)
+        if len(results) >= k:
+            break
+    return results
 
 
 async def main():
@@ -57,7 +67,7 @@ async def main():
     
     # 4. Add documents - embeddings generated automatically!
     print("Adding documents to index...")
-    await index.add_nodes(DocumentNode, nodes)
+    await index.add_nodes(None, nodes)
     print("✓ Documents indexed (embeddings auto-generated!)\n")
     
     # 5. Search with text query
@@ -68,7 +78,7 @@ async def main():
     query = "programming and code"
     print(f"Query: '{query}'\n")
     
-    results = await index.search_by_text(query, k=3)
+    results = await collect_results(index.search_by_text_iter(query), k=3)
     
     print("Top results:")
     for i, (doc, score) in enumerate(results, 1):

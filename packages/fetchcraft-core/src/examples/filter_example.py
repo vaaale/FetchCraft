@@ -11,13 +11,23 @@ from pathlib import Path
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
 from fetchcraft.vector_store import QdrantVectorStore
-from fetchcraft.node import Chunk
+from fetchcraft.node import Chunk, DocumentNode
 from fetchcraft.filters import (
     EQ, NE, GT, LT, GTE, LTE, IN, CONTAINS,
     AND, OR, NOT,
     FieldFilter, FilterOperator, CompositeFilter, FilterCondition
 )
 from qdrant_client import QdrantClient
+
+
+async def collect_results(async_iter, k: int = 100):
+    """Helper to collect results from async iterator."""
+    results = []
+    async for item in async_iter:
+        results.append(item)
+        if len(results) >= k:
+            break
+    return results
 
 
 async def example_basic_filters():
@@ -74,34 +84,34 @@ async def example_basic_filters():
         ),
     ]
     
-    await index.add_nodes(DocumentNode, nodes)
+    await index.add_nodes(None, nodes)
     print(f"✓ Indexed {len(nodes)} documents with metadata")
     
     # Example 1: Equality filter
     print("\n1. Equality Filter (category == 'tutorial'):")
     filter_eq = EQ("category", "tutorial")
-    results = await index.search_by_text("programming", k=5, filters=filter_eq)
+    results = await collect_results(index.search_by_text_iter("programming", filters=filter_eq), k=5)
     for node, score in results:
         print(f"  - {node.text[:50]}... (category: {node.metadata['category']})")
     
     # Example 2: Greater than filter
     print("\n2. Greater Than Filter (year > 2022):")
     filter_gt = GT("year", 2022)
-    results = await index.search_by_text("programming", k=5, filters=filter_gt)
+    results = await collect_results(index.search_by_text_iter("programming", filters=filter_gt), k=5)
     for node, score in results:
         print(f"  - {node.text[:50]}... (year: {node.metadata['year']})")
     
     # Example 3: IN filter
     print("\n3. IN Filter (language in ['python', 'rust']):")
     filter_in = IN("language", ["python", "rust"])
-    results = await index.search_by_text("programming", k=5, filters=filter_in)
+    results = await collect_results(index.search_by_text_iter("programming", filters=filter_in), k=5)
     for node, score in results:
         print(f"  - {node.text[:50]}... (language: {node.metadata['language']})")
     
     # Example 4: Contains filter
     print("\n4. Contains Filter (text contains 'type'):")
     filter_contains = CONTAINS("language", "type")
-    results = await index.search_by_text("programming", k=5, filters=filter_contains)
+    results = await collect_results(index.search_by_text_iter("programming", filters=filter_contains), k=5)
     for node, score in results:
         print(f"  - {node.text[:50]}... (language: {node.metadata['language']})")
 
@@ -160,7 +170,7 @@ async def example_composite_filters():
         ),
     ]
     
-    await index.add_nodes(DocumentNode, nodes)
+    await index.add_nodes(None, nodes)
     print(f"✓ Indexed {len(nodes)} documents with metadata")
     
     # Example 1: AND filter
@@ -169,7 +179,7 @@ async def example_composite_filters():
         EQ("language", "python"),
         GTE("year", 2024)
     )
-    results = await index.search_by_text("learning", k=5, filters=filter_and)
+    results = await collect_results(index.search_by_text_iter("learning", filters=filter_and), k=5)
     for node, score in results:
         print(f"  - {node.text[:50]}... (language: {node.metadata['language']}, year: {node.metadata['year']})")
     
@@ -179,14 +189,14 @@ async def example_composite_filters():
         EQ("level", "beginner"),
         EQ("level", "advanced")
     )
-    results = await index.search_by_text("learning", k=5, filters=filter_or)
+    results = await collect_results(index.search_by_text_iter("learning", filters=filter_or), k=5)
     for node, score in results:
         print(f"  - {node.text[:50]}... (level: {node.metadata['level']})")
     
     # Example 3: NOT filter
     print("\n3. NOT Filter (NOT language == 'python'):")
     filter_not = NOT(EQ("language", "python"))
-    results = await index.search_by_text("programming", k=5, filters=filter_not)
+    results = await collect_results(index.search_by_text_iter("programming", filters=filter_not), k=5)
     for node, score in results:
         print(f"  - {node.text[:50]}... (language: {node.metadata['language']})")
     
@@ -199,7 +209,7 @@ async def example_composite_filters():
         ),
         EQ("year", 2024)
     )
-    results = await index.search_by_text("learning", k=5, filters=filter_nested)
+    results = await collect_results(index.search_by_text_iter("learning", filters=filter_nested), k=5)
     for node, score in results:
         print(f"  - {node.text[:50]}... (language: {node.metadata['language']}, level: {node.metadata['level']}, year: {node.metadata['year']})")
 
@@ -253,7 +263,7 @@ async def example_retriever_with_filters():
         ),
     ]
     
-    await index.add_nodes(DocumentNode, nodes)
+    await index.add_nodes(None, nodes)
     print(f"✓ Indexed {len(nodes)} documents with metadata")
     
     # Method 1: Pass filter to retrieve call

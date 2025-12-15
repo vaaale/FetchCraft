@@ -94,20 +94,20 @@ class TestFilesystemConnector:
 
     def test_filesystem_connector_init(self, temp_dir):
         """Test FilesystemConnector initialization"""
-        connector = FilesystemConnector(path=temp_dir)
-        assert connector.path == temp_dir
+        connector = FilesystemConnector(root_path=temp_dir)
+        assert connector.root_path == temp_dir
         assert connector.fs is not None
         assert connector.filter is None
 
     def test_filesystem_connector_get_name(self, temp_dir):
         """Test FilesystemConnector.get_name()"""
-        connector = FilesystemConnector(path=temp_dir)
+        connector = FilesystemConnector(root_path=temp_dir)
         assert connector.get_name() == "FilesystemConnector"
 
     @pytest.mark.asyncio
     async def test_filesystem_connector_list_directories(self, temp_dir):
         """Test FilesystemConnector.list_directories()"""
-        connector = FilesystemConnector(path=temp_dir)
+        connector = FilesystemConnector(root_path=temp_dir)
         directories = await connector.list_directories()
 
         assert len(directories) == 2
@@ -118,7 +118,9 @@ class TestFilesystemConnector:
     @pytest.mark.asyncio
     async def test_filesystem_connector_glob_all_files(self, temp_dir):
         """Test FilesystemConnector.glob() returns all files"""
-        connector = FilesystemConnector(path=temp_dir)
+        from pathlib import Path
+        # Use sub_path=Path(".") to get relative glob pattern
+        connector = FilesystemConnector(root_path=temp_dir, sub_path=Path("."))
 
         files = []
         async for file in connector.glob():
@@ -135,11 +137,13 @@ class TestFilesystemConnector:
     @pytest.mark.asyncio
     async def test_filesystem_connector_glob_with_filter(self, temp_dir):
         """Test FilesystemConnector.glob() with filter function"""
+        from pathlib import Path
 
-        def txt_filter(file: LocalFile) -> bool:
+        async def txt_filter(file: LocalFile) -> bool:
             return file.path.suffix == ".txt"
 
-        connector = FilesystemConnector(path=temp_dir, filter=txt_filter)
+        # Use sub_path=Path(".") to get relative glob pattern
+        connector = FilesystemConnector(root_path=temp_dir, sub_path=Path("."), filter=txt_filter)
 
         files = []
         async for file in connector.glob():
@@ -152,7 +156,7 @@ class TestFilesystemConnector:
     @pytest.mark.asyncio
     async def test_filesystem_connector_glob_excludes_directories(self, temp_dir):
         """Test that glob() does not yield directories"""
-        connector = FilesystemConnector(path=temp_dir)
+        connector = FilesystemConnector(root_path=temp_dir)
 
         async for file in connector.glob():
             assert not file.path.is_dir()
@@ -160,7 +164,7 @@ class TestFilesystemConnector:
     @pytest.mark.asyncio
     async def test_filesystem_connector_glob_returns_local_files(self, temp_dir):
         """Test that glob() yields LocalFile instances"""
-        connector = FilesystemConnector(path=temp_dir)
+        connector = FilesystemConnector(root_path=temp_dir)
 
         async for file in connector.glob():
             assert isinstance(file, LocalFile)
@@ -169,7 +173,7 @@ class TestFilesystemConnector:
     async def test_filesystem_connector_empty_directory(self):
         """Test FilesystemConnector with empty directory"""
         with tempfile.TemporaryDirectory() as tmpdir:
-            connector = FilesystemConnector(path=Path(tmpdir))
+            connector = FilesystemConnector(root_path=Path(tmpdir))
 
             files = []
             async for file in connector.glob():
@@ -187,7 +191,7 @@ class TestFilesystemConnector:
         def exclude_all(file: LocalFile) -> bool:
             return False
 
-        connector = FilesystemConnector(path=temp_dir, filter=exclude_all)
+        connector = FilesystemConnector(root_path=temp_dir, filter=exclude_all)
 
         files = []
         async for file in connector.glob():
@@ -200,6 +204,6 @@ class TestFilesystemConnector:
         import fsspec
 
         custom_fs = fsspec.filesystem("dir", path=temp_dir)
-        connector = FilesystemConnector(path=temp_dir, fs=custom_fs)
+        connector = FilesystemConnector(root_path=temp_dir, fs=custom_fs)
 
         assert connector.fs is custom_fs

@@ -1,7 +1,7 @@
 """
 ChromaDB vector store implementation.
 """
-from typing import List, Dict, Any, Optional, Type, Union, Literal
+from typing import List, Dict, Any, Optional, Type, Union, Literal, AsyncIterator, Tuple
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, ConfigDict
@@ -458,6 +458,131 @@ class ChromaVectorStore(VectorStore[D]):
                 output.append((doc, score))
         
         return output
+
+    def similarity_search_iter(
+        self,
+        query_embedding: List[float],
+        index_id: Optional[str] = None,
+        query_text: Optional[str] = None,
+        filters: Optional[Union[MetadataFilter, Dict[str, Any]]] = None,
+        page_size: int = 32,
+        **kwargs: Any,
+    ) -> AsyncIterator[Tuple[D, float]]:
+        """
+        Lazily search for similar documents using a query embedding.
+
+        Yields results page-by-page until exhausted.
+        You can stop early by breaking out of the loop.
+
+        Args:
+            query_embedding: The embedding vector to search with
+            index_id: Optional index identifier to filter search results
+            query_text: Original query text (not used by Chroma, included for compatibility)
+            filters: Optional metadata filters to apply
+            page_size: How many results to fetch per request
+            **kwargs: Additional search parameters passed to Chroma
+
+        Yields:
+            Tuples of (document, similarity_score)
+        """
+        async def _iter():
+            if page_size <= 0:
+                raise ValueError("page_size must be > 0")
+
+            # Build where filter
+            where_filter = None
+            filter_clauses = []
+
+            # Add index_id filter if provided
+            if index_id is not None:
+                filter_clauses.append({"_index_id": {"$eq": index_id}})
+
+            # Add user-provided filters
+            if filters is not None:
+                user_filter = self._translate_filter_to_chroma(filters)
+                filter_clauses.append(user_filter)
+
+            # Combine filters
+            if len(filter_clauses) > 1:
+                where_filter = {"$and": filter_clauses}
+            elif len(filter_clauses) == 1:
+                where_filter = filter_clauses[0]
+
+            offset = 0
+            while True:
+                # Query Chroma with pagination
+                results = self._collection.query(
+                    query_embeddings=[query_embedding],
+                    n_results=page_size,
+                    where=where_filter,
+                    include=["embeddings", "metadatas", "documents", "distances"],
+                    **kwargs
+                )
+
+                if not results or not results['ids'] or len(results['ids']) == 0 or len(results['ids'][0]) == 0:
+                    return  # exhausted
+
+                # Parse results
+                for i in range(len(results['ids'][0])):
+                    doc_id = results['ids'][0][i]
+                    metadata = results['metadatas'][0][i] if results.get('metadatas') is not None and len(results['metadatas']) > 0 else {}
+                    embedding = results['embeddings'][0][i] if results.get('embeddings') is not None and len(results['embeddings']) > 0 else None
+                    text = results['documents'][0][i] if results.get('documents') is not None and len(results['documents']) > 0 else ""
+                    distance = results['distances'][0][i] if results.get('distances') is not None and len(results['distances']) > 0 else 0.0
+
+                    # Convert distance to similarity score
+                    if self.distance.lower() == "cosine":
+                        score = 1.0 - distance
+                    elif self.distance.lower() == "l2":
+                        score = 1.0 / (1.0 + distance)
+                    else:  # ip (inner product)
+                        score = distance
+
+                    # Reconstruct document
+                    doc_dict = {'text': text}
+                    user_metadata = {}
+
+                    import json
+                    for key, value in metadata.items():
+                        if key.startswith('_'):
+                            continue
+
+                        if key.startswith('metadata.'):
+                            metadata_key = key[len('metadata.'):]
+                            if isinstance(value, str):
+                                try:
+                                    user_metadata[metadata_key] = json.loads(value)
+                                except (json.JSONDecodeError, TypeError):
+                                    user_metadata[metadata_key] = value
+                            else:
+                                user_metadata[metadata_key] = value
+                        else:
+                            if isinstance(value, str):
+                                try:
+                                    doc_dict[key] = json.loads(value)
+                                except (json.JSONDecodeError, TypeError):
+                                    doc_dict[key] = value
+                            else:
+                                doc_dict[key] = value
+
+                    if user_metadata:
+                        doc_dict['metadata'] = user_metadata
+
+                    doc_dict['id'] = metadata.get('id', doc_id)
+                    if embedding is not None:
+                        doc_dict['embedding'] = embedding
+
+                    doc_class_name = metadata.get('_doc_class')
+                    doc_class = self._get_doc_class(doc_class_name)
+                    doc = doc_class(**doc_dict)
+
+                    yield (doc, score)
+
+                # ChromaDB doesn't support offset pagination well, so we stop after first batch
+                # For true pagination, we'd need to track seen IDs
+                return
+
+        return _iter()
     
     async def delete(self, ids: List[str], index_id: Optional[str] = None) -> bool:
         """

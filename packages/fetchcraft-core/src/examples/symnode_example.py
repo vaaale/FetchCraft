@@ -14,8 +14,18 @@ from qdrant_client import QdrantClient
 
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
-from fetchcraft.node import Chunk, SymNode, Node
+from fetchcraft.node import Chunk, SymNode, Node, DocumentNode
 from fetchcraft.vector_store import QdrantVectorStore
+
+
+async def collect_results(async_iter, k: int = 100):
+    """Helper to collect results from async iterator."""
+    results = []
+    async for item in async_iter:
+        results.append(item)
+        if len(results) >= k:
+            break
+    return results
 
 
 async def basic_symnode_example():
@@ -100,11 +110,11 @@ async def basic_symnode_example():
     
     # Step 5: Add parent chunk first (must exist before SymNodes can reference it)
     # Embeddings auto-generated!
-    parent_ids = await index.add_nodes(DocumentNode, [big_chunk])
+    parent_ids = await index.add_nodes(None, [big_chunk])
     print(f"✓ Indexed parent chunk (ID: {parent_ids[0][:8]}...)\n")
     
     # Step 6: Add symbolic nodes to the index (embeddings auto-generated!)
-    sym_ids = await index.add_nodes(DocumentNode, [sym_node1, sym_node2])
+    sym_ids = await index.add_nodes(None, [sym_node1, sym_node2])
     print(f"✓ Indexed {len(sym_ids)} SymNodes (all embeddings auto-generated!)\n")
     
     # Step 7: Search and observe parent resolution
@@ -113,7 +123,7 @@ async def basic_symnode_example():
     
     # Search with parent resolution (default behavior)
     print("--- With Parent Resolution (default) ---")
-    results = await index.search_by_text(query, k=2, resolve_parents=True)
+    results = await collect_results(index.search_by_text_iter(query, resolve_parents=True), k=2)
     
     for i, (doc, score) in enumerate(results, 1):
         print(f"{i}. [Score: {score:.3f}]")
@@ -124,7 +134,7 @@ async def basic_symnode_example():
     
     # Search without parent resolution to see the SymNodes
     print("--- Without Parent Resolution ---")
-    results_no_resolve = await index.search_by_text(query, k=2, resolve_parents=False)
+    results_no_resolve = await collect_results(index.search_by_text_iter(query, resolve_parents=False), k=2)
     
     for i, (doc, score) in enumerate(results_no_resolve, 1):
         print(f"{i}. [Score: {score:.3f}]")
@@ -213,11 +223,11 @@ async def hierarchical_chunking_example():
     print(f"Created {len(all_sym_nodes)} SymNodes\n")
     
     # Index parent chunks first (embeddings auto-generated!)
-    await index.add_nodes(DocumentNode, all_parent_chunks)
+    await index.add_nodes(None, all_parent_chunks)
     print(f"✓ Indexed {len(all_parent_chunks)} parent chunks")
     
     # Index SymNodes (embeddings auto-generated!)
-    await index.add_nodes(DocumentNode, all_sym_nodes)
+    await index.add_nodes(None, all_sym_nodes)
     print(f"✓ Indexed {len(all_sym_nodes)} SymNodes (all embeddings auto-generated!)\n")
     
     # Search examples
@@ -230,7 +240,7 @@ async def hierarchical_chunking_example():
     print("Searching with automatic parent resolution:\n")
     for query in queries:
         print(f"Query: '{query}'")
-        results = await index.search_by_text(query, k=1)
+        results = await collect_results(index.search_by_text_iter(query), k=1)
         
         if results:
             doc, score = results[0]

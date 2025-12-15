@@ -110,25 +110,23 @@ class VectorIndexRetriever(Retriever[D]):
         search_params = {**self.search_kwargs, **kwargs}
         k = top_k if top_k is not None else self.top_k
 
+        candidates = {}
         # Use vector store's search_by_text which handles embedding internally
-        results = await self.vector_index.vector_store.search_by_text(
+        async for doc, score in self.vector_index.search_by_text_iter(
             query=query,
-            k=k,
-            index_id=self.vector_index.index_id,
+            resolve_parents=self.resolve_parents,
             **search_params
-        )
-        
-        # Resolve parents if needed
-        if self.resolve_parents:
-            results = await self.vector_index._resolve_parent_nodes(results)
+        ):
+            candidates[doc.id] = NodeWithScore(node=doc, score=score)
+            if len(candidates) >= k:
+                break
 
-        # Convert tuples to NodeWithScore
-        return [NodeWithScore(node=doc, score=score) for doc, score in results]
+        return list(candidates.values())
 
     def update_config(
         self,
         top_k: Optional[int] = None,
-        resolve_parents: Optional[bool] = None,
+        resolve_parents: Optional[bool] = True,
         **search_kwargs
     ) -> None:
         """

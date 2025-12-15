@@ -6,8 +6,18 @@ import pytest
 from qdrant_client import QdrantClient
 
 from fetchcraft.index.vector_index import VectorIndex
-from fetchcraft.node import Node
+from fetchcraft.node import Node, DocumentNode
 from fetchcraft.vector_store import QdrantVectorStore, QdrantConfig
+
+
+async def collect_results(async_iter, k: int = 100):
+    """Helper to collect results from async iterator."""
+    results = []
+    async for item in async_iter:
+        results.append(item)
+        if len(results) >= k:
+            break
+    return results
 
 
 class MockEmbeddings:
@@ -78,11 +88,14 @@ async def test_hybrid_search_with_documents():
             Node(text="Machine learning with Python", embedding=[0.3] * 384),
         ]
 
-        doc_ids = await index.add_nodes(DocumentNode, documents)
+        doc_ids = await index.add_nodes(None, documents)
         assert len(doc_ids) == 3
 
         # Search with text query (required for hybrid)
-        results = await index.search_by_text("Python", k=2)
+        results = await collect_results(
+            index.search_by_text_iter("Python"),
+            k=2
+        )
 
         assert len(results) <= 2
         assert all(isinstance(result, tuple) for result in results)
@@ -166,10 +179,13 @@ async def test_dense_only_search_still_works():
         Node(text="JavaScript coding", embedding=[0.2] * 384),
     ]
 
-    await index.add_nodes(DocumentNode, documents)
+    await index.add_nodes(None, documents)
 
     # Search should work without query_text
-    results = await index.search_by_text("Python", k=2)
+    results = await collect_results(
+        index.search_by_text_iter("Python"),
+        k=2
+    )
 
     assert len(results) <= 2
     assert all(isinstance(result, tuple) for result in results)
@@ -192,13 +208,20 @@ async def test_hybrid_requires_query_text():
         index = VectorIndex(vector_store=vector_store)
 
         # Add a document
-        await index.add_nodes(DocumentNode, [Node(text="Test", embedding=[0.1] * 384)])
+        await index.add_nodes(None, [Node(text="Test", embedding=[0.1] * 384)])
 
         # Direct search without query_text should raise error
         query_embedding = [0.1] * 384
 
         with pytest.raises(ValueError, match="query_text is required"):
-            await index.search(query_embedding, k=1, query_text=None)
+            # Call vector store directly with query_text=None to trigger the error
+            await collect_results(
+                vector_store.similarity_search_iter(
+                    query_embedding=query_embedding,
+                    query_text=None
+                ),
+                k=1
+            )
 
     except ImportError as e:
         if "fastembed" in str(e):

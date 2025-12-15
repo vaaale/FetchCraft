@@ -1,4 +1,4 @@
-from typing import List, TypeVar, Optional, Annotated, Any
+from typing import List, TypeVar, Optional, Annotated, Any, AsyncIterator, Tuple
 from uuid import uuid4
 
 from pydantic import Field, SkipValidation
@@ -23,11 +23,11 @@ class VectorIndex(BaseIndex[D]):
     The vector store handles embedding generation automatically when adding documents.
     Multiple indices can coexist in the same vector store by using unique index_id values.
     """
-    
+
     vector_store: Annotated[VectorStore[D], SkipValidation()] = Field(description="Vector store instance")
 
     def __init__(
-        self, 
+        self,
         vector_store: VectorStore[D],
         doc_store: Optional[DocumentStore] = None,
         index_id: Optional[str] = None,
@@ -124,73 +124,52 @@ class VectorIndex(BaseIndex[D]):
         return await self.vector_store.insert_nodes(nodes, index_id=self.index_id, show_progress=show_progress)
 
 
-    async def search(
-        self,
-        query_embedding: List[float],
-        k: int = 4,
-        resolve_parents: bool = True,
-        query_text: Optional[str] = None,
-        **kwargs
-    ) -> List[tuple[D, float]]:
-        """
-        Search for similar documents using a query embedding.
-        Only searches within this index's documents.
-        
-        Args:
-            query_embedding: The embedding vector to search with
-            k: Number of results to return
-            resolve_parents: If True, automatically resolve parent nodes for SymNode results
-            query_text: Original query text (required for hybrid search)
-            **kwargs: Additional search parameters
-            
-        Returns:
-            List of tuples containing (document, similarity_score)
-        """
-        results = await self.vector_store.similarity_search(
-            query_embedding=query_embedding,
-            k=k,
-            index_id=self.index_id,
-            query_text=query_text,
-            **kwargs
-        )
-        
-        # Resolve parent nodes if enabled
-        if resolve_parents:
-            results = await self._resolve_parent_nodes(results)
-        
-        return results
-    
-    async def search_by_text(
+    async def search_by_text_iter(
         self,
         query: str,
-        k: int = 4,
         resolve_parents: bool = True,
         **kwargs
-    ) -> List[tuple[D, float]]:
-        """
-        Search for similar documents using a text query.
-        Automatically generates the query embedding using the vector store's embeddings.
-        
-        Args:
-            query: The query text
-            k: Number of results to return
-            resolve_parents: If True, automatically resolve parent nodes for SymNode results
-            **kwargs: Additional search parameters
-            
-        Returns:
-            List of tuples containing (document, similarity_score)
-        """
-        # Generate query embedding using vector store's embeddings
+    ) -> AsyncIterator[Tuple[D, float]]:
+
         query_embedding = await self.vector_store.embed_query(query)
-        
-        # Perform search with the generated embedding, passing query text for hybrid search
-        return await self.search(
+
+        async for item in self.vector_store.similarity_search_iter(
             query_embedding=query_embedding,
-            k=k,
-            resolve_parents=resolve_parents,
-            query_text=query,  # Pass query text for hybrid search support
+            index_id=self.index_id,
+            query_text=query,
             **kwargs
-        )
+        ):
+            # Resolve parent nodes if enabled
+            if resolve_parents:
+                resolved_nodes = await self._resolve_parent_nodes([item])
+                for resolved_node in resolved_nodes:
+                    yield resolved_node
+            else:
+                yield item
+
+
+    async def search_iter(
+        self,
+        query: str,
+        query_embedding: list[float],
+        resolve_parents: bool = True,
+        **kwargs
+    ) -> AsyncIterator[Tuple[D, float]]:
+
+        async for item in self.vector_store.similarity_search_iter(
+            query_embedding=query_embedding,
+            index_id=self.index_id,
+            query_text=query,
+            **kwargs
+        ):
+            # Resolve parent nodes if enabled
+            if resolve_parents:
+                resolved_nodes = await self._resolve_parent_nodes([item])
+                for resolved_node in resolved_nodes:
+                    yield resolved_node
+            else:
+                yield item
+
 
     async def get_document(self, document_id: str) -> Optional[D]:
         """
@@ -204,7 +183,7 @@ class VectorIndex(BaseIndex[D]):
             The document if found, None otherwise
         """
         return await self.vector_store.get_node(document_id, index_id=self.index_id)
-    
+
     async def delete_documents(self, document_ids: List[str]) -> bool:
         """
         Delete documents by their IDs.
@@ -269,7 +248,7 @@ class VectorIndex(BaseIndex[D]):
             ```
         """
         from ..retriever import VectorIndexRetriever
-        
+
         return VectorIndexRetriever(
             vector_index=self,
             top_k=top_k,

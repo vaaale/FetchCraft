@@ -100,6 +100,39 @@ class Retriever(BaseModel, ABC, Generic[D], ObjectNodeMixin):
         resolved_nodes = await self._resolve_recursively(nodes, result, query, top_k, **kwargs)
         return resolved_nodes
 
+    async def aretrieve_streaming(
+        self,
+        query: str,
+        top_k: Optional[int] = None,
+        **kwargs
+    ) -> List[NodeWithScore]:
+        """
+        Async version of retrieve.
+
+        Args:
+            query: The query text
+            top_k: Number of results to return (overrides default if provided)
+            **kwargs: Additional retrieval parameters, including optional 'filters'
+
+        Returns:
+            List of NodeWithScore objects containing documents and their relevance scores
+
+        Note:
+            If both default filters (from constructor) and query filters (from kwargs) are provided,
+            the query filters will override the default filters.
+        """
+        # Merge default filters with query filters
+        # Query filters override default filters
+        if self.filters is not None and 'filters' not in kwargs:
+            kwargs['filters'] = self.filters
+
+        nodes = await self._retrieve_streaming(query=query, top_k=top_k, **kwargs)
+
+        # Resolve nodes
+        result = []
+        resolved_nodes = await self._resolve_recursively(nodes, result, query, top_k, **kwargs)
+        return resolved_nodes
+
     async def _resolve_recursively(
         self,
         nodes: List[Node] | List[NodeWithScore],

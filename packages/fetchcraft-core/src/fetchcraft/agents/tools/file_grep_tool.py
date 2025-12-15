@@ -117,7 +117,7 @@ Context lines: {self.context_lines}
         try:
             # Read file
             with self.fs.open(file_path, 'rb') as f:
-                content = f.glob()
+                content = f.read()
 
             # Skip binary files (check for null bytes)
             if b'\x00' in content[:8192]:

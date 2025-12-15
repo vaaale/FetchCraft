@@ -5,8 +5,18 @@ import asyncio
 from qdrant_client import QdrantClient
 
 from fetchcraft.index.vector_index import VectorIndex
-from fetchcraft.node import Node, Chunk
+from fetchcraft.node import Node, Chunk, DocumentNode
 from fetchcraft.vector_store import QdrantVectorStore
+
+
+async def collect_results(async_iter, k: int = 100):
+    """Helper to collect results from async iterator."""
+    results = []
+    async for item in async_iter:
+        results.append(item)
+        if len(results) >= k:
+            break
+    return results
 
 
 class MockEmbeddings:
@@ -75,7 +85,7 @@ async def test_node_persistence():
     node1.next_id = node2.id
 
     # Add nodes to index
-    node_ids = await index.add_nodes(DocumentNode, [parent_node, node1, node2])
+    node_ids = await index.add_nodes(None, [parent_node, node1, node2])
 
     print("✓ Added 3 nodes to the index")
     print(f"  Parent ID: {parent_node.id}")
@@ -133,7 +143,7 @@ async def test_node_persistence():
     )
     chunk.embedding = [0.4] * 384
 
-    chunk_ids = await index.add_nodes(DocumentNode, [chunk])
+    chunk_ids = await index.add_nodes(None, [chunk])
     print("✓ Added Chunk to the index")
 
     # Retrieve chunk and verify all properties
@@ -154,7 +164,10 @@ async def test_node_persistence():
 
     # Search and verify results
     query_embedding = [0.25] * 384
-    results = await index.search(query_embedding, k=5)
+    results = await collect_results(
+        index.search_iter(query="test", query_embedding=query_embedding),
+        k=5
+    )
 
     print(f"✓ Search returned {len(results)} results")
     for i, (doc, score) in enumerate(results, 1):

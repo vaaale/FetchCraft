@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import List, Set, Generic, TypeVar, Optional, Type
+from typing import List, Set, Generic, TypeVar, Optional, Type, AsyncIterator, Tuple
 from uuid import uuid4
 
 from pydantic import Field, ConfigDict, BaseModel, PrivateAttr
@@ -42,39 +42,49 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
         """
         pass
 
-    @abstractmethod
-    async def search(self, query_embedding, k, resolve_parents, kwargs):
+    async def search_iter(
+        self,
+        query: str,
+        query_embedding: list[float],
+        resolve_parents: bool = True,
+        **kwargs
+    ) -> AsyncIterator[Tuple[D, float]]:
         """
-        Search for similar documents using a query embedding.
-        Only searches within this index's documents.
+        Search for documents in the index.
 
         Args:
-            query_embedding: The embedding vector to search with
-            k: Number of results to return
-            resolve_parents: If True, automatically resolve parent nodes for SymNode results
-            **kwargs: Additional search parameters
+            query: The query string
+            query_embedding: The query embedding
+            resolve_parents: Whether to resolve parent nodes for SymNodes (default: True)
+            **kwargs: Additional keyword arguments to pass to search
 
         Returns:
-            List of tuples containing (document, similarity_score)
+            Async iterator of (document, score) tuples
         """
-        pass
+        ...
 
     @abstractmethod
-    async def search_by_text(self, query, k, resolve_parents, kwargs):
+    async def search_by_text_iter(
+        self,
+        query: str,
+        query_embedding: List[float] = None,
+        resolve_parents: bool = True,
+        **kwargs
+    ) -> AsyncIterator[Tuple[D, float]]:
         """
-        Search for similar documents using a text query.
-        Automatically generates the query embedding.
+        Search for documents in the index.
 
         Args:
-            query: The query text
-            k: Number of results to return
-            resolve_parents: If True, automatically resolve parent nodes for SymNode results
-            **kwargs: Additional search parameters
+            query: The query string
+            query_embedding: The query embedding (optional)
+            resolve_parents: Whether to resolve parent nodes for SymNodes (default: True)
+            **kwargs: Additional keyword arguments to pass to search
 
         Returns:
-            List of tuples containing (document, similarity_score)
+            Async iterator of (document, score) tuples
         """
-        pass
+        ...
+
 
     async def _resolve_to_top_parent(
         self,

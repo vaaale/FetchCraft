@@ -11,7 +11,7 @@ from pathlib import Path
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
 from fetchcraft.vector_store import ChromaVectorStore
-from fetchcraft.node import Chunk
+from fetchcraft.node import Chunk, DocumentNode
 from fetchcraft.filters import (
     EQ, NE, GT, LT, GTE, LTE, IN, CONTAINS,
     AND, OR, NOT
@@ -22,6 +22,16 @@ try:
     CHROMADB_AVAILABLE = True
 except ImportError:
     CHROMADB_AVAILABLE = False
+
+
+async def collect_results(async_iter, k: int = 100):
+    """Helper to collect results from async iterator."""
+    results = []
+    async for item in async_iter:
+        results.append(item)
+        if len(results) >= k:
+            break
+    return results
 
 
 async def example_chroma_basic_filters():
@@ -82,71 +92,77 @@ async def example_chroma_basic_filters():
         ),
     ]
     
-    await index.add_nodes(DocumentNode, nodes)
+    await index.add_nodes(None, nodes)
     print(f"✓ Indexed {len(nodes)} documents with metadata")
     
     # Example 1: Equality filter
     print("\n1. Equality Filter (category == 'tutorial'):")
-    results = await index.search_by_text("programming", k=5, filters=EQ("category", "tutorial"))
+    results = await collect_results(index.search_by_text_iter("programming", filters=EQ("category", "tutorial")), k=5)
     for node, score in results:
         print(f"  - {node.text[:50]}... (category: {node.metadata['category']})")
     
     # Example 2: Greater than filter
     print("\n2. Greater Than Filter (year > 2022):")
-    results = await index.search_by_text("programming", k=5, filters=GT("year", 2022))
+    results = await collect_results(index.search_by_text_iter("programming", filters=GT("year", 2022)), k=5)
     for node, score in results:
         print(f"  - {node.text[:50]}... (year: {node.metadata['year']})")
     
     # Example 3: IN filter
     print("\n3. IN Filter (language in ['python', 'rust']):")
-    results = await index.search_by_text("programming", k=5, filters=IN("language", ["python", "rust"]))
+    results = await collect_results(index.search_by_text_iter("programming", filters=IN("language", ["python", "rust"])), k=5)
     for node, score in results:
         print(f"  - {node.text[:50]}... (language: {node.metadata['language']})")
     
     # Example 4: AND filter
     print("\n4. AND Filter (category == 'tutorial' AND year >= 2023):")
-    results = await index.search_by_text(
-        "programming",
-        k=5,
-        filters=AND(
-            EQ("category", "tutorial"),
-            GTE("year", 2023)
-        )
+    results = await collect_results(
+        index.search_by_text_iter(
+            "programming",
+            filters=AND(
+                EQ("category", "tutorial"),
+                GTE("year", 2023)
+            )
+        ),
+        k=5
     )
     for node, score in results:
         print(f"  - {node.text[:50]}... (category: {node.metadata['category']}, year: {node.metadata['year']})")
     
     # Example 5: OR filter
     print("\n5. OR Filter (level == 'beginner' OR level == 'advanced'):")
-    results = await index.search_by_text(
-        "programming",
-        k=5,
-        filters=OR(
-            EQ("level", "beginner"),
-            EQ("level", "advanced")
-        )
+    results = await collect_results(
+        index.search_by_text_iter(
+            "programming",
+            filters=OR(
+                EQ("level", "beginner"),
+                EQ("level", "advanced")
+            )
+        ),
+        k=5
     )
     for node, score in results:
         print(f"  - {node.text[:50]}... (level: {node.metadata['level']})")
     
     # Example 6: NOT filter
     print("\n6. NOT Filter (NOT category == 'systems'):")
-    results = await index.search_by_text("programming", k=5, filters=NOT(EQ("category", "systems")))
+    results = await collect_results(index.search_by_text_iter("programming", filters=NOT(EQ("category", "systems"))), k=5)
     for node, score in results:
         print(f"  - {node.text[:50]}... (category: {node.metadata['category']})")
     
     # Example 7: Complex nested filter
     print("\n7. Complex Nested Filter ((language == 'python' OR language == 'typescript') AND year >= 2023):")
-    results = await index.search_by_text(
-        "programming",
-        k=5,
-        filters=AND(
-            OR(
-                EQ("language", "python"),
-                EQ("language", "typescript")
-            ),
-            GTE("year", 2023)
-        )
+    results = await collect_results(
+        index.search_by_text_iter(
+            "programming",
+            filters=AND(
+                OR(
+                    EQ("language", "python"),
+                    EQ("language", "typescript")
+                ),
+                GTE("year", 2023)
+            )
+        ),
+        k=5
     )
     for node, score in results:
         print(f"  - {node.text[:50]}... (language: {node.metadata['language']}, year: {node.metadata['year']})")

@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional, Dict, Any, TypeVar, Generic, Type, Union
+from typing import List, Optional, Dict, Any, TypeVar, Generic, Type, Union, AsyncGenerator, AsyncIterator, Tuple, Iterable, Iterator
 
 from pydantic import BaseModel, ConfigDict, PrivateAttr
+
+from fetchcraft.node import Node
 
 # Type variable for document type
 D = TypeVar('D', bound=BaseModel)
@@ -112,6 +114,32 @@ class VectorStore(BaseModel, ABC, Generic[D]):
         """
         pass
     
+    @abstractmethod
+    def similarity_search_iter(
+        self,
+        query_embedding: List[float],
+        index_id: Optional[str] = None,
+        query_text: Optional[str] = None,
+        filters: Optional[Union["MetadataFilter", Dict[str, Any]]] = None,
+        page_size: int = 32,
+        **kwargs: Any,
+    ) -> AsyncIterator[Tuple["Node", float]]:
+        """
+        Search for similar documents using a query embedding.
+
+        Args:
+            query_embedding: The embedding vector to search with
+            k: Number of results to return
+            index_id: Optional index identifier to filter search results
+            query_text: Original query text (required for hybrid search)
+            filters: Optional metadata filters to apply
+            **kwargs: Additional search parameters
+
+        Returns:
+            List of tuples containing (document, similarity_score)
+        """
+        ...
+
     async def search_by_text(
         self,
         query: str,

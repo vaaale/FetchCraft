@@ -1,4 +1,5 @@
-from typing import List, Dict, Any, Optional, Type, Union, Literal
+from typing import Any, Dict, List, Optional, Tuple, Union, AsyncIterator, Iterator, AsyncGenerator
+from typing import Type, Literal
 
 from pydantic import BaseModel, Field, ConfigDict
 from qdrant_client import QdrantClient
@@ -8,15 +9,17 @@ from tqdm import tqdm
 from .base import VectorStore, D
 from .qdrant_filter_translator import QdrantFilterTranslator
 from ..embeddings import Embeddings
-from ..node import Node, DocumentNode, Chunk, SymNode, ObjectNode
 from ..filters import MetadataFilter
+from ..node import Node, DocumentNode, Chunk, SymNode, ObjectNode
 
 try:
     from fastembed import SparseTextEmbedding
+
     FASTEMBED_AVAILABLE = True
 except ImportError:
     FASTEMBED_AVAILABLE = False
     SparseTextEmbedding = None
+
 
 class QdrantConfig(BaseModel):
     """Configuration for Qdrant vector store."""
@@ -27,11 +30,12 @@ class QdrantConfig(BaseModel):
     enable_hybrid: bool = False  # Enable hybrid search with sparse + dense vectors
     fusion_method: Literal["rrf", "dbsf"] = "rrf"  # Fusion method for hybrid search
 
+
 class QdrantVectorStore(VectorStore[Node]):
     """
     Qdrant implementation of the VectorStore interface.
     """
-    
+
     client: Any = Field(description="QdrantClient instance")
     collection_name: str = Field(description="Name of the collection")
     document_class: Optional[Type[Node]] = Field(default=None, description="Document class type")
@@ -40,12 +44,12 @@ class QdrantVectorStore(VectorStore[Node]):
     fusion_method: Literal["rrf", "dbsf", "mmr"] = Field(default="rrf", description="Fusion method for hybrid search")
     _distance_metric: Any = None  # Computed field for models.Distance
     _sparse_embedder: Any = None  # Fastembed sparse embedder
-    
+
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         validate_assignment=True,
     )
-    
+
     def __init__(
         self,
         client: QdrantClient,
@@ -82,7 +86,7 @@ class QdrantVectorStore(VectorStore[Node]):
         )
         self._embeddings = embeddings
         self._distance_metric = getattr(models.Distance, distance.upper())
-        
+
         # Initialize sparse embedder if hybrid search is enabled
         if enable_hybrid:
             if not FASTEMBED_AVAILABLE:
@@ -91,15 +95,15 @@ class QdrantVectorStore(VectorStore[Node]):
                     "Install it with: pip install fastembed"
                 )
             self._sparse_embedder = SparseTextEmbedding(model_name=sparse_model)
-        
+
         # Create collection if it doesn't exist
         self._ensure_collection()
-    
+
     def _ensure_collection(self) -> None:
         """Ensure the collection exists, create it if it doesn't."""
         collections = self.client.get_collections().collections
         collection_names = [collection.name for collection in collections]
-        
+
         if self.collection_name not in collection_names:
             if self.enable_hybrid:
                 # Create collection with named dense vectors and sparse vectors for hybrid search
@@ -126,7 +130,7 @@ class QdrantVectorStore(VectorStore[Node]):
                         distance=self._distance_metric
                     )
                 )
-    
+
     def _get_doc_class(self, class_name: Optional[str]) -> Type[Node]:
         """
         Get the document class based on the stored class name.
@@ -183,7 +187,6 @@ class QdrantVectorStore(VectorStore[Node]):
             result.append(node)
         return result
 
-
     async def insert_nodes(self, nodes: List[Node], index_id: Optional[str] = None, show_progress: bool = False) -> List[str]:
         """
         Add documents to the Qdrant collection.
@@ -201,7 +204,7 @@ class QdrantVectorStore(VectorStore[Node]):
         """
         if not nodes:
             return []
-        
+
         # Single loop: check hash, generate embeddings if needed, upsert if changed
         ids = []
         if show_progress:
@@ -215,7 +218,7 @@ class QdrantVectorStore(VectorStore[Node]):
                 # Embed this single document
                 embedding = await self._embeddings.embed_documents([node.text])  # type: ignore
                 node.embedding = embedding[0]  # type: ignore
-            
+
             # Generate sparse embedding if hybrid mode
             sparse_vector = None
             if self.enable_hybrid:
@@ -225,21 +228,21 @@ class QdrantVectorStore(VectorStore[Node]):
                     indices=sparse_emb.indices.tolist(),
                     values=sparse_emb.values.tolist()
                 )
-            
+
             # Extract vector and payload
             payload = node.model_dump()
             dense_vector = payload.pop('embedding')
-            
+
             # Store the document ID in the payload
             payload['id'] = node.id
-            
+
             # Store the document class type for proper reconstruction
             payload['_doc_class'] = node.__class__.__name__
-            
+
             # Add index_id to payload if provided
             if index_id is not None:
                 payload['_index_id'] = index_id
-            
+
             # Prepare vectors based on hybrid mode
             if self.enable_hybrid:
                 vector = {
@@ -248,23 +251,23 @@ class QdrantVectorStore(VectorStore[Node]):
                 }
             else:
                 vector = dense_vector
-            
+
             # Create point and upsert (insert or update)
             point = models.PointStruct(
                 id=node.id,
                 vector=vector,
                 payload=payload
             )
-            
+
             # Upsert into index (insert if new, update if exists)
             self.client.upsert(
                 collection_name=self.collection_name,
                 points=[point]
             )
             ids.append(node.id)
-        
+
         return ids
-    
+
     def _translate_filter_to_qdrant(self, filter_obj: Union[MetadataFilter, Dict[str, Any]]) -> models.Filter:
         """
         Translate a MetadataFilter to Qdrant filter format.
@@ -276,9 +279,9 @@ class QdrantVectorStore(VectorStore[Node]):
             Qdrant Filter object
         """
         return QdrantFilterTranslator.translate(filter_obj)
-    
+
     async def similarity_search(
-        self, 
+        self,
         query_embedding: List[float],
         k: int = 4,
         index_id: Optional[str] = None,
@@ -288,7 +291,7 @@ class QdrantVectorStore(VectorStore[Node]):
     ) -> List[tuple[D, float]]:
         """
         Search for similar documents using a query embedding.
-        
+
         Args:
             query_embedding: The embedding vector to search with
             k: Number of results to return
@@ -296,7 +299,7 @@ class QdrantVectorStore(VectorStore[Node]):
             query_text: Original query text (required for hybrid search)
             filters: Optional metadata filters to apply
             **kwargs: Additional search parameters
-            
+
         Returns:
             List of tuples containing (document, similarity_score)
         """
@@ -305,7 +308,7 @@ class QdrantVectorStore(VectorStore[Node]):
         must_conditions = []
         must_not_conditions = []
         should_conditions = []
-        
+
         # Add index_id filter if provided
         if index_id is not None:
             must_conditions.append(
@@ -314,7 +317,7 @@ class QdrantVectorStore(VectorStore[Node]):
                     match=models.MatchValue(value=index_id)
                 )
             )
-        
+
         # Add user-provided filters
         if filters is not None:
             user_filter = self._translate_filter_to_qdrant(filters)
@@ -324,7 +327,7 @@ class QdrantVectorStore(VectorStore[Node]):
                 should_conditions.extend(user_filter.should)
             if user_filter.must_not:
                 must_not_conditions.extend(user_filter.must_not)
-        
+
         # Create final filter if we have any conditions
         if must_conditions or must_not_conditions or should_conditions:
             filter_kwargs = {}
@@ -335,15 +338,15 @@ class QdrantVectorStore(VectorStore[Node]):
             if should_conditions:
                 filter_kwargs['should'] = should_conditions
             query_filter = models.Filter(**filter_kwargs)
-        
+
         # Perform hybrid search if enabled
         if self.enable_hybrid:
             if query_text is None:
                 raise ValueError("query_text is required for hybrid search")
-            
+
             # Generate sparse embedding for query
             sparse_query = list(self._sparse_embedder.embed([query_text]))[0]
-            
+
             # Use prefetch + fusion query for hybrid search
             search_result = self.client.query_points(
                 collection_name=self.collection_name,
@@ -380,14 +383,14 @@ class QdrantVectorStore(VectorStore[Node]):
                 with_vectors=True,  # Include vectors in results
                 **kwargs
             )
-        
+
         results = []
         for hit in search_result.points:
             doc_dict = hit.payload.copy()
             # Remove internal fields from payload
             doc_dict.pop('_index_id', None)
             doc_class_name = doc_dict.pop('_doc_class', None)
-            
+
             # Ensure document ID is present
             if 'id' not in doc_dict:
                 doc_dict['id'] = hit.id
@@ -399,14 +402,299 @@ class QdrantVectorStore(VectorStore[Node]):
                         doc_dict['embedding'] = hit.vector.get('dense')
                     else:
                         doc_dict['embedding'] = hit.vector
-            
+
             # Reconstruct using the correct class type
             doc_class = self._get_doc_class(doc_class_name)
             doc = doc_class(**doc_dict)
             results.append((doc, hit.score))
-            
+
         return results
-    
+
+
+    def similarity_search_iter(
+        self,
+        query_embedding: List[float],
+        index_id: Optional[str] = None,
+        query_text: Optional[str] = None,
+        filters: Optional[Union["MetadataFilter", Dict[str, Any]]] = None,
+        page_size: int = 32,
+        **kwargs: Any,
+    ) -> AsyncIterator[Tuple["Node", float]]:
+        """
+        Lazily search for similar documents using a query embedding.
+
+        Yields results page-by-page (using Qdrant offset pagination) until exhausted.
+        You can stop early by breaking out of the loop.
+        """
+
+        async def _gen() -> AsyncIterator[Tuple["Node", float]]:
+            if page_size <= 0:
+                raise ValueError("page_size must be > 0")
+
+            # ---- Build filter (same logic as your similarity_search) ----
+            query_filter = None
+            must_conditions = []
+            must_not_conditions = []
+            should_conditions = []
+
+            if index_id is not None:
+                must_conditions.append(
+                    models.FieldCondition(
+                        key="_index_id",
+                        match=models.MatchValue(value=index_id),
+                    )
+                )
+
+            if filters is not None:
+                user_filter = self._translate_filter_to_qdrant(filters)
+                if user_filter.must:
+                    must_conditions.extend(user_filter.must)
+                if user_filter.should:
+                    should_conditions.extend(user_filter.should)
+                if user_filter.must_not:
+                    must_not_conditions.extend(user_filter.must_not)
+
+            if must_conditions or must_not_conditions or should_conditions:
+                filter_kwargs: Dict[str, Any] = {}
+                if must_conditions:
+                    filter_kwargs["must"] = must_conditions
+                if must_not_conditions:
+                    filter_kwargs["must_not"] = must_not_conditions
+                if should_conditions:
+                    filter_kwargs["should"] = should_conditions
+                query_filter = models.Filter(**filter_kwargs)
+
+            # ---- Paging loop ----
+            offset = 0
+            while True:
+                if self.enable_hybrid:
+                    if query_text is None:
+                        raise ValueError("query_text is required for hybrid search")
+
+                    sparse_query = list(self._sparse_embedder.embed([query_text]))[0]
+
+                    prefetch_limit = (offset + page_size) * 2
+
+                    search_result = self.client.query_points(
+                        collection_name=self.collection_name,
+                        prefetch=[
+                            models.Prefetch(
+                                query=models.SparseVector(
+                                    indices=sparse_query.indices.tolist(),
+                                    values=sparse_query.values.tolist(),
+                                ),
+                                using="sparse",
+                                limit=prefetch_limit,
+                            ),
+                            models.Prefetch(
+                                query=query_embedding,
+                                using="dense",
+                                limit=prefetch_limit,
+                            ),
+                        ],
+                        query=models.FusionQuery(
+                            fusion=models.Fusion.RRF
+                            if self.fusion_method == "rrf"
+                            else models.Fusion.DBSF
+                        ),
+                        limit=page_size,
+                        offset=offset,
+                        query_filter=query_filter,
+                        with_vectors=True,
+                        **kwargs,
+                    )
+                else:
+                    search_result = self.client.query_points(
+                        collection_name=self.collection_name,
+                        query=query_embedding,
+                        limit=page_size,
+                        offset=offset,
+                        query_filter=query_filter,
+                        with_vectors=True,
+                        **kwargs,
+                    )
+
+                points = getattr(search_result, "points", None) or []
+                if not points:
+                    return  # exhausted
+
+                for hit in points:
+                    doc_dict = hit.payload.copy()
+                    doc_dict.pop("_index_id", None)
+                    doc_class_name = doc_dict.pop("_doc_class", None)
+
+                    if "id" not in doc_dict:
+                        doc_dict["id"] = hit.id
+
+                    if "embedding" not in doc_dict and hasattr(self.document_class, "model_fields"):
+                        if "embedding" in self.document_class.model_fields:
+                            if self.enable_hybrid and isinstance(hit.vector, dict):
+                                doc_dict["embedding"] = hit.vector.get("dense")
+                            else:
+                                doc_dict["embedding"] = hit.vector
+
+                    doc_class = self._get_doc_class(doc_class_name)
+                    doc = doc_class(**doc_dict)
+
+                    yield (doc, hit.score)
+
+                offset += len(points)
+                if len(points) < page_size:
+                    return
+
+        return _gen()
+
+    # async def similarity_search_iter(
+    #     self,
+    #     query_embedding: List[float],
+    #     index_id: Optional[str] = None,
+    #     query_text: Optional[str] = None,
+    #     filters: Optional[Union["MetadataFilter", Dict[str, Any]]] = None,
+    #     page_size: int = 32,
+    #     **kwargs: Any,
+    # ) -> AsyncIterator[Tuple[Node, float]]:
+    #     """
+    #     Lazily search for similar documents using a query embedding.
+    #
+    #     Yields results page-by-page (using Qdrant offset pagination) until exhausted.
+    #     You can stop early by breaking out of the loop.
+    #
+    #     Args:
+    #         query_embedding: The embedding vector to search with
+    #         index_id: Optional index identifier to filter search results
+    #         query_text: Original query text (required for hybrid search)
+    #         filters: Optional metadata filters to apply
+    #         page_size: How many results to fetch per request
+    #         **kwargs: Additional search parameters passed to Qdrant
+    #
+    #     Yields:
+    #         Tuples of (document, similarity_score)
+    #     """
+    #     if page_size <= 0:
+    #         raise ValueError("page_size must be > 0")
+    #
+    #     # ---- Build filter (same logic as your similarity_search) ----
+    #     query_filter = None
+    #     must_conditions = []
+    #     must_not_conditions = []
+    #     should_conditions = []
+    #
+    #     if index_id is not None:
+    #         must_conditions.append(
+    #             models.FieldCondition(
+    #                 key="_index_id",
+    #                 match=models.MatchValue(value=index_id),
+    #             )
+    #         )
+    #
+    #     if filters is not None:
+    #         user_filter = self._translate_filter_to_qdrant(filters)
+    #         if user_filter.must:
+    #             must_conditions.extend(user_filter.must)
+    #         if user_filter.should:
+    #             should_conditions.extend(user_filter.should)
+    #         if user_filter.must_not:
+    #             must_not_conditions.extend(user_filter.must_not)
+    #
+    #     if must_conditions or must_not_conditions or should_conditions:
+    #         filter_kwargs: Dict[str, Any] = {}
+    #         if must_conditions:
+    #             filter_kwargs["must"] = must_conditions
+    #         if must_not_conditions:
+    #             filter_kwargs["must_not"] = must_not_conditions
+    #         if should_conditions:
+    #             filter_kwargs["should"] = should_conditions
+    #         query_filter = models.Filter(**filter_kwargs)
+    #
+    #     # ---- Paging loop ----
+    #     offset = 0
+    #     while True:
+    #         # Hybrid search (prefetch + fusion)
+    #         if self.enable_hybrid:
+    #             if query_text is None:
+    #                 raise ValueError("query_text is required for hybrid search")
+    #
+    #             sparse_query = list(self._sparse_embedder.embed([query_text]))[0]
+    #
+    #             # Important for hybrid paging:
+    #             # offset applies to main query; prefetch must cover (limit + offset)
+    #             # We'll fetch more candidates for fusion: *2
+    #             prefetch_limit = (offset + page_size) * 2
+    #
+    #             search_result = self.client.query_points(
+    #                 collection_name=self.collection_name,
+    #                 prefetch=[
+    #                     models.Prefetch(
+    #                         query=models.SparseVector(
+    #                             indices=sparse_query.indices.tolist(),
+    #                             values=sparse_query.values.tolist(),
+    #                         ),
+    #                         using="sparse",
+    #                         limit=prefetch_limit,
+    #                     ),
+    #                     models.Prefetch(
+    #                         query=query_embedding,
+    #                         using="dense",
+    #                         limit=prefetch_limit,
+    #                     ),
+    #                 ],
+    #                 query=models.FusionQuery(
+    #                     fusion=models.Fusion.RRF
+    #                     if self.fusion_method == "rrf"
+    #                     else models.Fusion.DBSF
+    #                 ),
+    #                 limit=page_size,
+    #                 offset=offset,
+    #                 query_filter=query_filter,
+    #                 with_vectors=True,
+    #                 **kwargs,
+    #             )
+    #         else:
+    #             # Standard dense vector search
+    #             search_result = self.client.query_points(
+    #                 collection_name=self.collection_name,
+    #                 query=query_embedding,
+    #                 limit=page_size,
+    #                 offset=offset,
+    #                 query_filter=query_filter,
+    #                 with_vectors=True,
+    #                 **kwargs,
+    #             )
+    #
+    #         points = getattr(search_result, "points", None) or []
+    #         if not points:
+    #             return  # exhausted
+    #
+    #         # Convert and yield
+    #         for hit in points:
+    #             doc_dict = hit.payload.copy()
+    #
+    #             # Remove internal fields from payload
+    #             doc_dict.pop("_index_id", None)
+    #             doc_class_name = doc_dict.pop("_doc_class", None)
+    #
+    #             # Ensure document ID is present
+    #             if "id" not in doc_dict:
+    #                 doc_dict["id"] = hit.id
+    #
+    #             # Add embedding back if the document class expects it
+    #             if "embedding" not in doc_dict and hasattr(self.document_class, "model_fields"):
+    #                 if "embedding" in self.document_class.model_fields:
+    #                     if self.enable_hybrid and isinstance(hit.vector, dict):
+    #                         doc_dict["embedding"] = hit.vector.get("dense")
+    #                     else:
+    #                         doc_dict["embedding"] = hit.vector
+    #
+    #             doc_class = self._get_doc_class(doc_class_name)
+    #             doc = doc_class(**doc_dict)
+    #
+    #             yield (doc, hit.score)
+    #
+    #         offset += len(points)
+    #         # If the server returned fewer than requested, it's likely the end.
+    #         if len(points) < page_size:
+    #             return
+
     async def delete(self, ids: List[str], index_id: Optional[str] = None) -> bool:
         """
         Delete documents by their IDs.
@@ -443,7 +731,7 @@ class QdrantVectorStore(VectorStore[Node]):
                 )
             )
         return True
-    
+
     async def get_node(self, node_id: str, index_id: Optional[str] = None) -> Optional[Node]:
         """
         Retrieve a single document by its ID.
@@ -460,21 +748,21 @@ class QdrantVectorStore(VectorStore[Node]):
             ids=[node_id],
             with_vectors=True  # Include vectors in results
         )
-        
+
         if not result:
             return None
-        
+
         # Check if index_id matches if specified
         doc_data = result[0].payload.copy()
         if index_id is not None:
             stored_index_id = doc_data.get('_index_id')
             if stored_index_id != index_id:
                 return None
-        
+
         # Remove internal fields from payload
         doc_data.pop('_index_id', None)
         doc_class_name = doc_data.pop('_doc_class', None)
-        
+
         # Ensure document ID is present
         if 'id' not in doc_data:
             doc_data['id'] = result[0].id
@@ -486,7 +774,7 @@ class QdrantVectorStore(VectorStore[Node]):
                     doc_data['embedding'] = result[0].vector.get('dense')
                 else:
                     doc_data['embedding'] = result[0].vector
-        
+
         # Reconstruct using the correct class type
         doc_class = self._get_doc_class(doc_class_name)
         return doc_class(**doc_data)
@@ -527,12 +815,12 @@ class QdrantVectorStore(VectorStore[Node]):
         """
         if not isinstance(config, QdrantConfig):
             config = QdrantConfig(**config)
-            
+
         client = QdrantClient(
             url=config.url,
             api_key=config.api_key
         )
-        
+
         return cls(
             client=client,
             collection_name=config.collection_name,

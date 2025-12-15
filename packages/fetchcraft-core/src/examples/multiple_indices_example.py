@@ -10,8 +10,18 @@ from qdrant_client import QdrantClient
 
 from fetchcraft.embeddings import Embeddings
 from fetchcraft.index.vector_index import VectorIndex
-from fetchcraft.node import Node
+from fetchcraft.node import Node, DocumentNode
 from fetchcraft.vector_store import QdrantVectorStore
+
+
+async def collect_results(async_iter, k: int = 100):
+    """Helper to collect results from async iterator."""
+    results = []
+    async for item in async_iter:
+        results.append(item)
+        if len(results) >= k:
+            break
+    return results
 
 
 class MockEmbeddings(Embeddings):
@@ -103,7 +113,7 @@ async def demo_multiple_indices():
         ),
     ]
     
-    tech_ids = await tech_index.add_nodes(DocumentNode, tech_docs)
+    tech_ids = await tech_index.add_nodes(None, tech_docs)
     print(f"✓ Added {len(tech_ids)} documents to technical index")
     
     # Add documents to marketing index (no embeddings needed!)
@@ -118,7 +128,7 @@ async def demo_multiple_indices():
         ),
     ]
     
-    marketing_ids = await marketing_index.add_nodes(DocumentNode, marketing_docs)
+    marketing_ids = await marketing_index.add_nodes(None, marketing_docs)
     print(f"✓ Added {len(marketing_ids)} documents to marketing index")
     
     # Add documents to support index (no embeddings needed!)
@@ -133,7 +143,7 @@ async def demo_multiple_indices():
         ),
     ]
     
-    support_ids = await support_index.add_nodes(DocumentNode, support_docs)
+    support_ids = await support_index.add_nodes(None, support_docs)
     print(f"✓ Added {len(support_ids)} documents to support index")
     print()
     
@@ -146,21 +156,21 @@ async def demo_multiple_indices():
     
     # Search only in technical index
     print(f"Searching technical docs index for '{query}':")
-    tech_results = await tech_index.search_by_text(query, k=2)
+    tech_results = await collect_results(tech_index.search_by_text_iter(query), k=2)
     for doc, score in tech_results:
         print(f"  - Score: {score:.3f} | {doc.text}")
     print()
     
     # Search only in marketing index
     print(f"Searching marketing index for '{query}':")
-    marketing_results = await marketing_index.search_by_text(query, k=2)
+    marketing_results = await collect_results(marketing_index.search_by_text_iter(query), k=2)
     for doc, score in marketing_results:
         print(f"  - Score: {score:.3f} | {doc.text}")
     print()
     
     # Search only in support index
     print(f"Searching support index for '{query}':")
-    support_results = await support_index.search_by_text(query, k=2)
+    support_results = await collect_results(support_index.search_by_text_iter(query), k=2)
     for doc, score in support_results:
         print(f"  - Score: {score:.3f} | {doc.text}")
     print()

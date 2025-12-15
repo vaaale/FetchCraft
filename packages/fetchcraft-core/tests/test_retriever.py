@@ -6,7 +6,7 @@ import pytest
 from qdrant_client import QdrantClient
 
 from fetchcraft.index.vector_index import VectorIndex
-from fetchcraft.node import Node, NodeWithScore, SymNode, Chunk
+from fetchcraft.node import Node, NodeWithScore, SymNode, Chunk, DocumentNode
 from fetchcraft.retriever import VectorIndexRetriever
 from fetchcraft.vector_store import QdrantVectorStore
 
@@ -54,7 +54,7 @@ async def test_basic_retriever():
     index = VectorIndex(
         vector_store=vector_store
     )
-    await index.add_nodes(DocumentNode, documents)
+    await index.add_nodes(None, documents)
 
     # Create retriever
     retriever = index.as_retriever(top_k=2)
@@ -87,7 +87,7 @@ async def test_retriever_top_k_override():
     index = VectorIndex(
         vector_store=vector_store
     )
-    await index.add_nodes(DocumentNode, documents)
+    await index.add_nodes(None, documents)
 
     # Create retriever with top_k=2
     retriever = index.as_retriever(top_k=2)
@@ -120,7 +120,7 @@ async def test_retriever_update_config():
     index = VectorIndex(
         vector_store=vector_store
     )
-    await index.add_nodes(DocumentNode, documents)
+    await index.add_nodes(None, documents)
 
     retriever = index.as_retriever(top_k=2)
 
@@ -161,8 +161,8 @@ async def test_retriever_with_symnode():
         vector_store=vector_store
     )
 
-    await index.add_nodes(DocumentNode, [parent])
-    await index.add_nodes(DocumentNode, [sym1, sym2])
+    await index.add_nodes(None, [parent])
+    await index.add_nodes(None, [sym1, sym2])
 
     # Retriever with parent resolution
     retriever = index.as_retriever(
@@ -203,7 +203,7 @@ async def test_retriever_without_parent_resolution():
         vector_store=vector_store
     )
 
-    await index.add_nodes(DocumentNode, [parent, sym])
+    await index.add_nodes(None, [parent, sym])
 
     # Retriever without parent resolution
     retriever = index.as_retriever(
@@ -234,7 +234,7 @@ async def test_direct_retriever_creation():
     index = VectorIndex(
         vector_store=vector_store
     )
-    await index.add_nodes(DocumentNode, documents)
+    await index.add_nodes(None, documents)
 
     # Create directly
     retriever = VectorIndexRetriever(
@@ -262,7 +262,7 @@ async def test_aretrieve_alias():
     index = VectorIndex(
         vector_store=vector_store
     )
-    await index.add_nodes(DocumentNode, documents)
+    await index.add_nodes(None, documents)
 
     retriever = index.as_retriever(top_k=1)
 

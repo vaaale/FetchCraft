@@ -28,6 +28,16 @@ from fetchcraft.parsing import FilesystemDocumentParser
 from fetchcraft.node_parser import SimpleNodeParser, HierarchicalNodeParser
 
 
+async def collect_results(async_iter, k: int = 100):
+    """Helper to collect results from async iterator."""
+    results = []
+    async for item in async_iter:
+        results.append(item)
+        if len(results) >= k:
+            break
+    return results
+
+
 async def example_basic_usage():
     """Basic usage example with in-memory ChromaDB."""
     
@@ -120,7 +130,7 @@ in valuable ways.
     # Step 5: Index documents
     print("\n5. Indexing documents...")
     
-    await vector_index.add_nodes(DocumentNode, all_chunks, show_progress=True)
+    await vector_index.add_nodes(None, all_chunks, show_progress=True)
     
     print(f"   ✓ Indexed {len(all_chunks)} chunks")
     
@@ -135,7 +145,7 @@ in valuable ways.
     
     for query in queries:
         print(f"\n   Query: '{query}'")
-        results = await vector_index.search_by_text(query, k=2)
+        results = await collect_results(vector_index.search_by_text_iter(query), k=2)
         
         for i, (doc, score) in enumerate(results, 1):
             filename = doc.metadata.get('filename', 'unknown')
@@ -280,7 +290,7 @@ become more powerful and widespread.
     # Index all nodes
     print("\n3. Indexing hierarchical chunks...")
     
-    await vector_index.add_nodes(DocumentNode, nodes, show_progress=True)
+    await vector_index.add_nodes(None, nodes, show_progress=True)
     
     print(f"   ✓ Indexed all {len(nodes)} nodes")
     
@@ -347,8 +357,8 @@ async def example_comparison():
             index_id=f"index_{distance}"
         )
         
-        await vector_index.add_nodes(DocumentNode, chunks)
-        results = await vector_index.search_by_text("AI and ML", k=1)
+        await vector_index.add_nodes(None, chunks)
+        results = await collect_results(vector_index.search_by_text_iter("AI and ML"), k=1)
         
         if results:
             score = results[0][1]

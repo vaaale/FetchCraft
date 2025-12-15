@@ -9,7 +9,7 @@ from qdrant_client import QdrantClient
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
 from fetchcraft.vector_store import QdrantVectorStore
-from fetchcraft.node import Chunk
+from fetchcraft.node import Chunk, DocumentNode
 from fetchcraft.filters import (
     EQ, NE, GT, LT, GTE, LTE, IN, CONTAINS,
     AND, OR, NOT,
@@ -71,8 +71,18 @@ async def populated_index(index):
         ),
     ]
     
-    await index.add_nodes(DocumentNode, nodes)
+    await index.add_nodes(None, nodes)
     return index
+
+
+async def collect_results(async_iter, k: int = 100):
+    """Helper to collect results from async iterator."""
+    results = []
+    async for item in async_iter:
+        results.append(item)
+        if len(results) >= k:
+            break
+    return results
 
 
 class TestBasicFilters:
@@ -81,10 +91,12 @@ class TestBasicFilters:
     @pytest.mark.asyncio
     async def test_equality_filter(self, populated_index):
         """Test EQ operator."""
-        results = await populated_index.search_by_text(
-            "programming",
-            k=5,
-            filters=EQ("metadata.category", "tutorial")
+        results = await collect_results(
+            populated_index.search_by_text_iter(
+                "programming",
+                filters=EQ("metadata.category", "tutorial")
+            ),
+            k=5
         )
         
         assert len(results) <= 5
@@ -94,10 +106,12 @@ class TestBasicFilters:
     @pytest.mark.asyncio
     async def test_not_equal_filter(self, populated_index):
         """Test NE operator."""
-        results = await populated_index.search_by_text(
-            "programming",
-            k=5,
-            filters=NE("metadata.level", "beginner")
+        results = await collect_results(
+            populated_index.search_by_text_iter(
+                "programming",
+                filters=NE("metadata.level", "beginner")
+            ),
+            k=5
         )
         
         for node, score in results:
@@ -106,10 +120,12 @@ class TestBasicFilters:
     @pytest.mark.asyncio
     async def test_greater_than_filter(self, populated_index):
         """Test GT operator."""
-        results = await populated_index.search_by_text(
-            "programming",
-            k=5,
-            filters=GT("year", 2022)
+        results = await collect_results(
+            populated_index.search_by_text_iter(
+                "programming",
+                filters=GT("year", 2022)
+            ),
+            k=5
         )
         
         for node, score in results:
@@ -118,10 +134,12 @@ class TestBasicFilters:
     @pytest.mark.asyncio
     async def test_greater_than_equal_filter(self, populated_index):
         """Test GTE operator."""
-        results = await populated_index.search_by_text(
-            "programming",
-            k=5,
-            filters=GTE("year", 2023)
+        results = await collect_results(
+            populated_index.search_by_text_iter(
+                "programming",
+                filters=GTE("year", 2023)
+            ),
+            k=5
         )
         
         for node, score in results:
@@ -130,10 +148,12 @@ class TestBasicFilters:
     @pytest.mark.asyncio
     async def test_in_filter(self, populated_index):
         """Test IN operator."""
-        results = await populated_index.search_by_text(
-            "programming",
-            k=5,
-            filters=IN("language", ["python", "rust"])
+        results = await collect_results(
+            populated_index.search_by_text_iter(
+                "programming",
+                filters=IN("language", ["python", "rust"])
+            ),
+            k=5
         )
         
         for node, score in results:
@@ -146,13 +166,15 @@ class TestCompositeFilters:
     @pytest.mark.asyncio
     async def test_and_filter(self, populated_index):
         """Test AND condition."""
-        results = await populated_index.search_by_text(
-            "programming",
-            k=5,
-            filters=AND(
-                EQ("category", "tutorial"),
-                GTE("year", 2023)
-            )
+        results = await collect_results(
+            populated_index.search_by_text_iter(
+                "programming",
+                filters=AND(
+                    EQ("category", "tutorial"),
+                    GTE("year", 2023)
+                )
+            ),
+            k=5
         )
         
         for node, score in results:
@@ -162,13 +184,15 @@ class TestCompositeFilters:
     @pytest.mark.asyncio
     async def test_or_filter(self, populated_index):
         """Test OR condition."""
-        results = await populated_index.search_by_text(
-            "programming",
-            k=5,
-            filters=OR(
-                EQ("level", "beginner"),
-                EQ("level", "advanced")
-            )
+        results = await collect_results(
+            populated_index.search_by_text_iter(
+                "programming",
+                filters=OR(
+                    EQ("level", "beginner"),
+                    EQ("level", "advanced")
+                )
+            ),
+            k=5
         )
         
         for node, score in results:
@@ -177,10 +201,12 @@ class TestCompositeFilters:
     @pytest.mark.asyncio
     async def test_not_filter(self, populated_index):
         """Test NOT condition."""
-        results = await populated_index.search_by_text(
-            "programming",
-            k=5,
-            filters=NOT(EQ("metadata.category", "systems"))
+        results = await collect_results(
+            populated_index.search_by_text_iter(
+                "programming",
+                filters=NOT(EQ("metadata.category", "systems"))
+            ),
+            k=5
         )
         
         for node, score in results:
@@ -190,16 +216,18 @@ class TestCompositeFilters:
     async def test_nested_filters(self, populated_index):
         """Test nested filter combinations."""
         # (level == "beginner" OR level == "advanced") AND year >= 2023
-        results = await populated_index.search_by_text(
-            "programming",
-            k=5,
-            filters=AND(
-                OR(
-                    EQ("level", "beginner"),
-                    EQ("level", "advanced")
-                ),
-                GTE("year", 2023)
-            )
+        results = await collect_results(
+            populated_index.search_by_text_iter(
+                "programming",
+                filters=AND(
+                    OR(
+                        EQ("level", "beginner"),
+                        EQ("level", "advanced")
+                    ),
+                    GTE("year", 2023)
+                )
+            ),
+            k=5
         )
         
         for node, score in results:
