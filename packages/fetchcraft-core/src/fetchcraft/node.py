@@ -504,6 +504,7 @@ class ObjectNode(Node):
         return cls(
             text=text,
             object_type=ObjectType.VECTOR_INDEX_RETRIEVER,
+            obj=retriever,
             data=retriever.to_json(),
         )
 
@@ -534,8 +535,9 @@ class DefaultObjectMapper(ObjectMapper):
     object_map: Dict[str, Any] = {}
     factories: Dict[str, Any] = {}
 
-    def __init__(self, factories: Optional[Dict[str, Any]] = None):
+    def __init__(self, factories: Optional[Dict[str, Any]] = None, object_map: Optional[Dict[str, Any]] = None):
         super().__init__()
+        self.object_map = object_map or {}
         self.factories = factories or {}
 
     async def resolve_object_node(self, node: ObjectNode, score: float, query: str, top_k: Optional[int] = None, **kwargs) -> List[Node]:

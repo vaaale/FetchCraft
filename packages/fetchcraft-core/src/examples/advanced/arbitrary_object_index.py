@@ -5,7 +5,6 @@ import os
 from typing import List, Any, Dict
 
 import openai
-from mongomock.mongo_client import MongoClient
 from pydantic_ai import Tool
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -15,7 +14,7 @@ from examples.test_data import AI_CHUNKS, PHYSICS_CHUNKS, DAD_JOKES_CHUNKS
 from fetchcraft.agents import PydanticAgent, RetrieverTool
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
-from fetchcraft.node import Node, ObjectNode, DefaultObjectMapper, ObjectType
+from fetchcraft.node import Node, ObjectNode, DefaultObjectMapper, ObjectType, DocumentNode
 from fetchcraft.retriever import VectorIndexRetriever
 from fetchcraft.vector_store import QdrantVectorStore
 
@@ -25,7 +24,6 @@ OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "http://wingman:8000/v1")
 
 COLLECTION_NAME = os.getenv("COLLECTION_NAME", "fetchcraft_objects")
 
-mongo_client = MongoClient()
 client = QdrantClient(":memory:")
 
 
@@ -35,13 +33,7 @@ async def get_vector_index(index_id: str, nodes: List[Node]):
         api_key=OPENAI_API_KEY,
         base_url=OPENAI_BASE_URL
     )
-    #
-    # document_store = MongoDBDocumentStore(
-    #     client=mongo_client,
-    #     database_name=COLLECTION_NAME,
-    #     collection_name=COLLECTION_NAME
-    # )
-    #
+
     vector_store = QdrantVectorStore(
         client=client,
         collection_name=COLLECTION_NAME,
@@ -50,10 +42,9 @@ async def get_vector_index(index_id: str, nodes: List[Node]):
 
     index = VectorIndex(
         vector_store=vector_store,
-        # doc_store=document_store,
         index_id=index_id
     )
-    await index.add_nodes(DocumentNode, nodes)
+    _ids = await index.add_nodes(doc=None, nodes=nodes)
 
     return index
 

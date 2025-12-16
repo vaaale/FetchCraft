@@ -99,9 +99,8 @@ class VectorIndex(BaseIndex[D]):
             :param doc: The source document
         """
         existing_docs = {}
-        if self._doc_store:
+        if self._doc_store and doc:
             for node in nodes:
-                # _docs = await self._doc_store.list_documents(filters={"metadata.source": node.metadata.get("source")})
                 _docs = await self._doc_store.list_documents(filters={"persistent_key": node.persistent_key})
                 existing_docs.update({doc.id: doc for doc in _docs})
 
@@ -116,7 +115,10 @@ class VectorIndex(BaseIndex[D]):
 
         try:
             if self._doc_store:
-                await self._doc_store.add_documents([doc] + nodes)
+                all_nodes = nodes
+                if doc:
+                    all_nodes = [doc] + nodes
+                await self._doc_store.add_documents(all_nodes)
         except Exception as e:
             logger.error(f"Error adding documents to document store: {e}")
             raise e

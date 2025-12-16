@@ -46,6 +46,7 @@ class FetchcraftMCPConfig(BaseSettings):
     qdrant_port: int = Field(default=6333, description="Qdrant port")
     
     # Document store configuration
+    mongo_uri: str = Field(default="mongodb://localhost:27017", description="MongoDB connection string")
     database_name: str = Field(default="fetchcraft", description="MongoDB database name")
     collection_name: str = Field(default="fetchcraft_chatbot", description="Collection name")
     documents_path: str = Field(default="Documents", description="Documents path")

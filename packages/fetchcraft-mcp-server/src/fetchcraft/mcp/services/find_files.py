@@ -66,6 +66,7 @@ class DefaultFindFilesService(FindFilesService, BaseModel):
         )
 
         doc_store = MongoDBDocumentStore(
+            connection_string=config.mongo_uri,
             database_name=config.database_name,
             collection_name=config.collection_name,
         )

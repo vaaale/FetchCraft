@@ -81,12 +81,16 @@ class VectorIndexRetriever(Retriever[D]):
         )
 
     def to_json(self) -> Dict[str, Any]:
-        return {
+        data_dict = {
             "index_id": self.vector_index.index_id,
             "top_k": self.top_k,
             "resolve_parents": self.resolve_parents,
             "search_kwargs": self.search_kwargs
         }
+        if self.filters:
+            filters = self.filters.model_dump()
+            data_dict["filters"] = filters
+        return data_dict
 
 
     async def _retrieve(

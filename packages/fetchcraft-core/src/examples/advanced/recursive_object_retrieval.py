@@ -46,7 +46,7 @@ async def get_vector_index(index_id: str, nodes: List[Node]):
         # doc_store=document_store,
         index_id=index_id
     )
-    await index.add_nodes(DocumentNode, nodes)
+    await index.add_nodes(doc=None, nodes=nodes)
 
     return index
 

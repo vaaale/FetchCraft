@@ -126,6 +126,38 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
         # Max depth reached, return current node
         return current_node
 
+    async def _resolve_parent_node(
+        self,
+        doc: Node,
+        score: float
+    ) -> tuple[Node, float]:
+        resolved_node: tuple[Node, float] = (doc, score)
+        seen_parent_ids: Set[str] = set()
+
+        # Check if this is a SymNode that needs parent resolution
+        if doc.node_type == NodeType.SYMNODE and doc.parent_id:
+            # Recursively resolve to top-level parent
+            top_parent = await self._resolve_to_top_parent(doc)
+
+            if top_parent and top_parent.id not in seen_parent_ids:
+                resolved_node = (top_parent, score)
+                seen_parent_ids.add(top_parent.id)
+            elif not top_parent:
+                # Resolution failed, fall back to original node
+                if doc.id not in seen_parent_ids:
+                    resolved_node = (doc, score)
+                    seen_parent_ids.add(doc.id)
+        else:
+            # Not a SymNode
+            # Check if this document is already a parent we've seen
+            if doc.id not in seen_parent_ids:
+                resolved_node = (doc, score)
+                # If this could be a parent (Chunk), track it to avoid duplicates
+                if isinstance(doc, Chunk):
+                    seen_parent_ids.add(doc.id)
+
+        return resolved_node
+
     async def _resolve_parent_nodes(
         self,
         results: List[tuple[D, float]]
@@ -197,7 +229,7 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    async def as_retriever(self, top_k, resolve_parents, object_mapper: Optional[ObjectMapper] = None, **search_kwargs):
+    def as_retriever(self, top_k: int = 4, resolve_parents: bool = True, object_mapper: Optional[ObjectMapper] = None, **search_kwargs):
         """
         Create a retriever from this index.
 

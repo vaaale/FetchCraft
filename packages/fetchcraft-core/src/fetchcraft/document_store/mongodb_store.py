@@ -2,7 +2,7 @@
 MongoDB document store implementation.
 """
 
-from typing import List, Optional, Dict, Any, Type
+from typing import List, Optional, Dict, Any, Type, Union
 from pydantic import BaseModel, Field, ConfigDict
 
 from .base import DocumentStore
@@ -413,7 +413,67 @@ class MongoDBDocumentStore(DocumentStore[Node]):
             documents.append(doc_class(**doc_dict))
         
         return documents
-    
+
+    async def find(
+        self,
+        query: Dict[str, Any],
+        values: List[str],
+        unique: bool = False,
+    ) -> Union[List[Any], List[Dict[str, Any]]]:
+        """
+        Find arbitrary values from a MongoDB collection.
+
+        Args:
+            query: MongoDB filter query
+            values: list of dot-path fields to return (e.g. ["metadata.source"])
+            unique: whether to return unique values only
+
+        Returns:
+            - If one value field is provided:
+                List[Any]
+            - If multiple value fields are provided:
+                List[Dict[str, Any]]
+        """
+
+        # Build projection
+        projection = {field: 1 for field in values}
+        projection["_id"] = 0
+
+        cursor = await self.collection.find(query, projection)
+
+        def extract(doc: Dict[str, Any], path: str):
+            """Safely extract dotted-path values."""
+            current = doc
+            for key in path.split("."):
+                if not isinstance(current, dict) or key not in current:
+                    return None
+                current = current[key]
+            return current
+
+        results = []
+
+        for doc in cursor:
+            if len(values) == 1:
+                results.append(extract(doc, values[0]))
+            else:
+                results.append({v: extract(doc, v) for v in values})
+
+        if unique:
+            if len(values) == 1:
+                return list({v for v in results if v is not None})
+            else:
+                # Deduplicate dicts
+                seen = set()
+                unique_results = []
+                for item in results:
+                    key = tuple(sorted(item.items()))
+                    if key not in seen:
+                        seen.add(key)
+                        unique_results.append(item)
+                return unique_results
+
+        return results
+
     async def close(self):
         """Close the MongoDB connection."""
         if self.client:
