@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from importlib_resources import files
 
 
 def create_frontend_router(frontend_dir: Path | None = None) -> APIRouter:
@@ -21,11 +22,13 @@ def create_frontend_router(frontend_dir: Path | None = None) -> APIRouter:
         Configured APIRouter with frontend routes
     """
     router = APIRouter(tags=["frontend"])
-    
+    frontend_dir = files("fetchcraft-mcp.frontend") / "dist"
+
     # Default frontend directory location
     if frontend_dir is None:
-        frontend_dir = Path(__file__).parent.parent.parent.parent / "frontend" / "dist"
-    
+        package_root = Path(__file__).parent.parent.parent.parent
+        frontend_dir = package_root / "frontend" / "dist"
+
     # Ensure frontend directory exists
     if not frontend_dir.exists():
         @router.get("/")

@@ -1,3 +1,6 @@
+"""
+Default implementation of FindFilesService using Qdrant and MongoDB.
+"""
 import logging
 from typing import List
 
@@ -7,13 +10,21 @@ from qdrant_client import QdrantClient
 from fetchcraft.document_store import MongoDBDocumentStore
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
-from fetchcraft.mcp.settings import MCPServerSettings
+from fetchcraft.mcp.config import FetchcraftMCPConfig
+from fetchcraft.mcp.interface import FindFilesService
 from fetchcraft.node import NodeWithScore
-from fetchcraft.retriever import Retriever
 from fetchcraft.vector_store import QdrantVectorStore
 
 
-class FindFilesService(BaseModel):
+class DefaultFindFilesService(FindFilesService, BaseModel):
+    """
+    Default implementation of FindFilesService using Qdrant vector store.
+    
+    This implementation uses:
+    - Qdrant for vector similarity search
+    - MongoDB for document storage
+    - OpenAI-compatible embeddings
+    """
     model_config = ConfigDict(arbitrary_types_allowed=True)
     logger: logging.Logger = logging.getLogger("FindFilesService")
 
@@ -25,37 +36,45 @@ class FindFilesService(BaseModel):
         self.logger.info(f"   ✓ Retriever initialized.")
 
     @classmethod
-    def create(cls, settings: MCPServerSettings) -> "FindFilesService":
-        """Set up the RAG system."""
+    def create(cls, config: FetchcraftMCPConfig) -> "DefaultFindFilesService":
+        """
+        Create a DefaultFindFilesService from config.
+        
+        Args:
+            config: MCP server configuration with database settings
+            
+        Returns:
+            Configured DefaultFindFilesService instance
+        """
         # Initialize embeddings
         embeddings = OpenAIEmbeddings(
-            model=settings.embedding_model,
-            api_key=settings.embedding_api_key,
-            base_url=settings.embedding_base_url
+            model=config.embedding_model,
+            api_key=config.embedding_api_key,
+            base_url=config.embedding_base_url
         )
 
-        client = QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
+        client = QdrantClient(host=config.qdrant_host, port=config.qdrant_port)
 
         # Create vector store
         vector_store = QdrantVectorStore(
             client=client,
-            collection_name=settings.collection_name,
+            collection_name=config.collection_name,
             embeddings=embeddings,
             distance="Cosine",
-            enable_hybrid=settings.enable_hybrid,
-            fusion_method=settings.fusion_method
+            enable_hybrid=config.enable_hybrid,
+            fusion_method=config.fusion_method
         )
 
         doc_store = MongoDBDocumentStore(
-            database_name=settings.database_name,
-            collection_name=settings.collection_name,
+            database_name=config.database_name,
+            collection_name=config.collection_name,
         )
 
         # Create vector index
         vector_index = VectorIndex(
             vector_store=vector_store,
             doc_store=doc_store,
-            index_id=settings.index_id
+            index_id=config.index_id
         )
 
         return cls(vector_index=vector_index)
@@ -70,7 +89,7 @@ class FindFilesService(BaseModel):
             offset: Offset for pagination
             
         Returns:
-            Dictionary with files, total count, and offset
+            List of NodeWithScore objects
         """
         self.logger.debug(f"find_files(query={query}, num_results={num_results}, offset={offset})")
 

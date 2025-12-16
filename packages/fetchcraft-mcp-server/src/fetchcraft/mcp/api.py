@@ -8,8 +8,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Query, HTTPException
 
-from fetchcraft.mcp.find_files_service import FindFilesService
-from fetchcraft.mcp.query_service import QueryService
+from fetchcraft.mcp.interface import FindFilesService, QueryService
 from fetchcraft.mcp.schema import FileResultSchema, FindFilesResponseSchema, QueryStructuredResponseSchema
 
 

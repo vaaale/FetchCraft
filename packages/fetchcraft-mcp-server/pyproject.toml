@@ -23,6 +23,9 @@ sources = ["src"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/fetchcraft/"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"frontend/dist" = "fetchcraft-mcp/frontend/dist"
+
 [tool.uv]
 src-layout = true
 

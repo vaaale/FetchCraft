@@ -3,8 +3,7 @@ from pathlib import Path
 
 from fastmcp import FastMCP
 
-from fetchcraft.mcp.find_files_service import FindFilesService
-from fetchcraft.mcp.settings import MCPServerSettings
+from fetchcraft.mcp.interface import FindFilesService
 
 
 def _get_frontend_asset_filenames() -> tuple[str | None, str | None]:

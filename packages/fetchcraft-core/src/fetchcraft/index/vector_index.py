@@ -1,16 +1,19 @@
+import logging
 from typing import List, TypeVar, Optional, Annotated, Any, AsyncIterator, Tuple
 from uuid import uuid4
 
 from pydantic import Field, SkipValidation
-from tqdm import tqdm
 
 from fetchcraft.document_store import DocumentStore
 from fetchcraft.index.base import BaseIndex
-from fetchcraft.node import Node, Chunk, ObjectMapper, DocumentNode
+from fetchcraft.node import Node, ObjectMapper
 from fetchcraft.retriever import Retriever
 from fetchcraft.vector_store.base import VectorStore
 
+logger = logging.getLogger(__name__)
+
 D = TypeVar('D', bound=Node)
+
 
 class VectorIndex(BaseIndex[D]):
     """
@@ -80,7 +83,6 @@ class VectorIndex(BaseIndex[D]):
             children = document.children_ids
             await self.vector_store.delete(children, index_id=self.index_id)
 
-
     async def add_nodes(self, doc: Optional[D], nodes: List[D], show_progress: bool = False) -> List[str]:
         """
         Add documents to the index.
@@ -116,13 +118,10 @@ class VectorIndex(BaseIndex[D]):
             if self._doc_store:
                 await self._doc_store.add_documents([doc] + nodes)
         except Exception as e:
-            print(f"Error adding documents to document store: {e}")
-            print(f"Document: {doc}")
-            print(f"Nodes: {nodes}")
+            logger.error(f"Error adding documents to document store: {e}")
             raise e
 
         return await self.vector_store.insert_nodes(nodes, index_id=self.index_id, show_progress=show_progress)
-
 
     async def search_by_text_iter(
         self,
@@ -147,7 +146,6 @@ class VectorIndex(BaseIndex[D]):
             else:
                 yield item
 
-
     async def search_iter(
         self,
         query: str,
@@ -169,7 +167,6 @@ class VectorIndex(BaseIndex[D]):
                     yield resolved_node
             else:
                 yield item
-
 
     async def get_document(self, document_id: str) -> Optional[D]:
         """
@@ -205,7 +202,6 @@ class VectorIndex(BaseIndex[D]):
             The number of documents in the index
         """
         return await self.vector_store.count(index_id=self.index_id)
-
 
     def as_retriever(
         self,

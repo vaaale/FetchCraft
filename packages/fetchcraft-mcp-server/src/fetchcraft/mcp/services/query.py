@@ -1,3 +1,6 @@
+"""
+Default implementation of QueryService using Qdrant and MongoDB.
+"""
 import os
 from pathlib import Path
 
@@ -9,55 +12,71 @@ from fetchcraft.agents import RetrieverTool, PydanticAgent
 from fetchcraft.document_store import MongoDBDocumentStore
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
-from fetchcraft.mcp.model import QueryResponse
-from fetchcraft.mcp.settings import MCPServerSettings
+from fetchcraft.mcp.config import FetchcraftMCPConfig
+from fetchcraft.mcp.interface import QueryService, QueryResponse
 from fetchcraft.vector_store import QdrantVectorStore
 
 
-class QueryService(BaseModel):
+class DefaultQueryService(QueryService, BaseModel):
+    """
+    Default implementation of QueryService using RAG with Qdrant.
+    
+    This implementation uses:
+    - Qdrant for vector similarity search
+    - MongoDB for document storage
+    - PydanticAgent for RAG query processing
+    """
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     vector_index: VectorIndex
-    settings: MCPServerSettings
+    config: FetchcraftMCPConfig
 
-    def __init__(self, vector_index: VectorIndex, settings: MCPServerSettings):
-        super().__init__(vector_index=vector_index, settings=settings)
+    def __init__(self, vector_index: VectorIndex, config: FetchcraftMCPConfig):
+        super().__init__(vector_index=vector_index, config=config)
 
     @classmethod
-    def create(cls, settings: MCPServerSettings) -> "QueryService":
-        """Set up the RAG system."""
+    def create(cls, config: FetchcraftMCPConfig) -> "DefaultQueryService":
+        """
+        Create a DefaultQueryService from config.
+        
+        Args:
+            config: MCP server configuration with database settings
+            
+        Returns:
+            Configured DefaultQueryService instance
+        """
         # Initialize embeddings
         embeddings = OpenAIEmbeddings(
-            model=settings.embedding_model,
-            api_key=settings.embedding_api_key,
-            base_url=settings.embedding_base_url
+            model=config.embedding_model,
+            api_key=config.embedding_api_key,
+            base_url=config.embedding_base_url
         )
 
-        client = QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
+        client = QdrantClient(host=config.qdrant_host, port=config.qdrant_port)
 
         # Create vector store
         vector_store = QdrantVectorStore(
             client=client,
-            collection_name=settings.collection_name,
+            collection_name=config.collection_name,
             embeddings=embeddings,
             distance="Cosine",
-            enable_hybrid=settings.enable_hybrid,
-            fusion_method=settings.fusion_method
+            enable_hybrid=config.enable_hybrid,
+            fusion_method=config.fusion_method
         )
 
         doc_store = MongoDBDocumentStore(
-            database_name=settings.database_name,
-            collection_name=settings.collection_name,
+            database_name=config.database_name,
+            collection_name=config.collection_name,
         )
 
         # Create vector index
         vector_index = VectorIndex(
             vector_store=vector_store,
             doc_store=doc_store,
-            index_id=settings.index_id
+            index_id=config.index_id
         )
 
-        return cls(vector_index=vector_index, settings=settings)
+        return cls(vector_index=vector_index, config=config)
 
     async def query(
         self,
@@ -65,6 +84,17 @@ class QueryService(BaseModel):
         top_k: int = 3,
         include_citations: bool = True
     ) -> QueryResponse:
+        """
+        Query the RAG system with a question.
+        
+        Args:
+            question: The question to ask
+            top_k: Number of documents to retrieve
+            include_citations: Whether to include citations in response
+            
+        Returns:
+            QueryResponse with answer, citations, and model info
+        """
         try:
             # Query the agent
             print(f"\n6️⃣  Creating RAG agent...")
@@ -76,7 +106,7 @@ class QueryService(BaseModel):
             tools = [Tool(tool_func, takes_ctx=True, max_retries=3)]
 
             agent = PydanticAgent.create(
-                model=self.settings.llm_model,
+                model=self.config.llm_model,
                 tools=tools,
                 retries=3
             )
@@ -108,7 +138,7 @@ class QueryService(BaseModel):
             result = QueryResponse(
                 answer=answer,
                 citations=citations or {},
-                model=self.settings.llm_model
+                model=self.config.llm_model
             )
             return result
 

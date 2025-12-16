@@ -144,8 +144,6 @@ class MongoDBDocumentStore(DocumentStore[Node]):
         Returns:
             The document ID
         """
-        # await self._ensure_indexes()
-
         existing = await self.list_documents(filters={"metadata.source": document.metadata["source"]})
         if existing:
             if len(existing) > 1:
