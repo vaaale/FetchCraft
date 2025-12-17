@@ -30,16 +30,18 @@ def init_server(*args):
     This is used by uvicorn when running with --factory flag.
     For new code, prefer using FetchcraftMCPServer directly.
     """
-    from fetchcraft.mcp.services import DefaultFindFilesService, DefaultQueryService
+    from fetchcraft.mcp.services import DefaultFindFilesService, DefaultQueryService, DefaultDocumentPreviewService
     
     config = FetchcraftMCPConfig()
     
     find_files_service = DefaultFindFilesService.create(config)
     query_service = DefaultQueryService.create(config)
+    document_preview_service = DefaultDocumentPreviewService.create(config)
     
     server = FetchcraftMCPServer(
         find_files_service=find_files_service,
         query_service=query_service,
+        document_preview_service=document_preview_service,
         config=config,
         title="Fetchcraft Files MCP Server",
     )

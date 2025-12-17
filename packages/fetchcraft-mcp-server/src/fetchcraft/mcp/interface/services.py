@@ -39,6 +39,15 @@ class FindFilesService(ABC):
         ...
 
 
+class DocumentContent(BaseModel):
+    """Response model for document content."""
+    node_id: str
+    filename: str
+    source: str
+    content: str
+    metadata: Dict[str, Any] = {}
+
+
 class QueryResponse(BaseModel):
     """Response model for query results."""
     answer: str
@@ -71,5 +80,27 @@ class QueryService(ABC):
             
         Returns:
             QueryResponse with answer, citations, and model info
+        """
+        ...
+
+
+class DocumentPreviewService(ABC):
+    """
+    Abstract interface for document preview functionality.
+    
+    Implementations should provide document content retrieval
+    for displaying full document previews.
+    """
+
+    @abstractmethod
+    async def get_document(self, node_id: str) -> Optional[DocumentContent]:
+        """
+        Get document content by node ID.
+        
+        Args:
+            node_id: The ID of the node to retrieve
+            
+        Returns:
+            DocumentContent with full document content, or None if not found
         """
         ...

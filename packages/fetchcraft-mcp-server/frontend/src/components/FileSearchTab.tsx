@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Search, File, ChevronLeft, ChevronRight, Loader, AlertCircle } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { api, FileResult } from '../api'
+import DocumentPreviewModal from './DocumentPreviewModal'
 
 // Check for embedded search results from MCP tool
 declare global {
@@ -25,6 +26,7 @@ export default function FileSearchTab() {
   const [currentPage, setCurrentPage] = useState(1)
   const [resultsPerPage, setResultsPerPage] = useState(10)
   const [hasSearched, setHasSearched] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<FileResult | null>(null)
   
   const performSearch = async (searchQuery: string, page: number, numResults: number) => {
     if (!searchQuery.trim()) {
@@ -198,7 +200,8 @@ export default function FileSearchTab() {
                 {files.map((file, index) => (
                   <div
                     key={`${file.source}-${index}`}
-                    className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-blue-300 transition-colors cursor-pointer"
+                    onClick={() => setSelectedFile(file)}
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
@@ -259,6 +262,15 @@ export default function FileSearchTab() {
             </>
           )}
         </>
+      )}
+
+      {/* Document Preview Modal */}
+      {selectedFile && (
+        <DocumentPreviewModal
+          nodeId={selectedFile.node_id}
+          filename={selectedFile.filename}
+          onClose={() => setSelectedFile(null)}
+        />
       )}
     </div>
   )

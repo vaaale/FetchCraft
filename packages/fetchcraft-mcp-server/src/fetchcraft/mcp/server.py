@@ -36,7 +36,7 @@ from fetchcraft.mcp.api import create_api_router
 from fetchcraft.mcp.config import FetchcraftMCPConfig
 from fetchcraft.mcp.frontend_router import create_frontend_router, mount_static_assets
 from fetchcraft.mcp.iframe_middleware import IframeHeadersMiddleware
-from fetchcraft.mcp.interface import FindFilesService, QueryService
+from fetchcraft.mcp.interface import FindFilesService, QueryService, DocumentPreviewService
 from fetchcraft.mcp.mcp_api import add_tools
 
 
@@ -67,6 +67,7 @@ class FetchcraftMCPServer:
         self,
         find_files_service: FindFilesService,
         query_service: QueryService,
+        document_preview_service: DocumentPreviewService,
         config: Optional[FetchcraftMCPConfig] = None,
         title: str = "Fetchcraft MCP Server",
         description: str = "MCP Server with file search and RAG query capabilities",
@@ -78,6 +79,7 @@ class FetchcraftMCPServer:
         Args:
             find_files_service: Service for file search functionality
             query_service: Service for RAG query functionality
+            document_preview_service: Service for document preview functionality
             config: Server configuration (uses defaults if not provided)
             title: API title for OpenAPI docs
             description: API description for OpenAPI docs
@@ -85,6 +87,7 @@ class FetchcraftMCPServer:
         """
         self._find_files_service = find_files_service
         self._query_service = query_service
+        self._document_preview_service = document_preview_service
         self._config = config or FetchcraftMCPConfig()
         self._title = title
         self._description = description
@@ -161,7 +164,8 @@ class FetchcraftMCPServer:
         # Add API router
         api_router = create_api_router(
             find_files_service=self._find_files_service,
-            query_service=self._query_service
+            query_service=self._query_service,
+            document_preview_service=self._document_preview_service,
         )
         base_app.include_router(api_router)
 

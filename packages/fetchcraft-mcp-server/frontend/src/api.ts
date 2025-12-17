@@ -1,10 +1,19 @@
 // API Client for Fetchcraft File Finder
 
 export interface FileResult {
+  node_id: string
   filename: string
   source: string
   score: number
   text_preview: string
+}
+
+export interface DocumentContent {
+  node_id: string
+  filename: string
+  source: string
+  content: string
+  metadata: Record<string, unknown>
 }
 
 export interface FindFilesResponse {
@@ -49,5 +58,10 @@ export const api = {
     if (params.offset) searchParams.append('offset', params.offset.toString())
 
     return fetchAPI(`/find-files?${searchParams}`)
+  },
+
+  // Get Document Content
+  getDocument: (nodeId: string): Promise<DocumentContent> => {
+    return fetchAPI(`/document/${encodeURIComponent(nodeId)}`)
   },
 }

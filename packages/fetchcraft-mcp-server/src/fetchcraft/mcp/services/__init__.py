@@ -6,8 +6,10 @@ using Qdrant vector store and MongoDB document store.
 """
 from fetchcraft.mcp.services.find_files import DefaultFindFilesService
 from fetchcraft.mcp.services.query import DefaultQueryService
+from fetchcraft.mcp.services.document_preview import DefaultDocumentPreviewService
 
 __all__ = [
     "DefaultFindFilesService",
     "DefaultQueryService",
+    "DefaultDocumentPreviewService",
 ]

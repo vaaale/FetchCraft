@@ -3,10 +3,20 @@ from pydantic import BaseModel
 
 class FileResultSchema(BaseModel):
     """A file search result."""
+    node_id: str
     filename: str
     source: str
     score: float
     text_preview: str
+
+
+class DocumentContentSchema(BaseModel):
+    """Full document content for preview."""
+    node_id: str
+    filename: str
+    source: str
+    content: str
+    metadata: dict
 
 
 class FindFilesResponseSchema(BaseModel):

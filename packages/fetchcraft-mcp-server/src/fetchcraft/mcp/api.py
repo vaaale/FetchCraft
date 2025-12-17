@@ -8,16 +8,22 @@ from pathlib import Path
 
 from fastapi import APIRouter, Query, HTTPException
 
-from fetchcraft.mcp.interface import FindFilesService, QueryService
-from fetchcraft.mcp.schema import FileResultSchema, FindFilesResponseSchema, QueryStructuredResponseSchema
+from fetchcraft.mcp.interface import FindFilesService, QueryService, DocumentPreviewService
+from fetchcraft.mcp.schema import FileResultSchema, FindFilesResponseSchema, QueryStructuredResponseSchema, DocumentContentSchema
 
 
-def create_api_router(find_files_service: FindFilesService, query_service: QueryService) -> APIRouter:
+def create_api_router(
+    find_files_service: FindFilesService,
+    query_service: QueryService,
+    document_preview_service: DocumentPreviewService
+) -> APIRouter:
     """
     Create the API router with all endpoints.
     
     Args:
         find_files_service: The file finder service instance
+        query_service: The query service instance
+        document_preview_service: The document preview service instance
         
     Returns:
         Configured API router
@@ -94,6 +100,7 @@ def create_api_router(find_files_service: FindFilesService, query_service: Query
                 preview = "\n\n".join(paragraphs[:5])
 
                 files.append({
+                    "node_id": node.node.id,
                     "filename": filename,
                     "source": source,
                     "score": float(node.score) if node.score else 0.0,
@@ -109,5 +116,39 @@ def create_api_router(find_files_service: FindFilesService, query_service: Query
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error searching files: {str(e)}")
+
+    @router.get(
+        "/document/{node_id}",
+        name="get-document",
+        operation_id="get_document",
+        response_model=DocumentContentSchema
+    )
+    async def get_document(node_id: str) -> DocumentContentSchema:
+        """
+        Get full document content by node ID.
+        
+        Args:
+            node_id: The ID of the node to retrieve
+            
+        Returns:
+            DocumentContentSchema with full document content
+        """
+        try:
+            result = await document_preview_service.get_document(node_id)
+            
+            if not result:
+                raise HTTPException(status_code=404, detail=f"Document not found: {node_id}")
+            
+            return DocumentContentSchema(
+                node_id=result.node_id,
+                filename=result.filename,
+                source=result.source,
+                content=result.content,
+                metadata=result.metadata,
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error retrieving document: {str(e)}")
 
     return router
