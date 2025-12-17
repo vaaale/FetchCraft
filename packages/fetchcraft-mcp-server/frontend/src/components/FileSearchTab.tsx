@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Search, File, ChevronLeft, ChevronRight, Loader, AlertCircle } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
 import { api, FileResult } from '../api'
 
 // Check for embedded search results from MCP tool
@@ -210,9 +211,9 @@ export default function FileSearchTab() {
                         <p className="text-xs text-gray-500 mb-2 break-all">
                           {file.source}
                         </p>
-                        <p className="text-sm text-gray-700 line-clamp-3">
-                          {file.text_preview}
-                        </p>
+                        <div className="text-sm text-gray-700 prose prose-sm max-w-none line-clamp-6">
+                          <ReactMarkdown>{file.text_preview}</ReactMarkdown>
+                        </div>
                       </div>
                       <div className="flex-shrink-0">
                         <span
