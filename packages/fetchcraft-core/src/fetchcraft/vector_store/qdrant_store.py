@@ -773,7 +773,7 @@ class QdrantVectorStore(VectorStore[Node]):
                 if self.enable_hybrid and isinstance(result[0].vector, dict):
                     doc_data['embedding'] = result[0].vector.get('dense')
                 else:
-                    doc_data['embedding'] = result[0].vector
+                    doc_data['embedding'] = result[0].vector.get('dense')
 
         # Reconstruct using the correct class type
         doc_class = self._get_doc_class(doc_class_name)

@@ -2,18 +2,19 @@
 Dataset generator for creating evaluation datasets from documents.
 """
 
+import logging
 import random
-import asyncio
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
+
 from pydantic import BaseModel, Field, ConfigDict, PrivateAttr
 from pydantic_ai import Agent
 from pydantic_ai.models import Model
 from tqdm import tqdm
-import logging
+from pathlib import Path
 
 from ..document_store.base import DocumentStore
+from ..node import Node, ContentMode, NodeType
 from ..vector_store.base import VectorStore
-from ..node import Node, DocumentNode, Chunk, ContentMode, NodeType
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +34,10 @@ logger = logging.getLogger(__name__)
 #     "Generate exactly {num_questions} questions, one per line, without numbering or bullet points."
 # )
 
-SYSTEM_PROMPT = "You are a helpful assistant that generates high-quality questions for evaluation datasets."
+# SYSTEM_PROMPT = "You are a helpful assistant that generates high-quality questions for evaluation datasets."
 
-USER_PROMPT = """You are helping evaluate a retrieval system.
+SYSTEM_PROMPT = """You are a helpful assistant that generates high-quality questions for evaluation datasets.
+You are helping evaluate a retrieval system.
 Given a parsing passage and a desired count N, write N user-style questions that a person might ask without knowing the passage exists, yet which are answerable using only the passage.
 
 ## Requirements
@@ -62,8 +64,9 @@ Given a parsing passage and a desired count N, write N user-style questions that
 
 6) No ambiguity or pronouns without antecedents
    - Replace “it/they/this” with the concrete entity.
-   
-SOURCE PASSAGE:
+"""
+
+USER_PROMPT = """SOURCE PASSAGE:
 {text}
 
 Generate {num_questions} questions.
@@ -91,17 +94,17 @@ class EvaluationDataset(BaseModel):
     def __len__(self) -> int:
         return len(self.qa_pairs)
 
-    def save(self, filepath: str) -> None:
+    def save(self, filepath: Path) -> None:
         """Save dataset to a JSON file."""
         import json
-        with open(filepath, 'w', encoding='utf-8') as f:
+        with filepath.open('w', encoding='utf-8') as f:
             json.dump(self.model_dump(), f, indent=2, ensure_ascii=False)
 
     @classmethod
-    def load(cls, filepath: str) -> 'EvaluationDataset':
+    def load(cls, filepath: Path) -> 'EvaluationDataset':
         """Load dataset from a JSON file."""
         import json
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with filepath.open('r', encoding='utf-8') as f:
             data = json.load(f)
         return cls(**data)
 
@@ -134,10 +137,14 @@ class DatasetGenerator(BaseModel):
     """
     model_config = ConfigDict(arbitrary_types_allowed=True)
     _model: str | Model = PrivateAttr()
+    _system_prompt: str = PrivateAttr()
+    _user_prompt: str = PrivateAttr()
 
     def __init__(
         self,
         model: str | Model,
+        system_prompt: Optional[str] = SYSTEM_PROMPT,
+        user_prompt: Optional[str] = USER_PROMPT,
     ):
         """
         Initialize the dataset generator.
@@ -151,11 +158,14 @@ class DatasetGenerator(BaseModel):
         """
         super().__init__()
         self._model = model
+        self._system_prompt = system_prompt
+        self._user_prompt = user_prompt
 
     async def _generate_questions_for_node(
         self,
         node: Node,
-        num_questions: int
+        num_questions: int,
+        prompt_args: Optional[Dict[str, Any]] = None,
     ) -> List[str]:
         """
         Generate questions that can be answered by the given node.
@@ -167,21 +177,27 @@ class DatasetGenerator(BaseModel):
         Returns:
             List of generated questions
         """
+        prompt_args = prompt_args or {}
+
         agent = Agent(
             model=self._model,
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=self._system_prompt,
             output_type=Questions,
             retries=3
         )
 
         response = await agent.run(
-            user_prompt=USER_PROMPT.format(
+            user_prompt=self._user_prompt.format(
                 num_questions=num_questions,
-                text=node.text
+                text=node.text,
+                **prompt_args
             )
         )
 
         questions = response.output.questions
+        print(f"Generated {len(questions)} questions for node {node.id}")
+        print("Questions:")
+        print("\n".join(questions))
         return questions
 
     async def _get_top_level_nodes_for_document(
@@ -220,14 +236,20 @@ class DatasetGenerator(BaseModel):
 
         return nodes
 
-    async def from_nodes(self, nodes: List[Node], questions_per_node: int = 3, show_progress: bool = True) -> List[QuestionContextPair]:
+    async def from_nodes(
+        self,
+        nodes: List[Node],
+        questions_per_node: int = 3,
+        show_progress: bool = True,
+        prompt_args: Optional[Dict[str, Any]] = None,
+    ) -> List[QuestionContextPair]:
         # Generate questions for each node
         node_iterator = tqdm(nodes, desc=f"  Nodes", leave=False) if show_progress else nodes
 
         qa_pairs: List[QuestionContextPair] = []
 
         for node in node_iterator:
-            questions = await self._generate_questions_for_node(node, questions_per_node)
+            questions = await self._generate_questions_for_node(node, questions_per_node, prompt_args=prompt_args)
 
             for question in questions:
                 qa_pair = QuestionContextPair(
@@ -251,7 +273,9 @@ class DatasetGenerator(BaseModel):
         index_id: Optional[str] = None,
         questions_per_node: int = 3,
         max_nodes_per_document: int = 5,
+        filters: Optional[Dict[str, Any]] = None,
         show_progress: bool = True,
+        prompt_args: Optional[Dict[str, Any]] = None,
     ) -> EvaluationDataset:
         """
         Generate an evaluation dataset.
@@ -268,8 +292,11 @@ class DatasetGenerator(BaseModel):
         logger.info(f"Generating evaluation dataset from {num_documents} documents")
 
         # Sample documents from document store
+        node_filter = {'node_type': NodeType.DOCUMENT.value}
+        if filters:
+            node_filter.update(filters)
         all_ids = await document_store.all_ids(
-            filters={'node_type': NodeType.DOCUMENT}
+            filters=node_filter
         )
 
         if len(all_ids) < num_documents:
@@ -301,7 +328,7 @@ class DatasetGenerator(BaseModel):
                 nodes = random.sample(nodes, max_nodes_per_document)
 
             # Generate questions for each node
-            qa_pairs.extend(await self.from_nodes(nodes, questions_per_node, show_progress))
+            qa_pairs.extend(await self.from_nodes(nodes, questions_per_node, show_progress, prompt_args=prompt_args))
 
         logger.info(f"Generated {len(qa_pairs)} question-answer pairs")
 

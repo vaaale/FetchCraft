@@ -65,14 +65,14 @@ services:
     networks: [ 'demo-net' ]
 
   librechat:
-    image: librechat-apps
+    image: librechat
 #    image: librechat-dev-alex2
 #    image: ghcr.io/danny-avila/librechat-dev-api:latest
     container_name: librechat
     ports:
-      - "8080:3080"
-    depends_on:
-      - mongodb
+      - "3080:3080"
+#    depends_on:
+#      - mongodb
 #      - rag_api
 #    image: ghcr.io/danny-avila/librechat-dev:latest
     restart: always
@@ -81,7 +81,7 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       - HOST=0.0.0.0
-      - MONGO_URI=mongodb://mongodb:27017/LibreChat
+      - MONGO_URI=mongodb://wingman.akhbar.home:27017/LibreChat
       - MEILI_HOST=http://meilisearch:7700
       - RAG_PORT=${RAG_PORT:-8000}
       - RAG_API_URL=http://rag_api:${RAG_PORT:-8010}

@@ -334,8 +334,11 @@ class MongoDBDocumentStore(DocumentStore[Node]):
             List of document IDs
         """
         query = filters or {}
+        node_ids = []
         cursor = self.collection.find(query)
-        return [doc["id"] for doc in cursor]
+        async for doc in cursor:
+            node_ids.append(doc["id"])
+        return node_ids
 
     async def list_documents(
         self,
