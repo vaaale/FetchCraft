@@ -10,6 +10,12 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
 
+class FindFilesResult(BaseModel):
+    """Result model for find_files including pagination info."""
+    nodes: List[Any]
+    has_more: bool
+
+
 class FindFilesService(ABC):
     """
     Abstract interface for file finding/search functionality.
@@ -24,7 +30,7 @@ class FindFilesService(ABC):
         query: str, 
         num_results: int = 10, 
         offset: int = 0
-    ) -> List[Any]:
+    ) -> FindFilesResult:
         """
         Find files using semantic search with pagination.
         
@@ -34,7 +40,7 @@ class FindFilesService(ABC):
             offset: Offset for pagination
             
         Returns:
-            List of NodeWithScore objects or similar results
+            FindFilesResult with nodes and has_more flag
         """
         ...
 

@@ -81,7 +81,7 @@ def create_api_router(
             FindFilesResponseSchema with matching files
         """
         try:
-            paginated_nodes = await find_files_service.find_files(
+            result = await find_files_service.find_files(
                 query=query,
                 num_results=num_results,
                 offset=offset
@@ -89,7 +89,7 @@ def create_api_router(
 
             # Convert nodes to file results
             files = []
-            for node in paginated_nodes:
+            for node in result.nodes:
                 # Get filename from metadata
                 source = node.node.metadata.get("source", "Unknown")
                 filename = node.node.metadata.get("filename", Path(source).name)
@@ -111,8 +111,9 @@ def create_api_router(
 
             return FindFilesResponseSchema(
                 files=[FileResultSchema(**file) for file in files],
-                total=len(paginated_nodes),
-                offset=offset
+                total=len(result.nodes),
+                offset=offset,
+                has_more=result.has_more,
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error searching files: {str(e)}")

@@ -24,6 +24,7 @@ class FindFilesResponseSchema(BaseModel):
     files: list[FileResultSchema]
     total: int
     offset: int
+    has_more: bool
 
 class QueryStructuredResponseSchema(BaseModel):
     answer: str

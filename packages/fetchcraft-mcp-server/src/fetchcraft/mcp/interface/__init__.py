@@ -6,6 +6,7 @@ by custom service classes for dependency injection.
 """
 from fetchcraft.mcp.interface.services import (
     FindFilesService,
+    FindFilesResult,
     QueryService,
     QueryResponse,
     DocumentPreviewService,
@@ -14,6 +15,7 @@ from fetchcraft.mcp.interface.services import (
 
 __all__ = [
     "FindFilesService",
+    "FindFilesResult",
     "QueryService",
     "QueryResponse",
     "DocumentPreviewService",

@@ -27,6 +27,7 @@ export default function FileSearchTab() {
   const [resultsPerPage, setResultsPerPage] = useState(10)
   const [hasSearched, setHasSearched] = useState(false)
   const [selectedFile, setSelectedFile] = useState<FileResult | null>(null)
+  const [hasMore, setHasMore] = useState(false)
   
   const performSearch = async (searchQuery: string, page: number, numResults: number) => {
     if (!searchQuery.trim()) {
@@ -49,6 +50,7 @@ export default function FileSearchTab() {
 
       setFiles(response.files)
       setTotal(response.total)
+      setHasMore(response.has_more)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to search files')
       setFiles([])
@@ -99,7 +101,9 @@ export default function FileSearchTab() {
     handleSearch(1)
   }
 
-  const totalPages = Math.ceil(total / resultsPerPage)
+  // Calculate display info for current page
+  const startResult = (currentPage - 1) * resultsPerPage + 1
+  const endResult = startResult + files.length - 1
 
   const getScoreColor = (score: number) => {
     if (score >= 0.8) return 'text-green-600 bg-green-50'
@@ -190,8 +194,8 @@ export default function FileSearchTab() {
               {/* Results Header */}
               <div className="flex items-center justify-between">
                 <p className="text-sm text-gray-700">
-                  Showing {(currentPage - 1) * resultsPerPage + 1} to{' '}
-                  {Math.min(currentPage * resultsPerPage, total)} of {total} results
+                  Showing results {startResult} to {endResult}
+                  {!hasMore && currentPage === 1 && ` (${total} total)`}
                 </p>
               </div>
 
@@ -233,10 +237,10 @@ export default function FileSearchTab() {
               </div>
 
               {/* Pagination */}
-              {totalPages > 1 && (
+              {(currentPage > 1 || hasMore) && (
                 <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                   <div className="text-sm text-gray-700">
-                    Page {currentPage} of {totalPages}
+                    Page {currentPage}
                   </div>
                   <div className="flex items-center space-x-2">
                     <button
@@ -247,11 +251,11 @@ export default function FileSearchTab() {
                       <ChevronLeft className="w-4 h-4" />
                     </button>
                     <span className="px-4 py-2 text-sm text-gray-700">
-                      {currentPage} / {totalPages}
+                      Page {currentPage}
                     </span>
                     <button
                       onClick={() => handleSearch(currentPage + 1)}
-                      disabled={currentPage === totalPages || loading}
+                      disabled={!hasMore || loading}
                       className="p-2 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <ChevronRight className="w-4 h-4" />

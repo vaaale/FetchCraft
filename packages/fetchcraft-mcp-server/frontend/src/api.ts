@@ -20,6 +20,7 @@ export interface FindFilesResponse {
   files: FileResult[]
   total: number
   offset: number
+  has_more: boolean
 }
 
 // Get API base URL from embedded config or use relative path

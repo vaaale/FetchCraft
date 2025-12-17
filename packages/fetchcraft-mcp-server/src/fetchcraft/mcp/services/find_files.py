@@ -11,7 +11,7 @@ from fetchcraft.document_store import MongoDBDocumentStore
 from fetchcraft.embeddings import OpenAIEmbeddings
 from fetchcraft.index.vector_index import VectorIndex
 from fetchcraft.mcp.config import FetchcraftMCPConfig
-from fetchcraft.mcp.interface import FindFilesService
+from fetchcraft.mcp.interface import FindFilesService, FindFilesResult
 from fetchcraft.node import NodeWithScore
 from fetchcraft.vector_store import QdrantVectorStore
 
@@ -80,7 +80,7 @@ class DefaultFindFilesService(FindFilesService, BaseModel):
 
         return cls(vector_index=vector_index)
 
-    async def find_files(self, query: str, num_results: int = 10, offset: int = 0) -> List[NodeWithScore]:
+    async def find_files(self, query: str, num_results: int = 10, offset: int = 0) -> FindFilesResult:
         """
         Find files using semantic search with pagination.
         
@@ -90,16 +90,21 @@ class DefaultFindFilesService(FindFilesService, BaseModel):
             offset: Offset for pagination
             
         Returns:
-            List of NodeWithScore objects
+            FindFilesResult with nodes and has_more flag
         """
         self.logger.debug(f"find_files(query={query}, num_results={num_results}, offset={offset})")
 
-        total_needed = num_results + offset
+        # Fetch one extra to determine if there are more results
+        total_needed = num_results + offset + 1
 
         retriever = self.vector_index.as_retriever(top_k=3, resolve_parents=True)
         nodes = await retriever.aretrieve(query, top_k=total_needed)
 
+        # Check if there are more results beyond this page
+        has_more = len(nodes) > num_results + offset
+
         # Apply offset and limit
         paginated_nodes = nodes[offset:offset + num_results]
-        self.logger.debug(f"find_files() -> {len(paginated_nodes)} nodes")
-        return paginated_nodes
+        self.logger.debug(f"find_files() -> {len(paginated_nodes)} nodes, has_more={has_more}")
+        
+        return FindFilesResult(nodes=paginated_nodes, has_more=has_more)
