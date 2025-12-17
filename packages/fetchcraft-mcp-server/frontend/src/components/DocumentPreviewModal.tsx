@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Loader, AlertCircle, File } from 'lucide-react'
+import { X, Loader, AlertCircle, File, ChevronDown, ChevronRight } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { api, DocumentContent } from '../api'
 
@@ -13,6 +13,7 @@ export default function DocumentPreviewModal({ nodeId, filename, onClose }: Docu
   const [docContent, setDocContent] = useState<DocumentContent | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [metadataExpanded, setMetadataExpanded] = useState(false)
 
   useEffect(() => {
     const fetchDocument = async () => {
@@ -94,6 +95,42 @@ export default function DocumentPreviewModal({ nodeId, filename, onClose }: Docu
 
           {!loading && !error && docContent && (
             <div className="space-y-4">
+              {/* Metadata Accordion */}
+              <div className="border border-gray-200 rounded-lg">
+                <button
+                  onClick={() => setMetadataExpanded(!metadataExpanded)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors rounded-lg"
+                >
+                  <span>Document Metadata</span>
+                  {metadataExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-gray-500" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-gray-500" />
+                  )}
+                </button>
+                {metadataExpanded && (
+                  <div className="px-4 pb-4">
+                    <table className="w-full text-sm">
+                      <tbody className="divide-y divide-gray-100">
+                        {Object.entries(docContent.metadata).map(([key, value]) => (
+                          <tr key={key}>
+                            <td className="py-2 pr-4 font-medium text-gray-600 whitespace-nowrap align-top">
+                              {key}
+                            </td>
+                            <td className="py-2 text-gray-800 break-all">
+                              {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {Object.keys(docContent.metadata).length === 0 && (
+                      <p className="text-gray-500 text-sm italic">No metadata available</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Source path */}
               <div className="text-xs text-gray-500 break-all pb-2 border-b border-gray-100">
                 {docContent.source}
