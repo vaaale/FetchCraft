@@ -24,7 +24,7 @@ class BaseIndex(BaseModel, Generic[D], metaclass=ABCMeta):
         self._doc_store = doc_store
 
     @abstractmethod
-    async def add_nodes(self, doc: Optional[D], nodes: List[D], show_progress: bool = False):
+    async def add_nodes(self, nodes: List[D], doc: Optional[D] = None, show_progress: bool = False):
         """
         Add documents to the index.
 

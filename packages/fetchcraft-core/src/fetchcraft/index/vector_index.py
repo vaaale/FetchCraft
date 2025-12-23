@@ -83,7 +83,7 @@ class VectorIndex(BaseIndex[D]):
             children = document.children_ids
             await self.vector_store.delete(children, index_id=self.index_id)
 
-    async def add_nodes(self, doc: Optional[D], nodes: List[D], show_progress: bool = False) -> List[str]:
+    async def add_nodes(self, nodes: List[D], doc: Optional[D] = None, show_progress: bool = False) -> List[str]:
         """
         Add documents to the index.
         

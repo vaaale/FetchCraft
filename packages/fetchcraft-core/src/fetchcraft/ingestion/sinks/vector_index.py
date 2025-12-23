@@ -60,7 +60,7 @@ class VectorIndexSink(Sink):
                 # Add new chunks
                 if chunk_dicts:
                     nodes = [Node.model_validate(c) for c in chunk_dicts]
-                    await vector_index.add_nodes(doc, nodes)
+                    await vector_index.add_nodes(doc=doc, nodes=nodes)
                     
                     self._counter += 1
                     logger.info(

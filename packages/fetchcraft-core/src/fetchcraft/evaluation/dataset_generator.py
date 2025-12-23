@@ -189,7 +189,7 @@ class DatasetGenerator(BaseModel):
         response = await agent.run(
             user_prompt=self._user_prompt.format(
                 num_questions=num_questions,
-                text=node.text,
+                text=node.get_content(mode=ContentMode.EMBEDDING),
                 **prompt_args
             )
         )

@@ -18,7 +18,7 @@ class ListIndex(BaseIndex[Node]):
         super().__init__(index_id=index_id, storage=_storage, **kwargs)
 
 
-    async def add_nodes(self, nodes: List[D], doc: Optional[D] = None, show_progress: bool = False):
+    async def add_nodes(self, nodes: List[D], doc: Optional[D] = None, show_progress: bool = False) -> List[str]:
         self.storage.insert_nodes(nodes)
 
     async def search_by_text_iter(self, query: str, query_embedding: List[float] = None, resolve_parents: bool = True, **kwargs) -> AsyncIterator[Tuple[D, float]]:

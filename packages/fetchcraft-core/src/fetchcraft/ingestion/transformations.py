@@ -79,7 +79,7 @@ class ParsingTransformation(Transformation):
     def __init__(
         self,
         parser: Optional[DocumentParser] = None,
-        parser_map: Optional[Dict[str, DocumentParser]] = None,
+        parser_map: Optional[Dict[str, DocumentParser]] = None
     ):
         """
         Initialize the parsing transformation.
@@ -149,10 +149,12 @@ class ParsingTransformation(Transformation):
 
         # Check if parser is remote (async callback-based)
         if parser.is_remote:
-            return await self._parse_remote(correlation_id, file_adapter, parser, parser_metadata)
+            nodes = await self._parse_remote(correlation_id, file_adapter, parser, parser_metadata)
         else:
             # Local parser - return async generator
-            return self._parse_local(parser, file_adapter, parser_metadata, source)
+            nodes = self._parse_local(parser, file_adapter, parser_metadata, source)
+
+        return nodes
 
     async def _parse_remote(self, correlation_id: str, file_adapter: FileAdapter, parser: DocumentParser, parser_metadata: dict[str, str]) -> AsyncRemote:
         # Submit to remote parser using correlation_id for callback matching
