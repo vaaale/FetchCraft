@@ -47,6 +47,11 @@ class IngestionConfig(FetchcraftAdminConfig):
     llm_model: str = Field(default="gpt-4-turbo", description="LLM model name")
     openai_api_key: str = Field(default="sk-321", description="LLM API key")
     openai_base_url: Optional[str] = Field(default=None, description="LLM API base URL")
+    context_window: int = Field(default=16384, ge=1, description="Context window size")
+    max_output: int = Field(default=2048, ge=1, description="Max output size")
+    temperature: float = Field(default=0.6, ge=0, description="Temperature for LLM")
+    top_p: float = Field(default=0.95, ge=0, description="Top P for LLM")
+
     
     # Embeddings configuration
     embedding_model: str = Field(default="bge-m3", description="Embedding model name")
@@ -62,7 +67,9 @@ class IngestionConfig(FetchcraftAdminConfig):
         alias="child_chunks"
     )
     chunk_overlap: int = Field(default=200, ge=0, description="Chunk overlap size")
-    
+    chunk_overlap_ratio: float = Field(default=0.1, ge=0, description="Chunk overlap ratio")
+    tokenizer: Optional[str] = "Qwen/Qwen3-8B"
+
     # Hybrid search configuration
     enable_hybrid: bool = Field(default=True, description="Enable hybrid search")
     fusion_method: str = Field(default="rrf", description="Fusion method for hybrid search")

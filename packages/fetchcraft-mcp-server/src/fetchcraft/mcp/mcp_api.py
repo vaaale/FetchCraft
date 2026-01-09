@@ -170,7 +170,7 @@ def add_tools(mcp: FastMCP, find_files_service: FindFilesService, server_url: st
             data = {
                 "query": query,
                 "files": files,
-                "total": len(paginated_nodes),
+                "total": len(paginated_nodes.nodes),
                 "offset": offset,
                 "serverUrl": server_url
             }

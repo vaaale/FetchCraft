@@ -122,13 +122,13 @@ def create_ingestion_router(
             items = []
             for item in sorted(full_path.iterdir()):
                 try:
-                    relative_path = item.relative_to(config.documents_path)
+                    relative_path = item.relative_to(full_path)
                     items.append(DirectoryItem(
                         name=item.name,
                         path=str(relative_path),
                         is_directory=item.is_dir()
                     ))
-                except ValueError:
+                except ValueError as e:
                     continue
             
             return DirectoryListResponse(
