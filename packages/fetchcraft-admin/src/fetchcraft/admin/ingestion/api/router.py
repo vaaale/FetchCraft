@@ -33,6 +33,7 @@ from fetchcraft.admin.ingestion.api.schema import (
     QueueStatsResponse,
     RetryResponse,
 )
+import traceback
 
 if TYPE_CHECKING:
     from fetchcraft.admin.ingestion.services.ingestion_service import IngestionService
@@ -120,9 +121,10 @@ def create_ingestion_router(
                 raise HTTPException(status_code=400, detail="Path is not a directory")
             
             items = []
+            documents_root = config.documents_path.resolve()
             for item in sorted(full_path.iterdir()):
                 try:
-                    relative_path = item.relative_to(full_path)
+                    relative_path = item.relative_to(documents_root)
                     items.append(DirectoryItem(
                         name=item.name,
                         path=str(relative_path),
@@ -133,12 +135,14 @@ def create_ingestion_router(
             
             return DirectoryListResponse(
                 items=items,
-                current_path=str(full_path.relative_to(config.documents_path)) if path else ""
+                current_path=str(full_path.relative_to(config.documents_path.resolve())) if path else ""
             )
         
         except HTTPException:
+            traceback.print_exc()
             raise
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"Error listing directories: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=str(e))
     

@@ -1,6 +1,6 @@
 [project]
 name = "fetchcraft-core"
-version = "0.4.2"
+version = "0.4.3"
 description = "A flexible framework for building RAG applications"
 authors = [
     {name = "Alexander Vaagan", email = "2428222+vaaale@users.noreply.github.com"},
